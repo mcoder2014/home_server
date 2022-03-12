@@ -1,10 +1,13 @@
 #!/bin/bash
 
-PROGRAM_NAME="home_server"
+SERVER_NAME="home_server"
+CLIENT_NAME="home_client"
 
 mkdir -p output/bin
 cp script/* output
-chmod +x output/boot.sh
+chmod a+x output/boot_server.sh
+chmod a+x output/boot_client.sh
 
 # 构建程序
-go build -v -o output/bin/$PROGRAM_NAME
+go build -v -o output/bin/$SERVER_NAME ./
+go build -v -o output/bin/$CLIENT_NAME ./clients

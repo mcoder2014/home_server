@@ -19,6 +19,12 @@ func init () {
 		Handler: GetDomain,
 	}
 
+	data.RouterMap["/ddns/all"] = data.HttpRoute{
+		Method: http.MethodGet,
+		Path: "/ddns/all",
+		Handler: GetAllRecords,
+	}
+
 	data.RouterMap["/ddns/ipv4"] = data.HttpRoute{
 		Method: http.MethodPost,
 		Path: "/ddns/ipv4",

@@ -19,7 +19,36 @@ var(
 func UpdateIpv4(c *gin.Context) {
 
 	// 解析参数
+	type Request struct {
+		Domain string 
+		Ipv4 string
+		Name string
+	}
 
+	req := &Request{}
+	err := c.BindJSON(&req)
+	if err!=nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"Message":err.Error(),
+		})
+	}
+
+	// 处理
+	old, ok :=Ipv4Map.Load(req.Domain)
+	if ok {
+		if old.(string) == req.Ipv4 {
+			logrus.Infof("Same as record, No need update. Domain:%v Record:%v",req.Domain, req.Ipv4)
+			c.JSON(http.StatusOK, gin.H{
+				"Message":"success",
+			})
+		} else {
+			logrus.Infof("Not same as old, Update old record. Domain:%v old record:%v new record:%v", req.Domain, old.(string), req.Ipv4)
+		}
+	}
+	Ipv4Map.Store(req.Domain, req.Ipv4)
+	c.JSON(http.StatusOK, gin.H{
+		"Message":"Update Record",
+	})
 
 }
 
@@ -50,4 +79,28 @@ func GetDomain(c *gin.Context) {
 	}
 
 	c.PureJSON(http.StatusOK, resp)
+}
+
+func  GetAllRecords(c *gin.Context) {
+	// 查询所有记录
+	type Resp struct {
+		Ipv4 map[string]string
+		Ipv6 map[string]string
+	}
+
+	resp := Resp{
+		Ipv4: map[string]string{},
+		Ipv6: map[string]string{},
+	}
+	Ipv4Map.Range(func(key, value interface{}) bool {
+		resp.Ipv4[key.(string)] = value.(string)
+		return true
+	})
+	Ipv6Map.Range(func(key, value interface{}) bool {
+		resp.Ipv6[key.(string)] = value.(string)
+		return true
+	})
+
+	c.JSON(http.StatusOK, &resp)
+
 }
