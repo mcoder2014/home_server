@@ -104,3 +104,14 @@ func  GetAllRecords(c *gin.Context) {
 	c.JSON(http.StatusOK, &resp)
 
 }
+
+func GetClientIpAddress(c *gin.Context) {
+	type Resp struct {
+		Ip string
+	}
+
+	resp := Resp{}
+	resp.Ip = c.ClientIP()
+
+	c.JSON(http.StatusOK, &resp)
+}

@@ -25,6 +25,12 @@ func init () {
 		Handler: GetAllRecords,
 	}
 
+	data.RouterMap["/ddns/real_ip"] = data.HttpRoute{
+		Method: http.MethodGet,
+		Path: "ddns/real_ip",
+		Handler: GetClientIpAddress,
+	}
+
 	data.RouterMap["/ddns/ipv4"] = data.HttpRoute{
 		Method: http.MethodPost,
 		Path: "/ddns/ipv4",
