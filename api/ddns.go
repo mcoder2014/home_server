@@ -1,8 +1,8 @@
-package handler
+package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/pointer"
+	"github.com/mcoder2014/home_server/utils"
 	"github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
@@ -34,7 +34,7 @@ func UpdateIpv4(c *gin.Context) {
 	}
 
 	// 处理
-	old, ok :=Ipv4Map.Load(req.Domain)
+	old, ok := Ipv4Map.Load(req.Domain)
 	if ok {
 		if old.(string) == req.Ipv4 {
 			logrus.Infof("Same as record, No need update. Domain:%v Record:%v",req.Domain, req.Ipv4)
@@ -71,11 +71,11 @@ func GetDomain(c *gin.Context) {
 
 	// 处理逻辑
 	if ipv4, ok := Ipv4Map.Load(domain); ok {
-		resp.Ipv4 = pointer.String(ipv4.(string))
+		resp.Ipv4 = utils.String(ipv4.(string))
 	}
 
 	if ipv6, ok:= Ipv6Map.Load(domain); ok {
-		resp.Ipv6 = pointer.String(ipv6.(string))
+		resp.Ipv6 = utils.String(ipv6.(string))
 	}
 
 	c.PureJSON(http.StatusOK, resp)
