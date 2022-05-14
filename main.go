@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"strconv"
+
+	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/route"
 	"github.com/sirupsen/logrus"
-	"strconv"
 )
 
 func main() {
@@ -13,24 +15,39 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	config := GetConfig()
+	cliConfig := GetConfig()
+	err := config.InitGlobalConfig(cliConfig.ConfigPath)
+	if err != nil {
+		logrus.WithError(err).Errorf("load Global config from :%v failed.", cliConfig.ConfigPath)
+	}
+	logrus.Infof("Load Config: %+v", config.GlobalConfig())
 
 	r := route.InitRoute()
-	// listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
-	if err :=r.Run(":"+strconv.FormatInt(config.Port, 10)); err!=nil {
+
+	port := cliConfig.Port
+	if port == -1 {
+		port = config.GlobalConfig().Server.Port
+	}
+	logrus.Infof("will bind http server port on %v", port)
+
+	if err = r.Run(":" + strconv.Itoa(port)); err != nil {
 		panic(err)
 	}
 }
 
 type CliArgsConfig struct {
-	Port int64
+	// 配置端口号
+	Port int
+	// 配置文件路径
+	ConfigPath string
 }
 
+// GetConfig 读取命令行配置
 func GetConfig() *CliArgsConfig {
-    config := &CliArgsConfig{}
+	config := &CliArgsConfig{}
 
-	// StringVar用指定的名称、控制台参数项目、默认值、使用信息注册一个string类型flag，并将flag的值保存到p指向的变量
-	flag.Int64Var(&config.Port, "P", 8080, "http server 端口号,默认为空")
+	flag.IntVar(&config.Port, "port", -1, "http server 端口号,默认为空")
+	flag.StringVar(&config.ConfigPath, "config", "/etc/home_server/config.yaml", "配置文件路径")
 
 	// 从arguments中解析注册的flag。必须在所有flag都注册好而未访问其值时执行。未注册却使用flag -help时，会返回ErrHelp。
 	flag.Parse()

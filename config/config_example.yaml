@@ -1,0 +1,12 @@
+server:
+  # http server 的服务端口
+  port: 8080
+rpc:
+  jmisbn:
+    # 云市场的接口 https://market.aliyun.com/products/57126001/cmapi00053669.html?spm=5176.730005.result.6.f32d3524quBk45&innerSource=search_isbn#sku=yuncode4766900001
+    app_key: xxxx
+    app_code: xxxx
+  cloudflare:
+    api_key: xxxx
+    zone_id: xxxx
+    account_id: xxxx

@@ -5,6 +5,8 @@ CLIENT_NAME="home_client"
 
 mkdir -p output/bin
 cp script/* output
+cp config/config.yaml output
+
 chmod a+x output/boot_server.sh
 chmod a+x output/boot_client.sh
 
