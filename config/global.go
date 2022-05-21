@@ -31,7 +31,7 @@ type Config struct {
 
 var globalConfig = Config{}
 
-func GlobalConfig() Config {
+func Global() Config {
 	return globalConfig
 }
 

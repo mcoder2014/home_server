@@ -19,16 +19,19 @@ func FormatWithError(c *gin.Context, err error) {
 	if !errors.As(err, &myErrors.Error{}) {
 		resp := model.NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
 		c.JSON(http.StatusOK, resp)
+		return
 	}
 
 	myErr, ok := err.(myErrors.Error)
 	if !ok {
 		resp := model.NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
 		c.JSON(http.StatusOK, resp)
+		return
 	}
 
 	resp := model.NewErrorResponse(int(myErr.Code), myErr.Error())
 	c.JSON(http.StatusOK, resp)
+	return
 }
 
 func RPCContext(ginCtx *gin.Context) context.Context {

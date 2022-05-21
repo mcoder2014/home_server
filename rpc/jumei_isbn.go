@@ -68,7 +68,7 @@ func GetBookInfoByISBN(ctx context.Context, isbn string) (*model.BookInfo, error
 		return nil, errors.New(errors.ErrorCodeParamInvalid)
 	}
 
-	appCode := config.GlobalConfig().RPC.JmIsbn.AppCode
+	appCode := config.Global().RPC.JmIsbn.AppCode
 	if len(appCode) == 0 {
 		return nil, errors.NewWithMessage(errors.ErrorCodeRpcUnauthorized, "appcode is not config")
 	}

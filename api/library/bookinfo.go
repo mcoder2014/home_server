@@ -3,7 +3,7 @@ package library
 import (
 	"fmt"
 
-	"github.com/mcoder2014/home_server/rpc"
+	"github.com/mcoder2014/home_server/domain/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/errors"
@@ -21,7 +21,7 @@ func Query(c *gin.Context) {
 
 	ctx := ginfmt.RPCContext(c)
 
-	bookinfo, err := rpc.GetBookInfoByISBN(ctx, isbn)
+	bookinfo, err := service.QueryByIsbn(ctx, isbn)
 	if err != nil {
 		ginfmt.FormatWithError(c, err)
 		return

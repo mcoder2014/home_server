@@ -2,7 +2,10 @@ package main
 
 import (
 	"flag"
+	"os"
 	"strconv"
+
+	"github.com/mcoder2014/home_server/domain/database"
 
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/route"
@@ -19,14 +22,22 @@ func main() {
 	err := config.InitGlobalConfig(cliConfig.ConfigPath)
 	if err != nil {
 		logrus.WithError(err).Errorf("load Global config from :%v failed.", cliConfig.ConfigPath)
+		os.Exit(1)
 	}
-	logrus.Infof("Load Config: %+v", config.GlobalConfig())
+	logrus.Infof("Load Config: %+v", config.Global())
+
+	// 链接数据库
+	err = database.InitDatabase(config.Global().Mysql.MasterDB)
+	if err != nil {
+		logrus.WithError(err).Errorf("connect to mysql failed. dsn is %v ", config.Global().Mysql.MasterDB)
+		os.Exit(1)
+	}
 
 	r := route.InitRoute()
 
 	port := cliConfig.Port
 	if port == -1 {
-		port = config.GlobalConfig().Server.Port
+		port = config.Global().Server.Port
 	}
 	logrus.Infof("will bind http server port on %v", port)
 
