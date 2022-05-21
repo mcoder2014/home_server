@@ -1,14 +1,16 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/utils"
-	"github.com/sirupsen/logrus"
 	"net/http"
 	"sync"
+
+	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/data"
+	"github.com/mcoder2014/home_server/utils"
+	"github.com/sirupsen/logrus"
 )
 
-var(
+var (
 	// Ipv4Map Key string domain, Value string ipv4
 	Ipv4Map sync.Map
 
@@ -16,20 +18,52 @@ var(
 	Ipv6Map sync.Map
 )
 
+func InitDDNSRouter() {
+	data.RouterMap["/ddns"] = data.HttpRoute{
+		Method:  http.MethodGet,
+		Path:    "/ddns",
+		Handler: GetDomain,
+	}
+
+	data.RouterMap["/ddns/all"] = data.HttpRoute{
+		Method:  http.MethodGet,
+		Path:    "/ddns/all",
+		Handler: GetAllRecords,
+	}
+
+	data.RouterMap["/ddns/real_ip"] = data.HttpRoute{
+		Method:  http.MethodGet,
+		Path:    "ddns/real_ip",
+		Handler: GetClientIpAddress,
+	}
+
+	data.RouterMap["/ddns/ipv4"] = data.HttpRoute{
+		Method:  http.MethodPost,
+		Path:    "/ddns/ipv4",
+		Handler: UpdateIpv4,
+	}
+
+	data.RouterMap["ddns/ipv6"] = data.HttpRoute{
+		Method:  http.MethodPost,
+		Path:    "/ddns/ipv6",
+		Handler: UpdateIpv6,
+	}
+}
+
 func UpdateIpv4(c *gin.Context) {
 
 	// 解析参数
 	type Request struct {
-		Domain string 
-		Ipv4 string
-		Name string
+		Domain string
+		Ipv4   string
+		Name   string
 	}
 
 	req := &Request{}
 	err := c.BindJSON(&req)
-	if err!=nil {
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"Message":err.Error(),
+			"Message": err.Error(),
 		})
 	}
 
@@ -37,9 +71,9 @@ func UpdateIpv4(c *gin.Context) {
 	old, ok := Ipv4Map.Load(req.Domain)
 	if ok {
 		if old.(string) == req.Ipv4 {
-			logrus.Infof("Same as record, No need update. Domain:%v Record:%v",req.Domain, req.Ipv4)
+			logrus.Infof("Same as record, No need update. Domain:%v Record:%v", req.Domain, req.Ipv4)
 			c.JSON(http.StatusOK, gin.H{
-				"Message":"success",
+				"Message": "success",
 			})
 		} else {
 			logrus.Infof("Not same as old, Update old record. Domain:%v old record:%v new record:%v", req.Domain, old.(string), req.Ipv4)
@@ -47,7 +81,7 @@ func UpdateIpv4(c *gin.Context) {
 	}
 	Ipv4Map.Store(req.Domain, req.Ipv4)
 	c.JSON(http.StatusOK, gin.H{
-		"Message":"Update Record",
+		"Message": "Update Record",
 	})
 
 }
@@ -61,9 +95,9 @@ func GetDomain(c *gin.Context) {
 	domain := c.Query("domain")
 
 	type Resp struct {
-		Domain string `json:"domain"`
-		Ipv4 *string `json:"ipv4"`
-		Ipv6 *string `json:"ipv6"`
+		Domain string  `json:"domain"`
+		Ipv4   *string `json:"ipv4"`
+		Ipv6   *string `json:"ipv6"`
 	}
 
 	resp := Resp{Domain: domain}
@@ -74,14 +108,14 @@ func GetDomain(c *gin.Context) {
 		resp.Ipv4 = utils.String(ipv4.(string))
 	}
 
-	if ipv6, ok:= Ipv6Map.Load(domain); ok {
+	if ipv6, ok := Ipv6Map.Load(domain); ok {
 		resp.Ipv6 = utils.String(ipv6.(string))
 	}
 
 	c.PureJSON(http.StatusOK, resp)
 }
 
-func  GetAllRecords(c *gin.Context) {
+func GetAllRecords(c *gin.Context) {
 	// 查询所有记录
 	type Resp struct {
 		Ipv4 map[string]string

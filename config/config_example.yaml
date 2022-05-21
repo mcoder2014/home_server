@@ -4,9 +4,10 @@ server:
 rpc:
   jmisbn:
     # 云市场的接口 https://market.aliyun.com/products/57126001/cmapi00053669.html?spm=5176.730005.result.6.f32d3524quBk45&innerSource=search_isbn#sku=yuncode4766900001
-    app_key: xxxx
-    app_code: xxxx
+    app_code: 702c7ad931a94bc397c181c38aa25792
   cloudflare:
     api_key: xxxx
     zone_id: xxxx
     account_id: xxxx
+mysql:
+  master_db: xxxxx@xxxx

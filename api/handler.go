@@ -1,45 +1,20 @@
 package api
 
 import (
-	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/data"
-	"net/http"
+	"sync"
+
+	"github.com/mcoder2014/home_server/api/library"
 )
 
-func Hi(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"message": "Hi",
+var routeInit sync.Once
+
+// InitRouter 初始化路由， 仅执行一次
+func InitRouter() {
+	routeInit.Do(func() {
+		// DDNS 相关接口
+		InitDDNSRouter()
+
+		// 图书相关接口
+		library.InitRouter()
 	})
-}
-
-func init () {
-	data.RouterMap["/ddns"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "/ddns",
-		Handler: GetDomain,
-	}
-
-	data.RouterMap["/ddns/all"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "/ddns/all",
-		Handler: GetAllRecords,
-	}
-
-	data.RouterMap["/ddns/real_ip"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "ddns/real_ip",
-		Handler: GetClientIpAddress,
-	}
-
-	data.RouterMap["/ddns/ipv4"] = data.HttpRoute{
-		Method:  http.MethodPost,
-		Path:    "/ddns/ipv4",
-		Handler: UpdateIpv4,
-	}
-
-	data.RouterMap["ddns/ipv6"] = data.HttpRoute{
-		Method:  http.MethodPost,
-		Path:    "/ddns/ipv6",
-		Handler: UpdateIpv6,
-	}
 }

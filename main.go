@@ -44,14 +44,14 @@ type CliArgsConfig struct {
 
 // GetConfig 读取命令行配置
 func GetConfig() *CliArgsConfig {
-	config := &CliArgsConfig{}
+	conf := &CliArgsConfig{}
 
-	flag.IntVar(&config.Port, "port", -1, "http server 端口号,默认为空")
-	flag.StringVar(&config.ConfigPath, "config", "/etc/home_server/config.yaml", "配置文件路径")
+	flag.IntVar(&conf.Port, "port", -1, "http server 端口号,默认为空")
+	flag.StringVar(&conf.ConfigPath, "conf", "/etc/home_server/conf.yaml", "配置文件路径")
 
 	// 从arguments中解析注册的flag。必须在所有flag都注册好而未访问其值时执行。未注册却使用flag -help时，会返回ErrHelp。
 	flag.Parse()
 
-	logrus.Infof("Got Cli Args: %v", *config)
-	return config
+	logrus.Infof("Got Cli Args: %v", *conf)
+	return conf
 }

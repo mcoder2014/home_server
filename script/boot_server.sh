@@ -5,4 +5,4 @@ CURDIR=$(cd $(dirname $0); pwd)
 
 export GIN_MODE=release
 
-exec $CURDIR/bin/$PROGRAM_NAME -config $CURDIR/config.yaml
+exec $CURDIR/bin/$PROGRAM_NAME -conf $CURDIR/config.yaml
