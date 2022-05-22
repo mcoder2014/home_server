@@ -6,30 +6,29 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/domain/model"
 	myErrors "github.com/mcoder2014/home_server/errors"
 )
 
 func FormatWithData(c *gin.Context, data interface{}) {
-	resp := model.NewBaseResponse(data)
+	resp := NewBaseResponse(data)
 	c.JSON(http.StatusOK, resp)
 }
 
 func FormatWithError(c *gin.Context, err error) {
 	if !errors.As(err, &myErrors.Error{}) {
-		resp := model.NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
+		resp := NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
 		c.JSON(http.StatusOK, resp)
 		return
 	}
 
 	myErr, ok := err.(myErrors.Error)
 	if !ok {
-		resp := model.NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
+		resp := NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
 		c.JSON(http.StatusOK, resp)
 		return
 	}
 
-	resp := model.NewErrorResponse(int(myErr.Code), myErr.Error())
+	resp := NewErrorResponse(int(myErr.Code), myErr.Error())
 	c.JSON(http.StatusOK, resp)
 	return
 }

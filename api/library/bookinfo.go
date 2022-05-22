@@ -10,8 +10,8 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
-// Query 从 rpc 处查询书籍
-func Query(c *gin.Context) {
+// QueryBookInfo 从 rpc 处查询书籍
+func QueryBookInfo(c *gin.Context) {
 	isbn := c.Query("isbn")
 	if len(isbn) < 10 || len(isbn) > 13 {
 		// error
@@ -21,7 +21,7 @@ func Query(c *gin.Context) {
 
 	ctx := ginfmt.RPCContext(c)
 
-	bookinfo, err := service.QueryByIsbn(ctx, isbn)
+	bookinfo, err := service.QueryBookInfoByIsbn(ctx, isbn)
 	if err != nil {
 		ginfmt.FormatWithError(c, err)
 		return

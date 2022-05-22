@@ -3,6 +3,8 @@ package dal
 import (
 	"testing"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/mcoder2014/home_server/domain/model"
 	"github.com/stretchr/testify/require"
 
@@ -10,7 +12,10 @@ import (
 )
 
 func TestMain(t *testing.M) {
-	_ = testutil.Init()
+	e := testutil.Init()
+	if e != nil {
+		logrus.Errorf("e:%v", e)
+	}
 	t.Run()
 }
 
@@ -19,12 +24,12 @@ func TestInsertBookInfo(t *testing.T) {
 		Title:     "测试图书",
 		Author:    "江超群",
 		Publisher: "小当家出版社",
-		Isbn:      "1123",
+		Isbn:      "1122334455123",
 		Isbn10:    "1234567890",
 	})
 	require.NoError(t, e)
 
-	b, e := QueryBookInfoByIsbn("1123")
+	b, e := QueryBookInfoByIsbn("1122334455123")
 	require.NoError(t, e)
 	require.NotNil(t, b)
 
@@ -32,6 +37,6 @@ func TestInsertBookInfo(t *testing.T) {
 	require.NoError(t, e)
 	require.NotNil(t, b)
 
-	e = DeleteById(b.Id)
+	e = DeleteBookInfoById(b.Id)
 	require.NoError(t, e)
 }

@@ -6,17 +6,22 @@ import (
 )
 
 type Config struct {
+	// 服务相关配置
 	Server struct {
+		// http 服务端口号
 		Port int `json:"port" yaml:"port"`
 	} `json:"server" yaml:"server"`
 
+	// 依赖的服务的相关配置
 	RPC struct {
 		// 聚美数智的 api 接口秘钥
 		// https://market.aliyun.com/products/57126001/cmapi00053669.html?spm=5176.730005.result.6.70ff35249MqvXk&innerSource=search_isbn#sku=yuncode4766900008
 		JmIsbn struct {
+			// 用于接口验证的 AppCode
 			AppCode string `json:"app_code" yaml:"app_code"`
 		} `json:"jmisbn" yaml:"jmisbn"`
 
+		// Cloudflare 相关的配置，用于配置域名
 		Cloudflare struct {
 			APIKey    string `json:"api_key" yaml:"api_key"`
 			ZoneID    string `json:"zone_id" yaml:"zone_id"`
@@ -24,11 +29,13 @@ type Config struct {
 		} `json:"cloudflare" yaml:"cloudflare"`
 	} `json:"rpc" yaml:"rpc"`
 
+	// 数据库相关配置
 	Mysql struct {
 		MasterDB string `json:"master_db" yaml:"master_db"`
 	} `json:"mysql" yaml:"mysql"`
 }
 
+// 全局配置
 var globalConfig = Config{}
 
 func Global() Config {
@@ -39,6 +46,7 @@ func SetGlobalConfig(c Config) {
 	globalConfig = c
 }
 
+// InitGlobalConfig 从指定配置文件中读取配置信息
 func InitGlobalConfig(filepath string) error {
 	err := utils.BindConfig(filepath, &globalConfig)
 	if err != nil {

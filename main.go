@@ -5,9 +5,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/mcoder2014/home_server/domain/database"
-
 	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/route"
 	"github.com/sirupsen/logrus"
 )
@@ -27,7 +26,7 @@ func main() {
 	logrus.Infof("Load Config: %+v", config.Global())
 
 	// 链接数据库
-	err = database.InitDatabase(config.Global().Mysql.MasterDB)
+	err = db.InitDatabase(config.Global().Mysql.MasterDB)
 	if err != nil {
 		logrus.WithError(err).Errorf("connect to mysql failed. dsn is %v ", config.Global().Mysql.MasterDB)
 		os.Exit(1)

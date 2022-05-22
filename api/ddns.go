@@ -19,35 +19,11 @@ var (
 )
 
 func InitDDNSRouter() {
-	data.RouterMap["/ddns"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "/ddns",
-		Handler: GetDomain,
-	}
-
-	data.RouterMap["/ddns/all"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "/ddns/all",
-		Handler: GetAllRecords,
-	}
-
-	data.RouterMap["/ddns/real_ip"] = data.HttpRoute{
-		Method:  http.MethodGet,
-		Path:    "ddns/real_ip",
-		Handler: GetClientIpAddress,
-	}
-
-	data.RouterMap["/ddns/ipv4"] = data.HttpRoute{
-		Method:  http.MethodPost,
-		Path:    "/ddns/ipv4",
-		Handler: UpdateIpv4,
-	}
-
-	data.RouterMap["ddns/ipv6"] = data.HttpRoute{
-		Method:  http.MethodPost,
-		Path:    "/ddns/ipv6",
-		Handler: UpdateIpv6,
-	}
+	data.AddRoute(http.MethodGet, "/ddns", GetDomain)
+	data.AddRoute(http.MethodGet, "/ddns/all", GetAllRecords)
+	data.AddRoute(http.MethodGet, "/ddns/real_ip", GetClientIpAddress)
+	data.AddRoute(http.MethodPost, "/ddns/ipv4", UpdateIpv4)
+	data.AddRoute(http.MethodPost, "/ddns/ipv6", UpdateIpv6)
 }
 
 func UpdateIpv4(c *gin.Context) {

@@ -10,4 +10,4 @@ rpc:
     zone_id: xxxx
     account_id: xxxx
 mysql:
-  master_db: xxxxx@xxxx
+  master_db: test:123456@tcp(127.0.0.1:3306)/home_server?charset=utf8mb4&parseTime=True&loc=Local

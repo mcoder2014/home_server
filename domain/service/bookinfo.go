@@ -12,19 +12,13 @@ import (
 	"github.com/mcoder2014/home_server/domain/model"
 )
 
-func QueryByIsbn(ctx context.Context, isbn string) (*model.BookInfo, error) {
+func QueryBookInfoByIsbn(ctx context.Context, isbn string) (*model.BookInfo, error) {
 	info, err := dal.QueryBookInfoByIsbn(isbn)
 	if err != nil {
 		return nil, err
 	}
-	if info == nil {
-		info, err = dal.QueryBookInfoByIsbn10(isbn)
-		if err != nil {
-			return nil, err
-		}
-	}
 	if info != nil {
-		log.Ctx(ctx).Infof("QueryByIsbn got result from local database")
+		log.Ctx(ctx).Infof("QueryBookInfoByIsbn got result from local database")
 		return info, nil
 	}
 
