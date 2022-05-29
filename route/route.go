@@ -19,14 +19,14 @@ func InitRoute() *gin.Engine {
 		})
 	})
 
+	// 加入中间件
+	r.Use(middleware.AddLogID, middleware.CORS())
+
 	// 批量注册回调
 	for path, route := range data.RouterMap {
 		r.Handle(route.Method, path, route.Handler)
 		logrus.Infof("Gin Register Method: %v, path: %v", route.Method, path)
 	}
-
-	// 加入中间件
-	r.Use(middleware.AddLogID)
 
 	return r
 }

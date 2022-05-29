@@ -1,13 +1,13 @@
 import axios from 'axios'
-import Element from 'element-ui'
+import Element from 'element-plus'
 import router from './router'
 import store from './store'
 
-
-axios.defaults.baseURL = "http://localhost:8081"
-
 // 前置拦截
 axios.interceptors.request.use(config => {
+    if (store.state.token.length > 0) {
+        config.headers.Authorization = `token ${store.state.token}`;
+    }
     return config
 })
 
@@ -21,7 +21,6 @@ axios.interceptors.response.use(response => {
         if (res.code === 200) {
             return response
         } else {
-
             Element.Message.error('错了哦，这是一条错误消息', {duration: 3 * 1000})
 
             return Promise.reject(response.data.msg)

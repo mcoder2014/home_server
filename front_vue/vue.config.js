@@ -5,6 +5,6 @@ module.exports = defineConfig({
     lintOnSave: false,
     // 必须用 https 才能打开手机的摄像头
     devServer:{
-        https: true
+        // https: true
     },
 })

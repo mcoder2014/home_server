@@ -1,6 +1,6 @@
 <template>
   <div class="page-scan">
-    <h1>扫描条形码</h1>
+    <h1>扫描图书条形码</h1>
     <!-- 扫码区域 -->
     <video ref="video" id="video" class="scan-video" autoplay></video>
     <!-- 提示语 -->
@@ -28,7 +28,7 @@ export default {
     this.openScan();
   },
   destroyed() {
-    this.codeReader.reset();
+
   },
   watch: {
     '$route'(to, from) {
@@ -86,7 +86,7 @@ export default {
           if (this.scanText) {
             this.tipShow = false;
             this.$store.commit('SET_ISBN', result.text);
-            this.$router.back()
+            this.return_back()
           }
         }
 
@@ -96,12 +96,15 @@ export default {
             this.tipShow = false;
           }, 2000)
           console.error(err);
+          this.return_back()
         }
+
       });
     },
-    clickIndexLeft() {  // 返回上一页
-      this.codeReader = null;
-      this.$destroy();
+    return_back() {  // 返回上一页
+      // 停止摄像头占用
+      this.codeReader.stopContinuousDecode()
+      this.codeReader.reset();
       this.$router.back();
     }
   }
