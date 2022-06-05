@@ -1,7 +1,5 @@
 package model
 
-import "time"
-
 type BookInfo struct {
 
 	// 主键
@@ -13,7 +11,7 @@ type BookInfo struct {
 	// 出版社
 	Publisher string `json:"publisher" gorm:"column:publisher"`
 	// 出版时间
-	PubDate time.Time `json:"pub_date" gorm:"column:pubdate"`
+	PubDate string `json:"pub_date" gorm:"column:pubdate"`
 	// 13 位 ISBN 编码
 	Isbn string `json:"isbn" gorm:"column:isbn13"`
 	// 10 位 ISBN 编码

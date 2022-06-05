@@ -3,7 +3,10 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/mcoder2014/home_server/utils/routine"
 
@@ -29,6 +32,11 @@ func main() {
 
 	routine.Init()
 
+	// 监听 ctrl c 信号
+	exitChan := make(chan os.Signal)
+	signal.Notify(exitChan, os.Interrupt, os.Kill, syscall.SIGTERM)
+	go exitHandle(exitChan)
+
 	// 链接数据库
 	err = db.InitDatabase(config.Global().Mysql.MasterDB)
 	if err != nil {
@@ -47,6 +55,7 @@ func main() {
 	if err = r.Run(":" + strconv.Itoa(port)); err != nil {
 		panic(err)
 	}
+	defer routine.Wait()
 }
 
 type CliArgsConfig struct {
@@ -68,4 +77,17 @@ func GetConfig() *CliArgsConfig {
 
 	logrus.Infof("Got Cli Args: %v", *conf)
 	return conf
+}
+
+func exitHandle(exitChan chan os.Signal) {
+
+	for {
+		select {
+		case sig := <-exitChan:
+			logrus.Infof("Get Signal: %v from sys, stop program", sig)
+			time.Sleep(1 * time.Second)
+			os.Exit(1) //如果ctrl+c 关不掉程序，使用os.Exit强行关掉
+		}
+	}
+
 }

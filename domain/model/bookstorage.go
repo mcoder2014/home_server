@@ -132,7 +132,7 @@ type BookStorage struct {
 	// 出版社
 	Publisher string `json:"publisher"`
 	// 出版时间
-	PubDate time.Time `json:"pub_date"`
+	PubDate string `json:"pub_date"`
 	// 定价
 	Price string `json:"price"`
 	// 页数
