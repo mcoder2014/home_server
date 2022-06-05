@@ -9,3 +9,14 @@ type BookAddress struct {
 	ShortName string `json:"short_name" gorm:"column:short_name"`
 	DalModel
 }
+
+func SliceToMapBookAddress(address []*BookAddress) map[int64]*BookAddress {
+	var result = make(map[int64]*BookAddress, len(address))
+	for _, a := range address {
+		if a == nil {
+			continue
+		}
+		result[a.Id] = a
+	}
+	return result
+}

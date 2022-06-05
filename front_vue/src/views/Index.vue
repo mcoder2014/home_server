@@ -1,7 +1,7 @@
 <template>
   <div>
     <MyHeader></MyHeader>
-    <h1>测试 Index 页面</h1>
+    <h1>Index 页面</h1>
   </div>
 </template>
 

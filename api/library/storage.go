@@ -2,6 +2,7 @@ package library
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
 	"github.com/mcoder2014/home_server/domain/service"
 	"github.com/mcoder2014/home_server/errors"
@@ -98,6 +99,42 @@ func AddAddress(c *gin.Context) {
 	}
 	resp := Response{
 		ID: id,
+	}
+	ginfmt.FormatWithData(c, resp)
+}
+
+func GetTotalBookStorage(c *gin.Context) {
+
+	type Response struct {
+		BookStorages []*model.BookStorage `json:"book_storages"`
+		Count        int                  `json:"count"`
+	}
+
+	// 获得查询参数
+	offset, e := ginfmt.GetInt(c, "offset")
+	if e != nil {
+		ginfmt.FormatWithError(c, e)
+		return
+	}
+	limit, e := ginfmt.GetInt(c, "limit")
+	if e != nil {
+		ginfmt.FormatWithError(c, e)
+		return
+	}
+
+	ctx := ginfmt.RPCContext(c)
+	bookStorage, e := service.GetTotalStorage(ctx, offset, limit)
+	if e != nil {
+		ginfmt.FormatWithError(c, e)
+		return
+	}
+	count, e := dal.GetBookStorageCount()
+	if e != nil {
+		log.Ctx(ctx).WithError(e).Errorf("GetTotalBookStorage get count error")
+	}
+	resp := &Response{
+		BookStorages: bookStorage,
+		Count:        count,
 	}
 	ginfmt.FormatWithData(c, resp)
 }

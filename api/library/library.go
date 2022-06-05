@@ -14,6 +14,8 @@ func InitRouter() {
 	data.AddRoute(http.MethodPost, "/library/book/add", AddStorage)
 	// 查询库存接口
 	data.AddRoute(http.MethodGet, "/library/book/query", QueryStorage)
+	// 分页查询所有库存信息
+	data.AddRoute(http.MethodGet, "/library/book/total", GetTotalBookStorage)
 	// 新增地址
 	data.AddRoute(http.MethodPost, "/library/address/add", AddAddress)
 }

@@ -32,6 +32,12 @@ func QueryBookAddressById(id int64) (*model.BookAddress, error) {
 	return &info, e
 }
 
+func BatchQueryBookAddress(ids []int64) ([]*model.BookAddress, error) {
+	var res []*model.BookAddress
+	e := db.MasterDB().Table(BookAddressTable).Where("id in (?)", ids).Find(&res).Error
+	return res, e
+}
+
 func DeleteBookAddress(id int64) error {
 	return db.MasterDB().Table(BookAddressTable).Where("id=?", id).Delete(&model.BookAddress{}).Error
 }

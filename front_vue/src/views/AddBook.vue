@@ -55,7 +55,6 @@ export default {
         console.log(response);
         if (response.data.code === 0) {
           alert("添加成功")
-          tmpRouter.push({path:"/"})
         } else {
           alert("添加失败，错误码：" + response.data.code + " 错误信息：" + response.data.message)
         }

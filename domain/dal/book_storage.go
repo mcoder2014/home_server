@@ -11,7 +11,6 @@ import (
 
 const (
 	BookStorageTable = "book_storage"
-	AddressTable     = "book_address"
 )
 
 func InsertBookStorage(info *model.DBBookStorage) error {
@@ -59,4 +58,17 @@ func QueryBookStorageByIsbn10(isbn string) (*model.DBBookStorage, error) {
 
 func DeleteBookStorageById(id int64) error {
 	return db.MasterDB().Table(BookStorageTable).Where("id=?", id).Delete(&model.DBBookStorage{}).Error
+}
+
+func GetAllBookStorageOrderByUpdateTime(offset int, limit int) ([]*model.DBBookStorage, error) {
+	var result []*model.DBBookStorage
+	err := db.MasterDB().Table(BookStorageTable).Offset(offset).Limit(limit).Find(&result).Order("update_time desc").Error
+	return result, err
+}
+
+// GetBookStorageCount 查询总藏书数
+func GetBookStorageCount() (int, error) {
+	var count int
+	err := db.MasterDB().Table(BookStorageTable).Select("count(1)").Find(&count).Error
+	return count, err
 }

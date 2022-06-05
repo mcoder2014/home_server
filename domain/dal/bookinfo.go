@@ -32,15 +32,13 @@ func QueryBookInfoById(id int64) (*model.BookInfo, error) {
 }
 
 func QueryBookInfoByIsbn(isbn string) (*model.BookInfo, error) {
-	if len(isbn) <= 10 {
-		return QueryBookInfoByIsbn10(isbn)
-	} else if len(isbn) > 13 {
+	if len(isbn) > 13 || len(isbn) < 10 {
 		return nil, nil
 	}
 
 	var info model.BookInfo
 	e := db.MasterDB().Table(BookInfoTable).
-		Where("isbn13=?", isbn).Take(&info).Debug().Error
+		Where("isbn13=? or isbn10=?", isbn, isbn).Take(&info).Debug().Error
 	if errors.Is(e, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -62,4 +60,13 @@ func QueryBookInfoByIsbn10(isbn string) (*model.BookInfo, error) {
 
 func DeleteBookInfoById(id int64) error {
 	return db.MasterDB().Table(BookInfoTable).Where("id=?", id).Delete(&model.BookInfo{}).Error
+}
+
+func BatchQueryBookInfoByIsbn(isbnList []string) ([]*model.BookInfo, error) {
+	if len(isbnList) == 0 {
+		return nil, nil
+	}
+	var result []*model.BookInfo
+	err := db.MasterDB().Table(BookInfoTable).Where("isbn13 in (?) or isbn10 in (?)", isbnList, isbnList).Find(&result).Error
+	return result, err
 }

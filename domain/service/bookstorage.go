@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	"github.com/mcoder2014/home_server/utils"
+
 	"github.com/mcoder2014/home_server/errors"
 
 	"github.com/mcoder2014/home_server/domain/dal"
@@ -55,4 +57,38 @@ func UpdateStorage(ctx context.Context, dto *model.UpdateBookStorageDto) error {
 
 func AddAddress(ctx context.Context, address *model.BookAddress) (int64, error) {
 	return dal.InsertBookAddress(address)
+}
+
+// GetTotalStorage 分页查询全部图书
+func GetTotalStorage(ctx context.Context, offset int, limit int) ([]*model.BookStorage, error) {
+
+	// 查询库存
+	dbs, err := dal.GetAllBookStorageOrderByUpdateTime(offset, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(dbs) == 0 {
+		return nil, nil
+	}
+	var isbnList []string
+	for _, s := range dbs {
+		if s == nil {
+			continue
+		}
+		isbnList = append(isbnList, s.Isbn)
+	}
+	// 查询图书信息
+	bookinfos, e := BatchQueryBookInfo(ctx, isbnList)
+	if e != nil {
+		return nil, e
+	}
+
+	// 查询地址信息
+	addressIDMap := make(map[int64]bool, len(dbs))
+	for _, s := range dbs {
+		addressIDMap[s.LibraryId] = true
+	}
+	addressList, e := dal.BatchQueryBookAddress(utils.MapToSliceInt64(addressIDMap))
+
+	return model.BatchConvertBookStorage(dbs, bookinfos, addressList), nil
 }

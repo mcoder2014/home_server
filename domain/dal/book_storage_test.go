@@ -58,6 +58,10 @@ func TestInsertBookStorage(t *testing.T) {
 	require.Equal(t, *updateDto.Isbn10, i.Isbn10)
 	require.Equal(t, *updateDto.LibraryId, i.LibraryId)
 
+	count, e := GetBookStorageCount()
+	require.NoError(t, e)
+	require.True(t, count > 0)
+
 	e = DeleteBookStorageById(i.Id)
 	require.NoError(t, e)
 }

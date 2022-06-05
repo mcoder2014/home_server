@@ -178,3 +178,15 @@ func GetBookStorage(info *BookInfo, storage *DBBookStorage, address *BookAddress
 	}
 	return s
 }
+
+func BatchConvertBookStorage(dbs []*DBBookStorage, bookinfos map[string]*BookInfo, address []*BookAddress) []*BookStorage {
+	addressMap := SliceToMapBookAddress(address)
+	var result = make([]*BookStorage, 0, len(dbs))
+	for _, s := range dbs {
+		if s == nil || bookinfos[s.Isbn] == nil || addressMap[s.LibraryId] == nil {
+			continue
+		}
+		result = append(result, GetBookStorage(bookinfos[s.Isbn], s, addressMap[s.LibraryId]))
+	}
+	return result
+}

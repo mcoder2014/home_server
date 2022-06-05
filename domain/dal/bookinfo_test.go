@@ -37,6 +37,10 @@ func TestInsertBookInfo(t *testing.T) {
 	require.NoError(t, e)
 	require.NotNil(t, b)
 
+	books, err := BatchQueryBookInfoByIsbn([]string{"1234567890", "9787115546081"})
+	require.NoError(t, err)
+	require.True(t, len(books) >= 2)
+
 	e = DeleteBookInfoById(b.Id)
 	require.NoError(t, e)
 }

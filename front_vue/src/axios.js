@@ -1,5 +1,5 @@
 import axios from 'axios'
-import Element from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import router from './router'
 import store from './store'
 
@@ -21,7 +21,10 @@ axios.interceptors.response.use(response => {
         if (res.code === 200) {
             return response
         } else {
-            Element.Message.error('错了哦，这是一条错误消息', {duration: 3 * 1000})
+            ElMessageBox.alert('Error Code: ' + res.code, '这是一条错误信息', {
+                confirmButtonText: 'OK',
+                callback: (action) => {},
+            })
 
             return Promise.reject(response.data.msg)
         }

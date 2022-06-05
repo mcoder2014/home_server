@@ -62,7 +62,7 @@ func GetBookInfoByISBN(ctx context.Context, isbn string) (*model.BookInfo, error
 
 	// 构造 request
 	client := &http.Client{}
-	var data = strings.NewReader(fmt.Sprintf(`isbn=%v`, isbn))
+	var data = strings.NewReader(fmt.Sprintf(`isbn=%s`, isbn))
 	req, err := http.NewRequest("POST", JumeiURL+"/isbn/query", data)
 	if err != nil {
 		return nil, errors.New(errors.ErrorCodeParamInvalid)
@@ -92,7 +92,7 @@ func GetBookInfoByISBN(ctx context.Context, isbn string) (*model.BookInfo, error
 
 	// 检查 statusCode
 	if err = statusCodeCheck(resp); err != nil {
-		log.Ctx(ctx).Warnf("Resp header: %+v\n Resp Body: %v", resp.Header, string(bodyText))
+		log.Ctx(ctx).Warnf("Query isbn:%v Resp header: %+v\n Resp Body: %v", isbn, resp.Header, string(bodyText))
 		return nil, err
 	}
 

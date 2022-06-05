@@ -1,3 +1,3 @@
 export const config = {
-    serverUrl: 'http://localhost:18080'
+    serverUrl: 'https://pi.mcoder.cc:18080'
 }

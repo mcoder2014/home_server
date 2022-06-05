@@ -1,13 +1,27 @@
 <template>
   <el-menu class="row-bg" mode="horizontal" router=true>
-    <el-menu-item index="/login" id="h-user"> login</el-menu-item>
+
+
     <el-sub-menu>
       <template #title>lib 管理</template>
       <el-menu-item index="/book/list">图书列表</el-menu-item>
       <el-menu-item index="/book/add">录入图书</el-menu-item>
       <el-menu-item index="/book/search">图书检索</el-menu-item>
     </el-sub-menu>
-    <el-menu-item @click="logout">Logout</el-menu-item>
+
+    <template v-if="hasLogin">
+      <!-- 用户信息 -->
+      <el-row>
+        <el-avatar shape="square" :size="50" :src="user.avatar"/>
+        <span>{{ user.username }}</span>
+      </el-row>
+      <el-menu-item @click="logout">退出</el-menu-item>
+    </template>
+    <template v-else>
+      <el-menu-item index="/login" id="h-user">登录</el-menu-item>
+    </template>
+
+
   </el-menu>
 </template>
 
@@ -17,7 +31,6 @@
 export default {
   name: "MyHeader",
   data() {
-    console.log("header")
     return {
       user: {
         username: '请先登录',
@@ -28,16 +41,16 @@ export default {
   },
   methods: {
     logout() {
-      // const _this = this
-      // _this.$axios.get("/logout", {
-      //   headers: {
-      //     "Authorization": localStorage.getItem("token")
-      //   }
-      // }).then(res => {
-      //   _this.$store.commit("REMOVE_INFO")
-      //   _this.$router.push("/login")
-      //
-      // })
+      const _this = this
+      _this.$axios.get("/logout", {
+        headers: {
+          "Authorization": localStorage.getItem("token")
+        }
+      }).then(res => {
+        _this.$store.commit("REMOVE_INFO")
+        _this.$router.push("/login")
+
+      })
     }
   },
   created() {

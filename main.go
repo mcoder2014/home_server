@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/mcoder2014/home_server/utils/routine"
+
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/route"
@@ -24,6 +26,8 @@ func main() {
 		os.Exit(1)
 	}
 	logrus.Infof("Load Config: %+v", config.Global())
+
+	routine.Init()
 
 	// 链接数据库
 	err = db.InitDatabase(config.Global().Mysql.MasterDB)

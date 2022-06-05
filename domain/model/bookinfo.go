@@ -30,3 +30,30 @@ type BookInfo struct {
 	// 数据库通用字段
 	DalModel
 }
+
+func BookInfoSliceToMap(infoList []*BookInfo) (map[string]*BookInfo, map[string]*BookInfo) {
+	isbn10Map := make(map[string]*BookInfo, len(infoList))
+	isbnMap := make(map[string]*BookInfo, len(infoList))
+	for _, b := range infoList {
+		if b == nil {
+			continue
+		}
+		isbnMap[b.Isbn] = b
+		isbn10Map[b.Isbn10] = b
+	}
+	return isbnMap, isbn10Map
+}
+
+func BookInfoSliceToMapByIsbnList(isbnList []string, infoList []*BookInfo) map[string]*BookInfo {
+	result := make(map[string]*BookInfo, len(isbnList))
+	isbn10Map, isbnMap := BookInfoSliceToMap(infoList)
+	for _, isbn := range isbnList {
+		if isbn10Map[isbn] != nil {
+			result[isbn] = isbn10Map[isbn]
+		}
+		if isbnMap[isbn] != nil {
+			result[isbn] = isbnMap[isbn]
+		}
+	}
+	return result
+}
