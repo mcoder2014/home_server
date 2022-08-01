@@ -2,7 +2,7 @@
   <MyHeader></MyHeader>
   <el-container>
     <el-header>
-      <img class="mlogo" src="https://www.markerhub.com/dist/images/logo/markerhub-logo.png" alt="">
+<!--      <img class="mlogo" src="https://www.markerhub.com/dist/images/logo/markerhub-logo.png" alt="">-->
       <h1>登录</h1>
     </el-header>
     <el-main>
@@ -26,6 +26,21 @@
 
 <script>
 import MyHeader from "@/components/MyHeader";
+import axios from "axios";
+import global from "@/components/Common"
+import {JSEncrypt} from 'jsencrypt'
+
+let rsa = ""
+
+function encrypt(passwd) {
+  if (rsa.length === 0 ){
+    alert("get rsa public key failed")
+    return
+  }
+  let jsEncrypt = new JSEncrypt()
+  jsEncrypt.setPublicKey(rsa)
+  return jsEncrypt.encrypt(passwd)
+}
 
 export default {
   name: "MyLogin",
@@ -34,8 +49,8 @@ export default {
   data() {
     return {
       ruleForm: {
-        username: 'markerhub',
-        password: '111111'
+        username: 'admin',
+        password: '123456'
       },
       rules: {
         username: [
@@ -45,10 +60,74 @@ export default {
         password: [
           {required: true, message: '请选择密码', trigger: 'change'}
         ]
-      }
+      },
+      rsa: "rsa",
+      config : global.config
     };
   },
+  methods: {
+    submitForm(formName) {
+      let url = this.$store.state.global.baseUrl + "/"
+      let apiBase = axios.create({
+        baseURL: url,
+        withCredentials: false,
+      });
+      let enPasswd = encrypt(this.ruleForm.password)
+      console.log("rsa:", rsa, "username",this.ruleForm.username,"passwd:",enPasswd)
+
+      let loginParam = {
+        user_name: this.ruleForm.username,
+        crypt_passwd: enPasswd
+      }
+
+      let curStore = this.$store
+      let curRouter = this.$router
+
+      apiBase.post("/passport/login",
+        loginParam
+      ).then(function (response) {
+        console.log(response);
+        if (response.data.code === 0) {
+          console.log(response.data.data)
+          localStorage.setItem("token",response.data.data.token);
+          localStorage.setItem("user_name",response.data.data.user_name);
+
+          curStore.state.global.token = response.data.data.token
+          curRouter.push({
+            path: '/'
+          });
+        } else {
+          alert("login failed")
+        }
+      }).catch(function (err) {
+        alert("error " + err)
+      })
+    },
+    loadRsaKey(){
+      let url = this.config.serverUrl + "/"
+      let apiBase = axios.create({
+        baseURL: url,
+        withCredentials: false,
+      });
+
+      apiBase.get("/passport/rsa",{}).then(function (response) {
+        console.log(response);
+        if (response.data.code === 0) {
+          console.log(response.data.data)
+          rsa = response.data.data
+        } else {
+          alert("get failed.")
+        }
+      }).catch(function (err) {
+        alert("error " + err)
+      })
+    }
+  },
+  created() {
+    this.loadRsaKey()
+  }
 }
+
 </script>
 
 <style scoped>

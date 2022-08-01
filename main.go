@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mcoder2014/home_server/domain/service"
 	"github.com/mcoder2014/home_server/utils/routine"
 
 	"github.com/mcoder2014/home_server/config"
@@ -51,6 +52,11 @@ func main() {
 		port = config.Global().Server.Port
 	}
 	logrus.Infof("will bind http server port on %v", port)
+
+	// init service
+	if err := service.Init(config.ConfigPtr(config.Global())); err != nil {
+		panic(err)
+	}
 
 	if err = r.Run(":" + strconv.Itoa(port)); err != nil {
 		panic(err)

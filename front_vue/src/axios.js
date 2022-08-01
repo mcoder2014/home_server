@@ -6,6 +6,7 @@ import store from './store'
 // 前置拦截
 axios.interceptors.request.use(config => {
     if (store.state.token.length > 0) {
+        config.headers['passport'] = `${store.state.token}`;
         config.headers.Authorization = `token ${store.state.token}`;
     }
     return config
@@ -20,6 +21,8 @@ axios.interceptors.response.use(response => {
 
         if (res.code === 200) {
             return response
+        } else if (res.code === 301) {
+            console.log(response)
         } else {
             ElMessageBox.alert('Error Code: ' + res.code, '这是一条错误信息', {
                 confirmButtonText: 'OK',

@@ -127,6 +127,7 @@ export default {
 
     },
     getBookStorages(offset, limit) {
+      console.log("current token:"+localStorage.getItem('token') )
       let url = this.$store.state.global.baseUrl + "/"
       let param = {
         offset: offset,
@@ -136,6 +137,7 @@ export default {
       let apiBase = axios.create({
         baseURL: url,
         withCredentials: false,
+        headers:{'passport':localStorage.getItem('token')}
       });
 
       let updateTable = this.updateTable

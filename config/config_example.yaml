@@ -11,3 +11,6 @@ rpc:
     account_id: xxxx
 mysql:
   master_db: test:123456@tcp(127.0.0.1:3306)/home_server?charset=utf8mb4&parseTime=True&loc=Local
+passport:
+  mock_data: '[{"id":123,"user_name":"test","password":"$2a$04$R2Csdr0qO4JEHxawUyysM.xiv266hVHiNh.hoUCAwpNObRFMyisE6","email":"m123@123.com","mobile":"12345678901","create_time":"0001-01-01T00:00:00Z","update_time":"0001-01-01T00:00:00Z"}]'
+  redirect_login_path: https://example.com/login

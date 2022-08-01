@@ -14,13 +14,13 @@ type HttpRoute struct {
 	// HTTP 路径
 	Path string
 	// Handler 处理函数
-	Handler gin.HandlerFunc
+	Handlers []gin.HandlerFunc
 }
 
-func AddRoute(method string, path string, handler gin.HandlerFunc) {
+func AddRoute(method string, path string, handlers ...gin.HandlerFunc) {
 	RouterMap[path] = HttpRoute{
-		Method:  method,
-		Path:    path,
-		Handler: handler,
+		Method:   method,
+		Path:     path,
+		Handlers: handlers,
 	}
 }

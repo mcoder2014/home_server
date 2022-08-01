@@ -34,10 +34,10 @@ func Wrap(err error, code ErrorCode) error {
 	}
 }
 
-func Wrapf(err error, code ErrorCode, message string) error {
+func Wrapf(err error, code ErrorCode, message string, args ...interface{}) error {
 	return &Error{
 		Code:    code,
-		Message: message,
+		Message: fmt.Sprintf(message, args...),
 		origin:  err,
 	}
 }
