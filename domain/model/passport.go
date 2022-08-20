@@ -2,7 +2,7 @@ package model
 
 type UserIdentity struct {
 	// 主键
-	Id int64 `json:"id" gorm:"column:id"`
+	ID int64 `json:"id" gorm:"column:id"`
 	// 用户名
 	UserName string `json:"user_name" gorm:"column:user_name"`
 	// 密码

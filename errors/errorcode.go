@@ -24,4 +24,10 @@ const (
 
 	// 数据库相关的
 	ErrorCodeDbError ErrorCode = 301 // 数据库错误
+
+	// 登录相关
+	ErrorCodeUserNameOrPasswdWrong = 401 // 用户名密码不正确
+	ErrorCodeGenRsaKeyFailed       = 402 // RSA 秘钥生成错误
+	ErrorCodeUserNotLogin          = 403 // 用户未登录
+	ErrorCodeUserLoginExpire       = 404 // 用户登录态过期
 )

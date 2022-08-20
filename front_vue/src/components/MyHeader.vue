@@ -15,13 +15,11 @@
         <el-avatar shape="square" :size="50" :src="user.avatar"/>
         <span>{{ user.username }}</span>
       </el-row>
-      <el-menu-item @click="logout">退出</el-menu-item>
+      <el-button @click="logout">退出</el-button>
     </template>
     <template v-else>
       <el-menu-item index="/login" id="h-user">登录</el-menu-item>
     </template>
-
-
   </el-menu>
 </template>
 
@@ -41,27 +39,27 @@ export default {
   },
   methods: {
     logout() {
-      const _this = this
-      _this.$axios.get("/logout", {
-        headers: {
-          "Authorization": localStorage.getItem("token")
-        }
-      }).then(res => {
-        _this.$store.commit("REMOVE_INFO")
-        _this.$router.push("/login")
-
-      })
+      localStorage.removeItem('token')
+      localStorage.removeItem('user_name')
+      console.log("clear token success")
+      // const _this = this
+      // _this.$axios.get("/logout", {
+      //   headers: {
+      //     "Authorization": localStorage.getItem("token")
+      //   }
+      // }).then(res => {
+      //   _this.$store.commit("REMOVE_INFO")
+      //   _this.$router.push("/login")
+      //
+      // })
     }
   },
   created() {
     // 根据用户登录信息修改
-    // if(this.$store.getters.getUser.username) {
-    //   this.user.username = this.$store.getters.getUser.username
-    //   this.user.avatar = this.$store.getters.getUser.avatar
-    //
-    //   this.hasLogin = true
-    // }
-
+    if (localStorage.getItem('token') !== null && localStorage.getItem('token') !=='') {
+      this.hasLogin = true
+      this.user.username = localStorage.getItem('user_name')
+    }
   }
 }
 </script>

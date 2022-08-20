@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/mcoder2014/home_server/api/library"
+	"github.com/mcoder2014/home_server/api/passport"
 )
 
 var routeInit sync.Once
@@ -16,5 +17,7 @@ func InitRouter() {
 
 		// 图书相关接口
 		library.InitRouter()
+
+		passport.InitRouter()
 	})
 }

@@ -33,6 +33,11 @@ type Config struct {
 	Mysql struct {
 		MasterDB string `json:"master_db" yaml:"master_db"`
 	} `json:"mysql" yaml:"mysql"`
+
+	Passport struct {
+		MockData          string `json:"mock_data" yaml:"mock_data"`
+		RedirectLoginPath string `json:"redirect_login_path" yaml:"redirect_login_path"`
+	} `json:"passport" yaml:"passport"`
 }
 
 // 全局配置
@@ -54,4 +59,8 @@ func InitGlobalConfig(filepath string) error {
 	}
 	logrus.Infof("InitGlobalConfig config file path: %v", filepath)
 	return nil
+}
+
+func ConfigPtr(c Config) *Config {
+	return &c
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	myErrors "github.com/mcoder2014/home_server/errors"
+	"github.com/mcoder2014/home_server/utils/log"
 )
 
 func FormatWithData(c *gin.Context, data interface{}) {
@@ -15,6 +16,7 @@ func FormatWithData(c *gin.Context, data interface{}) {
 }
 
 func FormatWithError(c *gin.Context, err error) {
+	log.Ctx(RPCContext(c)).Errorf("Error:%+v", err)
 	if !errors.As(err, &myErrors.Error{}) {
 		resp := NewErrorResponse(int(myErrors.ErrorCodeUnknownError), err.Error())
 		c.JSON(http.StatusOK, resp)
