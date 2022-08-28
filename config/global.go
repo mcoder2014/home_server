@@ -24,6 +24,7 @@ type Config struct {
 		// Cloudflare 相关的配置，用于配置域名
 		Cloudflare struct {
 			APIKey    string `json:"api_key" yaml:"api_key"`
+			APIToken  string `json:"api_token" yaml:"api_token"`
 			ZoneID    string `json:"zone_id" yaml:"zone_id"`
 			AccountID string `json:"account_id" yaml:"account_id"`
 		} `json:"cloudflare" yaml:"cloudflare"`

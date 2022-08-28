@@ -1,0 +1,12 @@
+cloudflare:
+  api_token: <your cloudflare api token>
+  zone: <your domain zone id>
+  debug: true
+
+ddns_config:
+  -
+    domain: a.example.org
+    ip_version: ipv4
+  -
+    domain: a6.example.org
+    ip_version: ipv6
