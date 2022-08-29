@@ -9,8 +9,7 @@ import (
 const LogIDKey = "log_id"
 
 func Ctx(ctx context.Context) *logrus.Entry {
-	logger := logrus.New()
-
+	logger := logrus.StandardLogger()
 	fields := logrus.Fields{}
 	// logID
 	if c := ctx.Value(LogIDKey); c != nil {
