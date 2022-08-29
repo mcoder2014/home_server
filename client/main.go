@@ -14,8 +14,9 @@ import (
 
 func main() {
 	logrus.SetFormatter(&logrus.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: true,
+		DisableColors:   false,
+		FullTimestamp:   true,
+		TimestampFormat: "2006-01-02T15:04:05.000000",
 	})
 
 	cliConfig := GetConfig()
