@@ -20,28 +20,34 @@ func StartDDNSRoutine() {
 	logrus.Infof("StartDDNSRoutine")
 	ticker := time.NewTicker(120 * time.Second)
 	for range ticker.C {
-
 		ctx := log.GetCtxWithLogID(context.Background())
+		RefreshOnce(ctx)
+	}
+}
 
-		// 处理 DDNS
-		ddnsConfs := config.Global().DDNSConfig
-		if len(ddnsConfs) == 0 {
-			log.Ctx(ctx).Infof("ddns config len 0, continue")
-			continue
-		}
+func RefreshOnce(ctx context.Context) {
+	defer utils.Recovery(ctx)
 
-		// 查询 ddns record
-		records, err := rpc.GetAllDNSRecord(ctx, config.Global().Cloudflare.Zone)
-		recordMap := convertToDNSRecordMap(records)
+	log.Ctx(ctx).Infof("DDNS refresh once")
+
+	// 处理 DDNS
+	ddnsConfs := config.Global().DDNSConfig
+	if len(ddnsConfs) == 0 {
+		log.Ctx(ctx).Infof("ddns config len 0, continue")
+		return
+	}
+
+	// 查询 ddns record
+	records, err := rpc.GetAllDNSRecord(ctx, config.Global().Cloudflare.Zone)
+	recordMap := convertToDNSRecordMap(records)
+	if err != nil {
+		log.Ctx(ctx).WithError(err).Errorf("GetAllDNSRecord failed")
+		return
+	}
+	for _, domainConfig := range ddnsConfs {
+		err = domainCheck(ctx, domainConfig, recordMap)
 		if err != nil {
-			log.Ctx(ctx).WithError(err).Errorf("GetAllDNSRecord failed")
-			continue
-		}
-		for _, domainConfig := range ddnsConfs {
-			err = domainCheck(ctx, domainConfig, recordMap)
-			if err != nil {
-				log.Ctx(ctx).WithError(err).Errorf("ddns check domain %v failed", domainConfig.Domain)
-			}
+			log.Ctx(ctx).WithError(err).Errorf("ddns check domain %v failed", domainConfig.Domain)
 		}
 	}
 }
