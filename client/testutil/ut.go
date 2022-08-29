@@ -3,10 +3,8 @@ package testutil
 import (
 	"os"
 
-	"github.com/mcoder2014/home_server/domain/db"
+	"github.com/mcoder2014/home_server/client/config"
 	"github.com/mcoder2014/home_server/utils/routine"
-
-	"github.com/mcoder2014/home_server/config"
 )
 
 func Init() error {
@@ -25,11 +23,5 @@ func Init() error {
 		return err
 	}
 
-	// 链接数据库
-	err = db.InitDatabase(config.Global().Mysql.MasterDB)
-	if err != nil {
-		return err
-	}
 	return nil
-
 }
