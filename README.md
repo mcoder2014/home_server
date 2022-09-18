@@ -14,6 +14,23 @@
 - Watch Dog: 或者叫 heart beat，用于记录设备心跳数据，包含一些辅助数据，可以快速发现设备是否掉线；
 - 家庭图书管理能力: 以 isbn 为基础，快速管理家庭中的纸质书及电子书；
 
+## 安装说明
+
+
+### home_client
+1. 运行 `./build.sh`，编译程序;
+2. 仿照 `client/config_example.yaml` 编写一份自己的配置文件；
+3. 将二进制文件复制到指定文件夹 `sudo cp/bin/home_client /usr/local/bin/home_client`;
+4. 将配置文件放在指定文件 `/etc/home_server/client_config.yaml`；
+5. 将 systemd 配置文件复制到指定路径 `sudo cp script/systemd/home_client.service /etc/systemd/system`
+6. 启动 `sudo systemctl start home_client.service`
+
+#### 查看日志
+
+```shell
+sudo journalctl --unit home_client.service
+```
+
 ## 版权信息 MIT LICENSE
 
 本项目为个人兴趣，目的在于满足个人需求，不提供技术支持，使用本系统造成数据丢失、机器损坏等损失概不负责。
