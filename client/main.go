@@ -45,7 +45,7 @@ func exitHandle(exitChan chan os.Signal) {
 		select {
 		case sig := <-exitChan:
 			logrus.Infof("Get Signal: %v from sys, stop program", sig)
-			time.Sleep(10 * time.Second)
+			time.Sleep(3 * time.Second)
 			logrus.Infof("Force Exit")
 			os.Exit(1) //如果ctrl+c 关不掉程序，使用os.Exit强行关掉
 		}

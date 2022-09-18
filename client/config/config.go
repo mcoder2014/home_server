@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/mcoder2014/home_server/utils"
 	"github.com/sirupsen/logrus"
 )
@@ -17,10 +19,24 @@ type CloudflareConfig struct {
 	Debug    bool   `json:"debug" yaml:"debug"`
 }
 
+func (c *CloudflareConfig) String() string {
+	if c == nil {
+		return ""
+	}
+	return fmt.Sprintf("%+v", *c)
+}
+
 type DomainConfig struct {
 	// 对应的 DDNS 域名
 	Domain    string    `json:"domain" yaml:"domain"`
 	IPVersion IpVersion `json:"ip_version" yaml:"ip_version"`
+}
+
+func (d *DomainConfig) String() string {
+	if d == nil {
+		return ""
+	}
+	return fmt.Sprintf("%+v", *d)
 }
 
 type IpVersion string
