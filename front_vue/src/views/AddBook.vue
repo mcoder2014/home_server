@@ -46,10 +46,9 @@ export default {
         withCredentials: false,
         headers: {
           'Content-Type': 'application/json;charset=UTF-8',
+          'passport':localStorage.getItem('token')
         },
       });
-
-      let tmpRouter = this.$router
 
       apiBase.post("/library/book/add", param).then(function (response){
         console.log(response);

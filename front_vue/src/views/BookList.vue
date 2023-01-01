@@ -66,6 +66,7 @@ export default {
           publisher: '超群出版社',
           pubDate: '2000-01-01',
           isbn: '`1234567890123',
+          img: 'https://img.maimiaobook.com/cover/5608VP471D.jpg?x-oss-process=style/yuantu',
           update_time: '2000-01-01',
           info: {}
         }

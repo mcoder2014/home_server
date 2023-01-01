@@ -2,6 +2,7 @@
   <div>
     <MyHeader></MyHeader>
     <h1>Index 页面</h1>
+    <h2>内容开发中</h2>
   </div>
 </template>
 

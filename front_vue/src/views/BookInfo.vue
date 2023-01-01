@@ -1,5 +1,5 @@
 <template>
-  <h1>bookinfo</h1>
+  <h1>bookinfo(未开发)</h1>
   <div>
   </div>
 </template>
