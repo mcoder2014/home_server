@@ -52,6 +52,7 @@
 import MyHeader from "@/components/MyHeader";
 import axios from "axios";
 import {ElMessageBox} from "element-plus";
+import {handleError} from "@/utils/handle_http_error";
 
 export default {
   name: "BookList",
@@ -148,6 +149,7 @@ export default {
         params: param,
       }).then(function (response) {
         console.log(response);
+        handleError(response)
         if (response.data.code === 0) {
           console.log(response.data.data)
           // 更新表格

@@ -90,3 +90,18 @@ func Login(c *gin.Context) {
 		Token:    token,
 	})
 }
+
+func Logout(c *gin.Context) {
+	ctx := ginfmt.RPCContext(c)
+	token := utils.GetTokenFromCtx(ctx)
+	if token == "" {
+		ginfmt.FormatWithError(c, errors.New("token is empty"))
+		return
+	}
+	err := passport.DeleteToken(ctx, token)
+	if err != nil {
+		ginfmt.FormatWithError(c, err)
+		return
+	}
+	ginfmt.FormatWithData(c, nil)
+}

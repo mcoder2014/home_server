@@ -31,6 +31,7 @@ type MockData struct {
 	mobileMap   map[string]*model.UserIdentity
 	emailMap    map[string]*model.UserIdentity
 	userNameMap map[string]*model.UserIdentity
+	userIDMap   map[int64]*model.UserIdentity
 }
 
 func (m *MockData) LoadConf(conf string) error {
@@ -53,6 +54,7 @@ func (m *MockData) LoadConf(conf string) error {
 	m.mobileMap = make(map[string]*model.UserIdentity, len(identities))
 	m.emailMap = make(map[string]*model.UserIdentity, len(identities))
 	m.userNameMap = make(map[string]*model.UserIdentity, len(identities))
+	m.userIDMap = make(map[int64]*model.UserIdentity, len(identities))
 
 	for _, i := range identities {
 		if len(i.Mobile) > 0 {
@@ -64,6 +66,7 @@ func (m *MockData) LoadConf(conf string) error {
 		if len(i.UserName) > 0 {
 			m.userNameMap[i.UserName] = i
 		}
+		m.userIDMap[i.ID] = i
 	}
 	return nil
 }
@@ -83,4 +86,8 @@ func (m *MockData) GetIdentity(ctx context.Context, mobileEmailUsername string) 
 		return
 	}
 	return nil, nil
+}
+
+func (m *MockData) GetByID(userID int64) (*model.UserIdentity, error) {
+	return m.userIDMap[userID], nil
 }

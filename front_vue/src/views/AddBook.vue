@@ -14,6 +14,7 @@
 <script>
 
 import MyHeader from "@/components/MyHeader";
+import {handleError} from "@/utils/handle_http_error"
 
 export default {
   name: "AddBook",
@@ -52,6 +53,7 @@ export default {
 
       apiBase.post("/library/book/add", param).then(function (response){
         console.log(response);
+        handleError(response);
         if (response.data.code === 0) {
           alert("添加成功")
         } else {

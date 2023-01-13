@@ -1,93 +1,78 @@
 package passport
 
 import (
-	"sync"
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
 	myErrors "github.com/mcoder2014/home_server/errors"
-	"github.com/sirupsen/logrus"
-)
-
-var (
-	tokenStore     = map[string]*TokenValue{}
-	tokenStoreLock sync.RWMutex
+	"github.com/mcoder2014/home_server/utils"
+	"github.com/mcoder2014/home_server/utils/log"
 )
 
 const (
 	// TokenExpireTime Token 过期时间
 	TokenExpireTime = 7 * 24 * time.Hour
-	// TokenExpireCheckDuration 检查 token 过期间隔
-	TokenExpireCheckDuration = 1 * time.Hour
 )
 
-type TokenValue struct {
-	// Identity 身份信息
-	Identity *model.UserIdentity
-	// 过期时间
-	ExpireTime time.Time
-}
-
 func GenToken(identity *model.UserIdentity) (string, error) {
-	uid, err := uuid.NewUUID()
+	token := BuildUserToken(identity.ID, TokenExpireTime)
+	_, err := dal.CreateToken(token)
 	if err != nil {
 		return "", err
 	}
-	tokenStoreLock.Lock()
-	defer tokenStoreLock.Unlock()
-
-	tokenStore[uid.String()] = &TokenValue{
-		Identity:   identity,
-		ExpireTime: time.Now().Add(TokenExpireTime),
-	}
-	return uid.String(), nil
+	return token.Token, nil
 }
 
-func CheckToken(token string) (*model.UserIdentity, error) {
-	tokenStoreLock.RLock()
-	defer tokenStoreLock.RUnlock()
-
-	tokenValue, ok := tokenStore[token]
-	if !ok {
+func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) {
+	tokenEntity, err := dal.QueryByToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if tokenEntity == nil {
 		return nil, myErrors.New(myErrors.ErrorCodeUserNotLogin)
 	}
-	if tokenValue.ExpireTime.Before(time.Now()) {
+	if tokenEntity.IsExpired == model.UserTokenExpired {
 		return nil, myErrors.New(myErrors.ErrorCodeUserLoginExpire)
 	}
-	return tokenValue.Identity, nil
-}
 
-func DeleteToken(token string) error {
-	tokenStoreLock.Lock()
-	defer tokenStoreLock.Unlock()
-
-	delete(tokenStore, token)
-	return nil
-}
-
-func CleanExpireToken() error {
-	tokenStoreLock.Lock()
-	defer tokenStoreLock.Unlock()
-
-	for token, value := range tokenStore {
-		if value.ExpireTime.Add(TokenExpireTime).Before(time.Now()) {
-			delete(tokenStore, token)
-		}
+	if tokenEntity.ExpireTime.After(time.Now()) {
+		log.Ctx(ctx).Infof("get tokenEntity success :%+v", *tokenEntity)
+		return GetMockData().GetByID(tokenEntity.UserID)
 	}
-	return nil
+
+	// 设置过期
+	_ = dal.ExpireToken(tokenEntity.ID)
+	return nil, myErrors.New(myErrors.ErrorCodeUserLoginExpire)
 }
 
-func InitToken() error {
-	go func() {
-		ticker := time.Tick(TokenExpireCheckDuration)
-		select {
-		case <-ticker:
-			err := CleanExpireToken()
-			if err != nil {
-				logrus.WithError(err).Warnf("CleanToken failed")
-			}
-		}
-	}()
-	return nil
+func DeleteToken(ctx context.Context, token string) error {
+	tokenEntity, err := dal.QueryByToken(token)
+	if err != nil {
+		return err
+	}
+	if tokenEntity == nil || tokenEntity.IsExpired == model.UserTokenExpired {
+		return nil
+	}
+	return dal.ExpireToken(tokenEntity.ID)
+}
+
+func BuildUserToken(userID int64, expireTime time.Duration) *model.UserToken {
+	if expireTime <= 0 {
+		expireTime = TokenExpireTime
+	}
+
+	tokenString := fmt.Sprintf("%d-%s-%d", time.Now().Unix(), uuid.New().String(), userID)
+
+	token := &model.UserToken{
+		ID:         utils.GenInt64ID(),
+		UserID:     userID,
+		Token:      tokenString,
+		ExpireTime: time.Now().Add(expireTime),
+		IsExpired:  model.UserTokenNotExpired,
+	}
+	return token
 }
