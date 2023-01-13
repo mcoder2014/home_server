@@ -16,6 +16,17 @@
 
 ## 安装说明
 
+### 前端页面
+
+编译前端文件，将 dist 目录下的文件拷贝到服务器的 /var/www/html 目录下，即可访问。
+
+```shell
+npm run build
+```
+
+### home_server
+
+执行 `./build.sh` 构建 server 和 client 的二进制文件。
 
 ### home_client
 1. 运行 `./build.sh`，编译程序;
