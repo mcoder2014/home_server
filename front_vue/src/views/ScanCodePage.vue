@@ -73,7 +73,6 @@ export default {
         console.error(err);
       });
     },
-
     decodeFromInputVideoFunc(firstDeviceId) {
       this.codeReader.reset(); // 重置
       this.codeReader.decodeFromInputVideoDeviceContinuously(firstDeviceId, 'video', (result, err) => {

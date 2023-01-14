@@ -26,6 +26,8 @@
 
 <script>
 
+import axios from "axios";
+
 export default {
   name: "MyHeader",
   data() {
@@ -39,19 +41,33 @@ export default {
   },
   methods: {
     logout() {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user_name')
-      console.log("clear token success")
-      // const _this = this
-      // _this.$axios.get("/logout", {
-      //   headers: {
-      //     "Authorization": localStorage.getItem("token")
-      //   }
-      // }).then(res => {
-      //   _this.$store.commit("REMOVE_INFO")
-      //   _this.$router.push("/login")
-      //
-      // })
+      let url = this.$store.state.global.baseUrl + "/"
+      let apiBase = axios.create({
+        baseURL: url,
+        withCredentials: false,
+        headers:{'passport':localStorage.getItem('token')}
+      });
+
+      let curRouter = this.$router
+
+      apiBase.post("/passport/logout").then(function (response) {
+        console.log(response);
+
+        if (response.data.code === 0) {
+          console.log(response)
+        } else {
+          alert("login failed")
+        }
+
+        // 最终都需要退出
+        localStorage.removeItem('token')
+        localStorage.removeItem('user_name')
+        curRouter.push({
+          path: '/'
+        });
+      }).catch(function (err) {
+        alert("error " + err)
+      })
     }
   },
   created() {

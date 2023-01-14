@@ -37,10 +37,6 @@ func Init(conf *config.Config) error {
 	if err != nil {
 		return errors.Wrap(err, "passport init failed")
 	}
-	err = InitToken()
-	if err != nil {
-		return errors.Wrap(err, "init token failed")
-	}
 	return nil
 }
 
