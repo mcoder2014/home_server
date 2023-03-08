@@ -14,9 +14,10 @@ type ClientConfig struct {
 
 // CloudflareConfig 相关的配置，用于配置域名
 type CloudflareConfig struct {
-	APIToken string `json:"api_token" yaml:"api_token"`
-	Zone     string `json:"zone" yaml:"zone"`
-	Debug    bool   `json:"debug" yaml:"debug"`
+	APIToken  string `json:"api_token" yaml:"api_token"`
+	Zone      string `json:"zone" yaml:"zone"`
+	Debug     bool   `json:"debug" yaml:"debug"`
+	HTTPProxy string `json:"http_proxy" yaml:"http_proxy"`
 }
 
 func (c *CloudflareConfig) String() string {

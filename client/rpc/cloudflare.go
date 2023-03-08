@@ -3,18 +3,40 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 
 	"github.com/cloudflare/cloudflare-go"
 	"github.com/mcoder2014/home_server/client/config"
 )
 
-func getApi() (*cloudflare.API, error) {
-	apiToken := config.Global().Cloudflare.APIToken
-	api, err := cloudflare.NewWithAPIToken(apiToken)
+func getHTTPClient() (*http.Client, error) {
+	if config.Global().Cloudflare.HTTPProxy == "" {
+		return http.DefaultClient, nil
+	}
+
+	proxyURL, err := url.Parse(config.Global().Cloudflare.HTTPProxy)
 	if err != nil {
 		return nil, err
 	}
-	api.Debug = config.Global().Cloudflare.Debug
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyURL(proxyURL),
+		},
+	}, nil
+}
+func getApi() (*cloudflare.API, error) {
+	apiToken := config.Global().Cloudflare.APIToken
+	client, err := getHTTPClient()
+	if err != nil {
+		return nil, err
+	}
+	api, err := cloudflare.NewWithAPIToken(apiToken,
+		cloudflare.Debug(config.Global().Cloudflare.Debug),
+		cloudflare.HTTPClient(client))
+	if err != nil {
+		return nil, err
+	}
 	return api, nil
 }
 

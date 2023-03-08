@@ -15,7 +15,7 @@ func TestMain(t *testing.M) {
 }
 
 func TestGetAllDNSRecord(t *testing.T) {
-	records, err := GetAllDNSRecord(context.Background(), "mcoder.cc")
+	records, err := GetAllDNSRecord(context.Background(), "50bb5112d172dc847c194c6b2e3fdcac")
 	require.Nil(t, err)
 	fmt.Printf("records: \t%+v\n", records)
 }
