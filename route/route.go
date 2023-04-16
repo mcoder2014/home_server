@@ -1,8 +1,6 @@
 package route
 
 import (
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api"
 	"github.com/mcoder2014/home_server/api/middleware"
@@ -20,11 +18,8 @@ func InitRoute() *gin.Engine {
 			"message": "pong",
 		})
 	})
-	// session
-	store := cookie.NewStore([]byte("secret11111"))
-	r.Use(sessions.Sessions("home_server", store))
 	// 加入中间件
-	r.Use(middleware.AddLogID, middleware.CORS())
+	r.Use(gin.Recovery(), middleware.AddLogID, middleware.CORS())
 
 	// 批量注册 http 接口
 	data.ForRange(func(method, path string, handlers ...gin.HandlerFunc) {

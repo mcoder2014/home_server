@@ -42,7 +42,7 @@ func ValidateLogin() gin.HandlerFunc {
 
 func ValidateBasicAuth() gin.HandlerFunc {
 
-	unauhtorized := func(c *gin.Context) {
+	unauthorized := func(c *gin.Context) {
 		c.Writer.Header().Set("WWW-Authenticate", `basic realm="Restricted"`)
 		c.Writer.WriteHeader(http.StatusUnauthorized)
 		c.Abort()
@@ -52,19 +52,19 @@ func ValidateBasicAuth() gin.HandlerFunc {
 		ctx := ginfmt.RPCContext(c)
 		username, password, ok := c.Request.BasicAuth()
 		if !ok {
-			unauhtorized(c)
+			unauthorized(c)
 			log.Ctx(ctx).Infof("Not login")
 			return
 		}
 
 		res, err := passport.ValidateUser(ctx, username, password)
 		if err != nil {
-			unauhtorized(c)
+			unauthorized(c)
 			log.Ctx(ctx).Warnf("user:%v, err:%+v", username, err)
 			return
 		}
 		if res == nil {
-			unauhtorized(c)
+			unauthorized(c)
 			log.Ctx(ctx).Warnf("user not found:%v, err:%+v", username, err)
 			return
 		}
