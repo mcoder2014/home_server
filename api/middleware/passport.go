@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 	"github.com/mcoder2014/home_server/utils/log"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -34,6 +36,40 @@ func ValidateLogin() gin.HandlerFunc {
 			c.Set(utils.CtxKeyLoginUseID, userEntity.ID)
 			c.Set(utils.CtxKeyLoginToken, value)
 		}
+		c.Next()
+	}
+}
+
+func ValidateBasicAuth() gin.HandlerFunc {
+
+	unauhtorized := func(c *gin.Context) {
+		c.Writer.Header().Set("WWW-Authenticate", `basic realm="Restricted"`)
+		c.Writer.WriteHeader(http.StatusUnauthorized)
+		c.Abort()
+	}
+
+	return func(c *gin.Context) {
+		ctx := ginfmt.RPCContext(c)
+		username, password, ok := c.Request.BasicAuth()
+		if !ok {
+			unauhtorized(c)
+			log.Ctx(ctx).Infof("Not login")
+			return
+		}
+
+		res, err := passport.ValidateUser(ctx, username, password)
+		if err != nil {
+			unauhtorized(c)
+			log.Ctx(ctx).Warnf("user:%v, err:%+v", username, err)
+			return
+		}
+		if res == nil {
+			unauhtorized(c)
+			log.Ctx(ctx).Warnf("user not found:%v, err:%+v", username, err)
+			return
+		}
+
+		logrus.Infof("basic auth success, user:%v", username)
 		c.Next()
 	}
 }

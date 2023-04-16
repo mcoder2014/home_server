@@ -26,11 +26,11 @@ func InitRoute() *gin.Engine {
 	// 加入中间件
 	r.Use(middleware.AddLogID, middleware.CORS())
 
-	// 批量注册回调
-	for path, route := range data.RouterMap {
-		r.Handle(route.Method, path, route.Handlers...)
-		logrus.Infof("Gin Register Method: %v, path: %v", route.Method, path)
-	}
+	// 批量注册 http 接口
+	data.ForRange(func(method, path string, handlers ...gin.HandlerFunc) {
+		r.Handle(method, path, handlers...)
+		logrus.Infof("Gin Register Method: %v, path: %v", method, path)
+	})
 
 	return r
 }
