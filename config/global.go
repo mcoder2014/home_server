@@ -39,6 +39,9 @@ type Config struct {
 		MockData          string `json:"mock_data" yaml:"mock_data"`
 		RedirectLoginPath string `json:"redirect_login_path" yaml:"redirect_login_path"`
 	} `json:"passport" yaml:"passport"`
+	WebDAV struct {
+		SharePath string `json:"share_path" yaml:"share_path"`
+	} `json:"webdav" yaml:"webdav"`
 }
 
 // 全局配置

@@ -13,6 +13,7 @@
 - DDNS: 用于动态 dns 注册，由于小米路由器尚未具备 ipv6 的 ddns 能力，home server 可以为家庭硬件设备提供 ddns 能力；
 - Watch Dog: 或者叫 heart beat，用于记录设备心跳数据，包含一些辅助数据，可以快速发现设备是否掉线；
 - 家庭图书管理能力: 以 isbn 为基础，快速管理家庭中的纸质书及电子书；
+- WebDAV: 使用同一套账号体系，通过 WebDAV 协议实现外部文档访问，地址为 [https://www.server.com:port/webdav](https://www.server.com:port/webdav)；
 
 ## 安装说明
 
@@ -41,6 +42,14 @@ npm run build
 ```shell
 sudo journalctl --unit home_client.service
 ```
+
+## FAQ
+
+##### Q: 为什么服务没有使用 SSL?
+
+A: 本项目是家庭服务，内网只暴露了 http，外网通过一个虚拟机的 nginx 反向代理实现，nginx 处配置了 SSL。其实服务就可以写的简化些，不需要使用 SSL。
+
+反向代理的配置文件可以参考`config/nginx/home_server_backend.conf`。
 
 ## 版权信息 MIT LICENSE
 

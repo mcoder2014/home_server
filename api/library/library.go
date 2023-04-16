@@ -7,7 +7,7 @@ import (
 	"github.com/mcoder2014/home_server/data"
 )
 
-func InitRouter() {
+func InitRouter() error {
 	// 查询图书信息接口
 	data.AddRoute(http.MethodGet, "/bookinfo/query", middleware.ValidateLogin(), QueryBookInfo)
 	// 新增库存接口
@@ -18,4 +18,5 @@ func InitRouter() {
 	data.AddRoute(http.MethodGet, "/library/book/total", middleware.ValidateLogin(), GetTotalBookStorage)
 	// 新增地址
 	data.AddRoute(http.MethodPost, "/library/address/add", middleware.ValidateLogin(), AddAddress)
+	return nil
 }

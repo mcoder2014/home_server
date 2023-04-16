@@ -18,12 +18,13 @@ var (
 	Ipv6Map sync.Map
 )
 
-func InitDDNSRouter() {
+func InitDDNSRouter() error {
 	data.AddRoute(http.MethodGet, "/ddns", GetDomain)
 	data.AddRoute(http.MethodGet, "/ddns/all", GetAllRecords)
 	data.AddRoute(http.MethodGet, "/ddns/real_ip", GetClientIpAddress)
 	data.AddRoute(http.MethodPost, "/ddns/ipv4", UpdateIpv4)
 	data.AddRoute(http.MethodPost, "/ddns/ipv6", UpdateIpv6)
+	return nil
 }
 
 func UpdateIpv4(c *gin.Context) {
