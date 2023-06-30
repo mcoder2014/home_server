@@ -42,6 +42,12 @@ type Config struct {
 	WebDAV struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
+	Feishu struct {
+		AppID             string `json:"app_id" yaml:"app_id"`
+		AppSecret         string `json:"app_secret" yaml:"app_secret"`
+		EncryptKey        string `json:"encrypt_key" yaml:"encrypt_key"`
+		VerificationToken string `json:"verification_token" yaml:"verification_token"`
+	} `json:"feishu" yaml:"feishu"`
 }
 
 // 全局配置

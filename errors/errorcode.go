@@ -26,8 +26,11 @@ const (
 	ErrorCodeDbError ErrorCode = 301 // 数据库错误
 
 	// 登录相关
-	ErrorCodeUserNameOrPasswdWrong = 401 // 用户名密码不正确
-	ErrorCodeGenRsaKeyFailed       = 402 // RSA 秘钥生成错误
-	ErrorCodeUserNotLogin          = 403 // 用户未登录
-	ErrorCodeUserLoginExpire       = 404 // 用户登录态过期
+	ErrorCodeUserNameOrPasswdWrong ErrorCode = 401 // 用户名密码不正确
+	ErrorCodeGenRsaKeyFailed       ErrorCode = 402 // RSA 秘钥生成错误
+	ErrorCodeUserNotLogin          ErrorCode = 403 // 用户未登录
+	ErrorCodeUserLoginExpire       ErrorCode = 404 // 用户登录态过期
+
+	// 飞书回调事件
+	ErrorCodeDecryptFailed ErrorCode = 501 // 解密
 )

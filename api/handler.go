@@ -3,6 +3,7 @@ package api
 import (
 	"sync"
 
+	"github.com/mcoder2014/home_server/api/feishu"
 	"github.com/mcoder2014/home_server/api/library"
 	"github.com/mcoder2014/home_server/api/passport"
 	"github.com/mcoder2014/home_server/api/webdav"
@@ -24,6 +25,8 @@ func InitRouter() error {
 			passport.InitRouter,
 			// webDAV 相关接口
 			webdav.InitRouter,
+			// 飞书开放平台相关接口
+			feishu.InitRouter,
 		} {
 			err = initFunc()
 			if err != nil {
