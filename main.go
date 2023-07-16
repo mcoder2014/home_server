@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mcoder2014/home_server/domain/service"
+	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/mcoder2014/home_server/utils/routine"
 
 	"github.com/mcoder2014/home_server/config"
@@ -18,16 +20,13 @@ import (
 )
 
 func main() {
-	logrus.SetFormatter(&logrus.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: true,
-	})
+	if err := log.Init(); err != nil {
+		panic(fmt.Errorf("log init  error: %w", err))
+	}
 
 	cliConfig := GetConfig()
-	err := config.InitGlobalConfig(cliConfig.ConfigPath)
-	if err != nil {
-		logrus.WithError(err).Errorf("load Global config from :%v failed.", cliConfig.ConfigPath)
-		os.Exit(1)
+	if err := config.InitGlobalConfig(cliConfig.ConfigPath); err != nil {
+		panic(fmt.Errorf("load Global config from:%v failed, err:%w", cliConfig.ConfigPath, err))
 	}
 	logrus.Infof("Load Config: %+v", config.Global())
 
@@ -39,14 +38,11 @@ func main() {
 	go exitHandle(exitChan)
 
 	// 链接数据库
-	err = db.InitDatabase(config.Global().Mysql.MasterDB)
-	if err != nil {
-		logrus.WithError(err).Errorf("connect to mysql failed. dsn is %v ", config.Global().Mysql.MasterDB)
-		os.Exit(1)
+	if err := db.InitDatabase(config.Global().Mysql.MasterDB); err != nil {
+		panic(fmt.Errorf("connect to mysql failed. dsn is %v, err:%w ", config.Global().Mysql.MasterDB, err))
 	}
 
 	r := route.InitRoute()
-
 	port := cliConfig.Port
 	if port == -1 {
 		port = config.Global().Server.Port
@@ -58,7 +54,7 @@ func main() {
 		panic(err)
 	}
 
-	if err = r.Run(":" + strconv.Itoa(port)); err != nil {
+	if err := r.Run(":" + strconv.Itoa(port)); err != nil {
 		panic(err)
 	}
 	defer routine.Wait()
@@ -86,7 +82,6 @@ func GetConfig() *CliArgsConfig {
 }
 
 func exitHandle(exitChan chan os.Signal) {
-
 	for {
 		select {
 		case sig := <-exitChan:
@@ -95,5 +90,4 @@ func exitHandle(exitChan chan os.Signal) {
 			os.Exit(1) //如果ctrl+c 关不掉程序，使用os.Exit强行关掉
 		}
 	}
-
 }

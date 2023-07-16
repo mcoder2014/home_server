@@ -1,36 +1,42 @@
 package route
 
 import (
+	"fmt"
+
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api"
 	"github.com/mcoder2014/home_server/api/middleware"
 	"github.com/mcoder2014/home_server/data"
+	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/sirupsen/logrus"
 )
 
 func InitRoute() *gin.Engine {
 	// 先初始化路由
-	api.InitRouter()
+	if err := api.InitRouter(); err != nil {
+		panic(fmt.Errorf("init gin router error:%w", err))
+	}
 
-	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
+	engine := gin.New()
+	engine.Use(gin.LoggerWithWriter(log.GetDefaultOutput()), gin.RecoveryWithWriter(log.GetDefaultOutput()))
+	engine.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
 	// session
 	store := cookie.NewStore([]byte("secret11111"))
-	r.Use(sessions.Sessions("home_server", store))
+	engine.Use(sessions.Sessions("home_server", store))
 	// 加入中间件
-	r.Use(middleware.AddLogID, middleware.CORS())
+	engine.Use(middleware.AddLogID, middleware.CORS())
 
 	// 批量注册 http 接口
 	data.ForRange(func(method, path string, handlers ...gin.HandlerFunc) {
-		r.Handle(method, path, handlers...)
+		engine.Handle(method, path, handlers...)
 		logrus.Infof("Gin Register Method: %v, path: %v", method, path)
 	})
 
-	return r
+	return engine
 }
