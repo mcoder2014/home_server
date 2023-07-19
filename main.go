@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mcoder2014/home_server/app/schedule"
 	"github.com/mcoder2014/home_server/domain/service"
 	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/mcoder2014/home_server/utils/routine"
@@ -51,6 +52,10 @@ func main() {
 
 	// init service
 	if err := service.Init(config.ConfigPtr(config.Global())); err != nil {
+		panic(err)
+	}
+
+	if err := schedule.Init(); err != nil {
 		panic(err)
 	}
 

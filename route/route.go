@@ -6,8 +6,8 @@ import (
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/api"
-	"github.com/mcoder2014/home_server/api/middleware"
+	"github.com/mcoder2014/home_server/app/api"
+	middleware2 "github.com/mcoder2014/home_server/app/api/middleware"
 	"github.com/mcoder2014/home_server/data"
 	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/sirupsen/logrus"
@@ -30,7 +30,7 @@ func InitRoute() *gin.Engine {
 	store := cookie.NewStore([]byte("secret11111"))
 	engine.Use(sessions.Sessions("home_server", store))
 	// 加入中间件
-	engine.Use(middleware.AddLogID, middleware.CORS())
+	engine.Use(middleware2.AddLogID, middleware2.CORS())
 
 	// 批量注册 http 接口
 	data.ForRange(func(method, path string, handlers ...gin.HandlerFunc) {

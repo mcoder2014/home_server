@@ -3,7 +3,7 @@ package passport
 import (
 	"net/http"
 
-	"github.com/mcoder2014/home_server/api/middleware"
+	"github.com/mcoder2014/home_server/app/api/middleware"
 	"github.com/mcoder2014/home_server/data"
 )
 

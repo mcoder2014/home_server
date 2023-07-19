@@ -21,11 +21,11 @@ type StorageType int
 
 const (
 	// StorageTypeOwn 自有
-	StorageTypeOwn StorageType = iota + 1
+	StorageTypeOwn StorageType = 1
 	// StorageTypeEbook 电子书
-	StorageTypeEbook
+	StorageTypeEbook StorageType = 2
 	// StorageTypeBBorrow 借阅
-	StorageTypeBBorrow
+	StorageTypeBBorrow StorageType = 3
 )
 
 func StorageTypePtr(s StorageType) *StorageType {
@@ -49,6 +49,10 @@ type DBBookStorage struct {
 	Isbn10 string `json:"isbn10" gorm:"column:isbn10"`
 	// 图书所在位置 id
 	LibraryId int64 `json:"library_id" gorm:"column:libraryid"`
+	// 文件名
+	Filename string `json:"filename" gorm:"column:filename"`
+	// 文件路径
+	DirPath string `json:"dir_path" gorm:"column:dir_path"`
 	// 拓展信息
 	Extra string `json:"extra" gorm:"column:extra"`
 	DalModel
@@ -143,6 +147,10 @@ type BookStorage struct {
 	Summary string `json:"summary"`
 	// 地址简称
 	AddressShortName string `json:"address_short_name"`
+	// 文件名
+	Filename string `json:"filename" gorm:"column:filename"`
+	// 文件路径
+	DirPath string `json:"dir_path" gorm:"column:dir_path"`
 
 	DalModel
 }
@@ -179,14 +187,14 @@ func GetBookStorage(info *BookInfo, storage *DBBookStorage, address *BookAddress
 	return s
 }
 
-func BatchConvertBookStorage(dbs []*DBBookStorage, bookinfos map[string]*BookInfo, address []*BookAddress) []*BookStorage {
+func BatchConvertBookStorage(dbs []*DBBookStorage, bookinfos map[int64]*BookInfo, address []*BookAddress) []*BookStorage {
 	addressMap := SliceToMapBookAddress(address)
 	var result = make([]*BookStorage, 0, len(dbs))
 	for _, s := range dbs {
-		if s == nil || bookinfos[s.Isbn] == nil || addressMap[s.LibraryId] == nil {
+		if s == nil || bookinfos[s.BookId] == nil {
 			continue
 		}
-		result = append(result, GetBookStorage(bookinfos[s.Isbn], s, addressMap[s.LibraryId]))
+		result = append(result, GetBookStorage(bookinfos[s.BookId], s, addressMap[s.LibraryId]))
 	}
 	return result
 }

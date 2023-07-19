@@ -42,6 +42,14 @@ type Config struct {
 	WebDAV struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
+	Routine struct {
+		EBook struct {
+			ScanPaths      []string `yaml:"scan_paths"`
+			FilePostfixes  []string `yaml:"file_postfixes"`
+			ExcludeRegexps []string `yaml:"exclude_regexps"`
+			SkipError      bool     `yaml:"skip_error"`
+		} `yaml:"ebook"`
+	} `yaml:"routine"`
 }
 
 // 全局配置

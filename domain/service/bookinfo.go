@@ -26,6 +26,18 @@ func QueryBookInfoByIsbn(ctx context.Context, isbn string) (*model.BookInfo, err
 	return getBookInfoByRpc(ctx, isbn)
 }
 
+func QueryBookInfoByID(ctx context.Context, id int64) (*model.BookInfo, error) {
+	bookinfo, err := dal.QueryBookInfoById(id)
+	if err != nil {
+		return nil, err
+	}
+	return bookinfo, nil
+}
+
+func CreateBookInfo(ctx context.Context, info *model.BookInfo) error {
+	return dal.InsertBookInfo(info)
+}
+
 func getBookInfoByRpc(ctx context.Context, isbn string) (*model.BookInfo, error) {
 	// 调用 rpc 查询
 	info, err := rpc.GetBookInfoByISBN(ctx, isbn)
@@ -41,6 +53,18 @@ func getBookInfoByRpc(ctx context.Context, isbn string) (*model.BookInfo, error)
 		log.Ctx(ctx).WithError(err).Errorf("Backup Bookinfo failed.")
 	}
 	return info, nil
+}
+
+func MGetBookInfo(ctx context.Context, ids []int64) (map[int64]*model.BookInfo, error) {
+	bookinfoList, err := dal.BatchQueryBookInfoByID(ids)
+	if err != nil {
+		return nil, err
+	}
+	var res = make(map[int64]*model.BookInfo, len(bookinfoList))
+	for _, info := range bookinfoList {
+		res[info.Id] = info
+	}
+	return res, nil
 }
 
 func BatchQueryBookInfo(ctx context.Context, isbnList []string) (map[string]*model.BookInfo, error) {

@@ -72,6 +72,7 @@ func QueryStorage(c *gin.Context) {
 	ginfmt.FormatWithData(c, s)
 }
 
+// AddAddress 添加地址
 func AddAddress(c *gin.Context) {
 	type Request struct {
 		Address   string `json:"address"`
@@ -103,6 +104,7 @@ func AddAddress(c *gin.Context) {
 	ginfmt.FormatWithData(c, resp)
 }
 
+// GetTotalBookStorage 分页查询库存
 func GetTotalBookStorage(c *gin.Context) {
 
 	type Response struct {

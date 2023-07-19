@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mcoder2014/home_server/api/middleware"
+	"github.com/mcoder2014/home_server/app/api/middleware"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/data"
 	"github.com/mcoder2014/home_server/utils/log"

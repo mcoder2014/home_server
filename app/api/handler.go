@@ -3,9 +3,9 @@ package api
 import (
 	"sync"
 
-	"github.com/mcoder2014/home_server/api/library"
-	"github.com/mcoder2014/home_server/api/passport"
-	"github.com/mcoder2014/home_server/api/webdav"
+	"github.com/mcoder2014/home_server/app/api/library"
+	"github.com/mcoder2014/home_server/app/api/passport"
+	"github.com/mcoder2014/home_server/app/api/webdav"
 )
 
 var routeInit sync.Once

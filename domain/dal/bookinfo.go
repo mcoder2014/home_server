@@ -70,3 +70,11 @@ func BatchQueryBookInfoByIsbn(isbnList []string) ([]*model.BookInfo, error) {
 	err := db.MasterDB().Table(BookInfoTable).Where("isbn13 in (?) or isbn10 in (?)", isbnList, isbnList).Find(&result).Error
 	return result, err
 }
+func BatchQueryBookInfoByID(ids []int64) ([]*model.BookInfo, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var result []*model.BookInfo
+	err := db.MasterDB().Table(BookInfoTable).Where("id in (?)", ids).Find(&result).Error
+	return result, err
+}

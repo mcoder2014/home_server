@@ -2,7 +2,6 @@ package dal
 
 import (
 	"errors"
-	"time"
 
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
@@ -14,8 +13,6 @@ const (
 )
 
 func InsertBookStorage(info *model.DBBookStorage) error {
-	info.CreateTime = time.Now()
-	info.UpdateTime = time.Now()
 	return db.MasterDB().Table(BookStorageTable).Create(info).Debug().Error
 }
 
@@ -71,4 +68,12 @@ func GetBookStorageCount() (int, error) {
 	var count int
 	err := db.MasterDB().Table(BookStorageTable).Select("count(1)").Find(&count).Error
 	return count, err
+}
+
+func QueryBookStorageByDirAndFilename(dir, filename string) ([]*model.DBBookStorage, error) {
+	var result []*model.DBBookStorage
+	err := db.MasterDB().Table(BookStorageTable).
+		Where("dir_path = ? and filename = ?", dir, filename).
+		Find(&result).Error
+	return result, err
 }

@@ -51,12 +51,12 @@ func AddStorageByIsbn(ctx context.Context, isbn string, quantity int, t model.St
 	return e
 }
 
-func UpdateStorage(ctx context.Context, dto *model.UpdateBookStorageDto) error {
-	return dal.UpdateBookStorage(dto)
+func CreateBookStorage(ctx context.Context, dbStorage *model.DBBookStorage) error {
+	return dal.InsertBookStorage(dbStorage)
 }
 
-func AddAddress(ctx context.Context, address *model.BookAddress) (int64, error) {
-	return dal.InsertBookAddress(address)
+func UpdateStorage(ctx context.Context, dto *model.UpdateBookStorageDto) error {
+	return dal.UpdateBookStorage(dto)
 }
 
 // GetTotalStorage 分页查询全部图书
@@ -70,15 +70,15 @@ func GetTotalStorage(ctx context.Context, offset int, limit int) ([]*model.BookS
 	if len(dbs) == 0 {
 		return nil, nil
 	}
-	var isbnList []string
+	var infoIDs []int64
 	for _, s := range dbs {
 		if s == nil {
 			continue
 		}
-		isbnList = append(isbnList, s.Isbn)
+		infoIDs = append(infoIDs, s.BookId)
 	}
 	// 查询图书信息
-	bookinfos, e := BatchQueryBookInfo(ctx, isbnList)
+	bookinfos, e := MGetBookInfo(ctx, infoIDs)
 	if e != nil {
 		return nil, e
 	}
@@ -89,6 +89,9 @@ func GetTotalStorage(ctx context.Context, offset int, limit int) ([]*model.BookS
 		addressIDMap[s.LibraryId] = true
 	}
 	addressList, e := dal.BatchQueryBookAddress(utils.MapToSliceInt64(addressIDMap))
+	if e != nil {
+		return nil, e
+	}
 
 	return model.BatchConvertBookStorage(dbs, bookinfos, addressList), nil
 }
