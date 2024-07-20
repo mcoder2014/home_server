@@ -40,6 +40,7 @@ func ValidateLogin() gin.HandlerFunc {
 	}
 }
 
+// ValidateBasicAuth 多数 webdav client 仅支持基础身份验证
 func ValidateBasicAuth() gin.HandlerFunc {
 
 	unauhtorized := func(c *gin.Context) {
@@ -70,6 +71,7 @@ func ValidateBasicAuth() gin.HandlerFunc {
 		}
 
 		logrus.Infof("basic auth success, user:%v", username)
+		c.Set(utils.CtxKeyLoginUseID, res.ID)
 		c.Next()
 	}
 }
