@@ -51,4 +51,29 @@ CREATE TABLE book_address
     short_name  varchar(256)  null comment '地址简称',
     create_time datetime      null comment '创建时间',
     update_time datetime      null comment '更新时间'
-) comment '图书地址表'
+) comment '图书地址表';
+
+create table login_token
+(
+    id          bigint                                 null,
+    user_id     bigint                                 null,
+    token       varchar(256)                           null,
+    is_expired  int       default 0                    null,
+    create_time timestamp default current_timestamp(6) null,
+    update_time timestamp default current_timestamp()  null on update current_timestamp(),
+    expire_time timestamp                              null
+) comment '登录记录表';
+
+
+CREATE TABLE webdav_log
+(
+    id          bigint primary key comment '数据库主键',
+    method      varchar(64)   null comment 'HTTP 方法',
+    hash        varchar(512)  null comment '文件相对路径哈希值',
+    filepath    varchar(4096) null comment '文件相对路径记录',
+    user_id     bigint        not null comment '访问者的 user_id',
+    agent       varchar(1024) null comment '客户端名称',
+    extra       text          null comment '拓展信息，比如电子书下载地址等',
+    create_time datetime default current_timestamp(6) comment '创建时间',
+    update_time datetime default current_timestamp(6) on update current_timestamp() comment '更新时间'
+) comment 'WEBDAV 日志表';

@@ -6,7 +6,7 @@ import (
 )
 
 func GenInt64ID() int64 {
-	id := time.Now().Unix() << 32
-	id += rand.Int63()%2 ^ 32 - 1
+	id := time.Now().UnixNano() << 24
+	id += rand.Int63()%(2^24) - 1
 	return id
 }

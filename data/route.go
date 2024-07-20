@@ -30,6 +30,14 @@ func AddRoute(method string, path string, handlers ...gin.HandlerFunc) {
 	}
 }
 
+func AddRouteV2(methods []string, paths []string, handlers ...gin.HandlerFunc) {
+	for _, method := range methods {
+		for _, path := range paths {
+			AddRoute(method, path, handlers...)
+		}
+	}
+}
+
 func ForRange(f func(method, path string, handlers ...gin.HandlerFunc)) {
 	for path, route := range RouterMap {
 		for method, r := range route {

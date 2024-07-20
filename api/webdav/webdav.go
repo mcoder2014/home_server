@@ -4,6 +4,8 @@ package webdav
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
@@ -12,11 +14,16 @@ import (
 	"github.com/mcoder2014/home_server/api/middleware"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/data"
+	"github.com/mcoder2014/home_server/domain/model"
+	webdavService "github.com/mcoder2014/home_server/domain/service/webdav"
+	"github.com/mcoder2014/home_server/utils"
+	"github.com/mcoder2014/home_server/utils/ginfmt"
 	"github.com/mcoder2014/home_server/utils/log"
 	"golang.org/x/net/webdav"
 )
 
 var rawHandler *webdav.Handler
+var rawHandlerDev *webdav.Handler
 
 func InitRouter() error {
 	sharePath := config.Global().WebDAV.SharePath
@@ -30,21 +37,20 @@ func InitRouter() error {
 		LockSystem: webdav.NewMemLS(),
 		Logger:     Logger,
 	}
+	rawHandlerDev = &webdav.Handler{
+		Prefix:     "/webdav_dev/",
+		FileSystem: webdav.Dir(sharePath),
+		LockSystem: webdav.NewMemLS(),
+		Logger:     Logger,
+	}
 
-	webDAVPath := "/webdav/*path"
-	data.AddRoute("OPTIONS", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("GET", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("HEAD", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("POST", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("DELETE", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("PUT", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("MKCOL", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("COPY", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("MOVE", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("LOCK", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("UNLOCK", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("PROPFIND", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
-	data.AddRoute("PROPPATCH", webDAVPath, middleware.ValidateBasicAuth(), WebDAV)
+	// 计划加入 log 信息，备份一份路由
+	methods := []string{
+		"OPTIONS", "GET", "HEAD", "POST", "DELETE", "PUT", "MKCOL",
+		"COPY", "MOVE", "LOCK", "UNLOCK", "PROPFIND", "PROPPATCH",
+	}
+	data.AddRouteV2(methods, []string{"/webdav/*path"}, middleware.ValidateBasicAuth(), WebDAV)
+	data.AddRouteV2(methods, []string{"/webdav_dev/*path"}, middleware.ValidateBasicAuth(), WebDAVDev)
 	return nil
 }
 
@@ -63,6 +69,39 @@ func WebDAV(c *gin.Context) {
 		c.Request.Header.Set("Destination", destination)
 	}
 	rawHandler.ServeHTTP(c.Writer, c.Request)
+}
+
+func WebDAVDev(c *gin.Context) {
+	// 用比较黑客的方式规避 Nginx 代理后 URL 与 Host 不一致的问题
+	logID := c.GetString(log.LogIDKey)
+	c.Request.Header.Set(log.LogIDKey, logID)
+	c.Writer.Header().Set(log.LogIDKey, logID)
+
+	destination := c.Request.Header.Get("Destination")
+	if len(destination) > 0 {
+		idx := strings.Index(destination, "/webdav_dev/")
+		if idx >= 0 {
+			destination = "http://" + c.Request.Host + destination[idx:]
+		}
+		c.Request.Header.Set("Destination", destination)
+	}
+	filepath := strings.TrimPrefix(c.Request.URL.Path, "/webdav_dev/")
+	h := sha256.New()
+	h.Write([]byte(filepath))
+
+	logEntity := &model.WebDAVLogEntity{
+		ID:       utils.GenInt64ID(),
+		Method:   c.Request.Method,
+		FilePath: filepath,
+		Hash:     hex.EncodeToString(h.Sum(nil)),
+		UserID:   utils.GetUserIDFromCtx(c),
+		Agent:    c.Request.UserAgent(),
+		LogID:    logID,
+	}
+	if err := webdavService.SendLogEvent(logEntity); err != nil {
+		log.Ctx(ginfmt.RPCContext(c)).WithError(err).Errorf("logRoutine failed")
+	}
+	rawHandlerDev.ServeHTTP(c.Writer, c.Request)
 }
 
 func Logger(req *http.Request, err error) {
