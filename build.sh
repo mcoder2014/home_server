@@ -4,7 +4,9 @@ SERVER_NAME="home_server"
 CLIENT_NAME="home_client"
 
 mkdir -p output/bin
-cp script/* output
+mkdir -p output/testdata
+
+cp -r script/* output
 cp config/config.yaml output
 cp client/config/config.yaml output/client_config.yaml
 

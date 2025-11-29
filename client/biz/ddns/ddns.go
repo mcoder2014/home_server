@@ -18,6 +18,7 @@ import (
 
 func StartDDNSRoutine() {
 	logrus.Infof("StartDDNSRoutine")
+	RefreshOnce(context.Background())
 	ticker := time.NewTicker(120 * time.Second)
 	for range ticker.C {
 		ctx := log.GetCtxWithLogID(context.Background())
@@ -27,8 +28,7 @@ func StartDDNSRoutine() {
 
 func RefreshOnce(ctx context.Context) {
 	defer utils.Recovery(ctx)
-
-	log.Ctx(ctx).Infof("DDNS refresh once")
+	log.Ctx(ctx).Infof("DDNS refresh once start")
 
 	// 处理 DDNS
 	ddnsConfs := config.Global().DDNSConfig
@@ -37,6 +37,7 @@ func RefreshOnce(ctx context.Context) {
 		return
 	}
 
+	log.Ctx(ctx).Infof("get ddns configs: len(%d)", len(ddnsConfs))
 	// 查询 ddns record
 	records, err := rpc.GetAllDNSRecord(ctx, config.Global().Cloudflare.Zone)
 	recordMap := convertToDNSRecordMap(records)
@@ -44,6 +45,7 @@ func RefreshOnce(ctx context.Context) {
 		log.Ctx(ctx).WithError(err).Errorf("GetAllDNSRecord failed")
 		return
 	}
+
 	for _, domainConfig := range ddnsConfs {
 		err = domainCheck(ctx, domainConfig, recordMap)
 		if err != nil {
@@ -57,6 +59,7 @@ func domainCheck(ctx context.Context, domainConfig *config.DomainConfig, recordM
 	if err != nil {
 		return err
 	}
+	log.Ctx(ctx).Infof("get current ip type = %s ip = %s", domainConfig.IPVersion, ipAddress)
 
 	// check records
 	record, ok := recordMap[domainConfig.Domain]
@@ -68,11 +71,16 @@ func domainCheck(ctx context.Context, domainConfig *config.DomainConfig, recordM
 			log.Ctx(ctx).WithError(err).Errorf("domain:%v has no record, create new record failed", domainConfig.Domain)
 			return err
 		}
-		log.Ctx(ctx).Infof("domain:%v has no record, create content:%v , create new record success", domainConfig.Domain, ipAddress)
+		log.Ctx(ctx).Infof("domain:%s has no record, create record, ip=%s , create new record success", domainConfig.Domain, ipAddress)
 		return nil
 	}
 
 	// update
+	if strings.EqualFold(ipAddress, record.Content) {
+		log.Ctx(ctx).Infof("domain=%s ip=%s address not change, skip update", domainConfig.Domain, ipAddress)
+		return nil
+	}
+
 	return updateNewRecord(ctx, domainConfig, ipAddress, *record)
 }
 
@@ -93,12 +101,6 @@ func getIp(ctx context.Context, domainConfig *config.DomainConfig) (ipAddress st
 }
 
 func updateNewRecord(ctx context.Context, domainConfig *config.DomainConfig, ipAddr string, record cloudflare.DNSRecord) error {
-	// update
-	if strings.EqualFold(ipAddr, record.Content) {
-		log.Ctx(ctx).Infof("domain %v is not changed, ip:%v  no need update", domainConfig.Domain, ipAddr)
-		return nil
-	}
-
 	log.Ctx(ctx).Infof("domain %v has changed from %v to %v, prepare to update", domainConfig.Domain, record.Content, ipAddr)
 	record.Content = ipAddr
 

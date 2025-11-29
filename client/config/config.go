@@ -17,6 +17,7 @@ type CloudflareConfig struct {
 	APIToken string `json:"api_token" yaml:"api_token"`
 	Zone     string `json:"zone" yaml:"zone"`
 	Debug    bool   `json:"debug" yaml:"debug"`
+	Proxy    string `json:"proxy" yaml:"proxy"` // 通过代理访问 cloudflare
 }
 
 func (c *CloudflareConfig) String() string {
