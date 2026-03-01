@@ -31,15 +31,22 @@ func InitRouter() error {
 		return fmt.Errorf("module webdav, share path is empty")
 	}
 
+	maxSize := int64(defaultMaxCacheSize)
+	if config.Global().WebDAV.CacheMaxSizeMB > 0 {
+		maxSize = config.Global().WebDAV.CacheMaxSizeMB * 1024 * 1024
+	}
+	cache := NewImageCache(maxSize)
+	fs := NewSmallImageFS(webdav.Dir(sharePath), cache)
+
 	rawHandler = &webdav.Handler{
 		Prefix:     "/webdav/",
-		FileSystem: webdav.Dir(sharePath),
+		FileSystem: fs,
 		LockSystem: webdav.NewMemLS(),
 		Logger:     Logger,
 	}
 	rawHandlerDev = &webdav.Handler{
 		Prefix:     "/webdav_dev/",
-		FileSystem: webdav.Dir(sharePath),
+		FileSystem: fs,
 		LockSystem: webdav.NewMemLS(),
 		Logger:     Logger,
 	}

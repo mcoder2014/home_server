@@ -40,7 +40,8 @@ type Config struct {
 		RedirectLoginPath string `json:"redirect_login_path" yaml:"redirect_login_path"`
 	} `json:"passport" yaml:"passport"`
 	WebDAV struct {
-		SharePath string `json:"share_path" yaml:"share_path"`
+		SharePath      string `json:"share_path" yaml:"share_path"`
+		CacheMaxSizeMB int64  `json:"cache_max_size_mb" yaml:"cache_max_size_mb"`
 	} `json:"webdav" yaml:"webdav"`
 }
 

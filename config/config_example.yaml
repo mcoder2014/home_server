@@ -16,3 +16,4 @@ passport:
   redirect_login_path: https://example.com/login
 webdav:
   share_path: ./share
+  cache_max_size_mb: 256
