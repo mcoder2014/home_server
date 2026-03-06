@@ -1,39 +1,63 @@
 <template>
-  <MyHeader></MyHeader>
-  <el-container>
-    <el-header>
-<!--      <img class="mlogo" src="https://www.markerhub.com/dist/images/logo/markerhub-logo.png" alt="">-->
-      <h1>登录</h1>
-    </el-header>
-    <el-main>
-      <el-form :model="ruleForm" :rules="rules" ref="ruleForm" label-width="100px" class="demo-ruleForm">
+  <div class="login-page">
+    <div class="login-card">
+      <!-- Logo + 标题 -->
+      <div class="login-header">
+        <el-icon :size="40" color="#409eff"><Reading /></el-icon>
+        <h2 class="login-title">图书管理系统</h2>
+        <p class="login-subtitle">请登录您的账号</p>
+      </div>
+
+      <el-form
+        :model="ruleForm"
+        :rules="rules"
+        ref="ruleForm"
+        label-position="top"
+        class="login-form"
+      >
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="ruleForm.username"></el-input>
+          <el-input
+            v-model="ruleForm.username"
+            placeholder="请输入用户名"
+            :prefix-icon="User"
+            size="large"
+          />
         </el-form-item>
         <el-form-item label="密码" prop="password">
-          <el-input type="password" v-model="ruleForm.password"></el-input>
+          <el-input
+            type="password"
+            v-model="ruleForm.password"
+            placeholder="请输入密码"
+            :prefix-icon="Lock"
+            show-password
+            size="large"
+          />
         </el-form-item>
-
         <el-form-item>
-          <el-button type="primary" @click="submitForm('ruleForm')">登录</el-button>
-          <el-button>重置密码</el-button>
+          <el-button
+            type="primary"
+            size="large"
+            class="login-btn"
+            @click="submitForm('ruleForm')"
+          >
+            登 录
+          </el-button>
         </el-form-item>
       </el-form>
-
-    </el-main>
-  </el-container>
+    </div>
+  </div>
 </template>
 
 <script>
-import MyHeader from "@/components/MyHeader";
 import axios from "axios";
 import global from "@/components/Common"
 import {JSEncrypt} from 'jsencrypt'
+import { Reading, User, Lock } from '@element-plus/icons-vue'
 
 let rsa = ""
 
 function encrypt(passwd) {
-  if (rsa.length === 0 ){
+  if (rsa.length === 0) {
     alert("get rsa public key failed")
     return
   }
@@ -44,7 +68,7 @@ function encrypt(passwd) {
 
 export default {
   name: "MyLogin",
-  components: {MyHeader},
+  components: { Reading, User, Lock },
 
   data() {
     return {
@@ -62,8 +86,11 @@ export default {
         ]
       },
       rsa: "rsa",
-      config : global.config
+      config: global.config
     };
+  },
+  setup() {
+    return { User, Lock }
   },
   methods: {
     submitForm(formName) {
@@ -73,7 +100,7 @@ export default {
         withCredentials: false,
       });
       let enPasswd = encrypt(this.ruleForm.password)
-      console.log("rsa:", rsa, "username",this.ruleForm.username,"passwd:",enPasswd)
+      console.log("rsa:", rsa, "username", this.ruleForm.username, "passwd:", enPasswd)
 
       let loginParam = {
         user_name: this.ruleForm.username,
@@ -83,19 +110,15 @@ export default {
       let curStore = this.$store
       let curRouter = this.$router
 
-      apiBase.post("/passport/login",
-        loginParam
-      ).then(function (response) {
+      apiBase.post("/passport/login", loginParam).then(function (response) {
         console.log(response);
         if (response.data.code === 0) {
           console.log(response.data.data)
-          localStorage.setItem("token",response.data.data.token);
-          localStorage.setItem("user_name",response.data.data.user_name);
+          localStorage.setItem("token", response.data.data.token);
+          localStorage.setItem("user_name", response.data.data.user_name);
 
           curStore.state.global.token = response.data.data.token
-          curRouter.push({
-            path: '/'
-          });
+          curRouter.push({ path: '/' });
         } else {
           alert("login failed")
         }
@@ -103,14 +126,14 @@ export default {
         alert("error " + err)
       })
     },
-    loadRsaKey(){
+    loadRsaKey() {
       let url = this.config.serverUrl + "/"
       let apiBase = axios.create({
         baseURL: url,
         withCredentials: false,
       });
 
-      apiBase.get("/passport/rsa",{}).then(function (response) {
+      apiBase.get("/passport/rsa", {}).then(function (response) {
         console.log(response);
         if (response.data.code === 0) {
           console.log(response.data.data)
@@ -127,30 +150,52 @@ export default {
     this.loadRsaKey()
   }
 }
-
 </script>
 
 <style scoped>
-body > .el-container {
-  margin-bottom: 40px;
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a73e8, #0d47a1);
+  padding: 20px;
 }
 
-.el-container:nth-child(5) .el-aside,
-.el-container:nth-child(6) .el-aside {
-  line-height: 260px;
+.login-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
 }
 
-.el-container:nth-child(7) .el-aside {
-  line-height: 320px;
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
 }
 
-.mlogo {
-  height: 60%;
-  margin-top: 10px;
+.login-title {
+  margin: 12px 0 4px 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #303133;
 }
 
-.demo-ruleForm {
-  max-width: 500px;
-  margin: 0 auto;
+.login-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #909399;
+}
+
+.login-form :deep(.el-form-item__label) {
+  font-weight: 500;
+}
+
+.login-btn {
+  width: 100%;
+  font-size: 16px;
+  letter-spacing: 4px;
 }
 </style>

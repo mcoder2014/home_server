@@ -5,7 +5,7 @@
 <script>
 
 const config = {
-  serverUrl: 'https://pi.mcoder.cc:18080'
+  serverUrl: 'https://192.168.31.45:18080'
 }
 
 export default {
