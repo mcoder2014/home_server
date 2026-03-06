@@ -1,0 +1,78 @@
+/* 全局 CSS 变量 */
+:root {
+  --primary-color: #409eff;
+  --primary-dark: #1a73e8;
+  --primary-darker: #0d47a1;
+  --bg-color: #f0f2f5;
+  --card-bg: #ffffff;
+  --text-primary: #303133;
+  --text-secondary: #606266;
+  --border-color: #e4e7ed;
+  --card-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  --header-height: 60px;
+}
+
+/* 全局 body 样式 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+}
+
+/* 页面容器 */
+.page-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+/* 卡片样式 */
+.card {
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  padding: 24px;
+}
+
+/* 页面标题 */
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+}
+
+/* 操作栏（标题 + 按钮） */
+.action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* 欢迎横幅 */
+.welcome-banner {
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary-darker));
+  color: white;
+  padding: 40px 24px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.welcome-banner h1 {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.welcome-banner p {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.85;
+}

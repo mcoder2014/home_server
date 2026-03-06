@@ -1,57 +1,83 @@
 <template>
-  <MyHeader></MyHeader>
-  <h1> 添加图书 </h1>
-  <el-row class="mb-4">
-    <el-input v-model="isbn" placeholder="手动输入 ISBN "/>
-  </el-row>
-  <el-row class="mb-4">
-    <el-button @click="add_book">手动提交</el-button>
-    <el-button @click="scanImage">相机扫描</el-button>
-  </el-row>
+  <div>
+    <MyHeader></MyHeader>
+    <div class="page-container">
+      <div class="card form-card">
+        <h2 class="page-title">录入图书</h2>
+        <p class="form-desc">通过 ISBN 号码添加图书到馆藏</p>
+
+        <el-form label-position="top" style="margin-top: 24px;">
+          <el-form-item label="ISBN 号码">
+            <el-input
+              v-model="isbn"
+              placeholder="请输入 ISBN（如：9787111111111）"
+              size="large"
+              :prefix-icon="Tickets"
+              clearable
+            />
+          </el-form-item>
+
+          <el-form-item>
+            <div class="btn-group">
+              <el-button type="primary" size="large" @click="add_book">
+                <el-icon><Check /></el-icon>
+                手动提交
+              </el-button>
+              <el-button size="large" @click="scanImage">
+                <el-icon><Camera /></el-icon>
+                相机扫码
+              </el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
+  </div>
 </template>
 
 
 <script>
-
 import MyHeader from "@/components/MyHeader";
 import {handleError} from "@/utils/handle_http_error"
+import axios from "axios";
+import { Tickets, Check, Camera } from '@element-plus/icons-vue'
 
 export default {
   name: "AddBook",
-  components: {MyHeader},
+  components: { MyHeader, Tickets, Check, Camera },
   data() {
     return {
       isbn: ''
     }
   },
+  setup() {
+    return { Tickets, Check, Camera }
+  },
   methods: {
     scanImage() {
       console.log('浏览器信息', navigator.userAgent);
-      this.$router.push({
-        path: '/scanCodePage'
-      });
+      this.$router.push({ path: '/scanCodePage' });
     },
-    // add_book 通过 post 方法增加库存
     add_book() {
       console.log('add book isbn', this.isbn)
       let url = this.$store.state.global.baseUrl + "/"
       let param = {
-        isbn:this.isbn,
-        quantity:1,
-        type:1,
-        lib_id:4
+        isbn: this.isbn,
+        quantity: 1,
+        type: 1,
+        lib_id: 4
       }
 
-       let apiBase = axios.create({
+      let apiBase = axios.create({
         baseURL: url,
         withCredentials: false,
         headers: {
           'Content-Type': 'application/json;charset=UTF-8',
-          'passport':localStorage.getItem('token')
+          'passport': localStorage.getItem('token')
         },
       });
 
-      apiBase.post("/library/book/add", param).then(function (response){
+      apiBase.post("/library/book/add", param).then(function (response) {
         console.log(response);
         handleError(response);
         if (response.data.code === 0) {
@@ -59,8 +85,8 @@ export default {
         } else {
           alert("添加失败，错误码：" + response.data.code + " 错误信息：" + response.data.message)
         }
-      }).catch(function (err){
-        alert("Add book error "+ err)
+      }).catch(function (err) {
+        alert("Add book error " + err)
       })
     }
   },
@@ -70,15 +96,22 @@ export default {
     }
   }
 }
-
-import {ref} from 'vue'
-import axios from "axios";
-
-const input = ref('')
-
-
 </script>
 
 <style scoped>
+.form-card {
+  max-width: 600px;
+  margin: 0 auto;
+}
 
+.form-desc {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.btn-group {
+  display: flex;
+  gap: 12px;
+}
 </style>
