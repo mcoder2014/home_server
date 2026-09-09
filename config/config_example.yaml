@@ -16,3 +16,18 @@ passport:
   redirect_login_path: https://example.com/login
 webdav:
   share_path: ./share
+web_projects:
+  # Keep disabled until the migration, private storage directory and same-origin proxy are ready.
+  enabled: false
+  storage_root: /var/lib/home_server/web-projects
+  site_origin: https://home.example.com
+  max_upload_bytes: 52428800
+  max_expanded_bytes: 209715200
+  max_file_bytes: 52428800
+  max_file_count: 5000
+  max_directory_depth: 16
+  max_project_bytes: 1073741824
+  max_releases: 10
+  max_concurrent_uploads_per_user: 2
+  max_concurrent_extracts: 4
+  delete_retention_days: 7

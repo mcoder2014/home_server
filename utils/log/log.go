@@ -41,8 +41,12 @@ func Init() error {
 
 func GetDefaultOutput() io.Writer {
 	defaultLogOutputOnce.Do(func() {
+		logFile := os.Getenv("HOME_SERVER_LOG_FILE")
+		if logFile == "" {
+			logFile = "/var/log/home_server/run.log"
+		}
 		l := &lumberjack.Logger{
-			Filename:   "/var/log/home_server/run.log",
+			Filename:   logFile,
 			MaxSize:    100, // megabytes
 			MaxBackups: 64,
 			MaxAge:     15,    //days

@@ -42,6 +42,24 @@ type Config struct {
 	WebDAV struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
+	WebProjects WebProjectsConfig `json:"web_projects" yaml:"web_projects"`
+}
+
+// WebProjectsConfig controls the isolated storage and hard safety limits for hosted web projects.
+type WebProjectsConfig struct {
+	Enabled                     bool   `json:"enabled" yaml:"enabled"`
+	StorageRoot                 string `json:"storage_root" yaml:"storage_root"`
+	SiteOrigin                  string `json:"site_origin" yaml:"site_origin"`
+	MaxUploadBytes              int64  `json:"max_upload_bytes" yaml:"max_upload_bytes"`
+	MaxExpandedBytes            int64  `json:"max_expanded_bytes" yaml:"max_expanded_bytes"`
+	MaxFileBytes                int64  `json:"max_file_bytes" yaml:"max_file_bytes"`
+	MaxFileCount                int    `json:"max_file_count" yaml:"max_file_count"`
+	MaxDirectoryDepth           int    `json:"max_directory_depth" yaml:"max_directory_depth"`
+	MaxProjectBytes             int64  `json:"max_project_bytes" yaml:"max_project_bytes"`
+	MaxReleases                 int    `json:"max_releases" yaml:"max_releases"`
+	MaxConcurrentUploadsPerUser int    `json:"max_concurrent_uploads_per_user" yaml:"max_concurrent_uploads_per_user"`
+	MaxConcurrentExtracts       int    `json:"max_concurrent_extracts" yaml:"max_concurrent_extracts"`
+	DeleteRetentionDays         int    `json:"delete_retention_days" yaml:"delete_retention_days"`
 }
 
 // 全局配置

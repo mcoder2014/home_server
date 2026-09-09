@@ -6,6 +6,7 @@ import (
 	"github.com/mcoder2014/home_server/api/library"
 	"github.com/mcoder2014/home_server/api/passport"
 	"github.com/mcoder2014/home_server/api/webdav"
+	"github.com/mcoder2014/home_server/api/webprojects"
 )
 
 var routeInit sync.Once
@@ -24,6 +25,8 @@ func InitRouter() error {
 			passport.InitRouter,
 			// webDAV 相关接口
 			webdav.InitRouter,
+			// 静态网页项目相关接口
+			webprojects.InitRouter,
 		} {
 			err = initFunc()
 			if err != nil {

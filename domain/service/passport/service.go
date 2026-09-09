@@ -10,7 +10,6 @@ import (
 	"github.com/mcoder2014/home_server/domain/service/rsa"
 	myErrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
-	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/pkg/errors"
 )
 
@@ -74,7 +73,6 @@ func GetLoginRsa(ctx context.Context) (pub, prv []byte, err error) {
 
 func updateRsa(ctx context.Context) (err error) {
 	rsaPubKey, rsaPrvKey, err = rsa.GenKey()
-	log.Ctx(ctx).Infof("update rsa key: pubKey:\n%v\nprivate key:\n%v\n", string(rsaPubKey), string(rsaPrvKey))
 
 	if err != nil {
 		return myErrors.Wrapf(err, myErrors.ErrorCodeGenRsaKeyFailed, "gen rsa key failed")

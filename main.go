@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strconv"
@@ -28,7 +29,6 @@ func main() {
 	if err := config.InitGlobalConfig(cliConfig.ConfigPath); err != nil {
 		panic(fmt.Errorf("load Global config from:%v failed, err:%w", cliConfig.ConfigPath, err))
 	}
-	logrus.Infof("Load Config: %+v", config.Global())
 
 	routine.Init()
 
@@ -39,7 +39,7 @@ func main() {
 
 	// 链接数据库
 	if err := db.InitDatabase(config.Global().Mysql.MasterDB); err != nil {
-		panic(fmt.Errorf("connect to mysql failed. dsn is %v, err:%w ", config.Global().Mysql.MasterDB, err))
+		panic(fmt.Errorf("connect to mysql failed: %w", err))
 	}
 
 	r := route.InitRoute()
@@ -47,20 +47,23 @@ func main() {
 	if port == -1 {
 		port = config.Global().Server.Port
 	}
-	logrus.Infof("will bind http server port on %v", port)
+	address := net.JoinHostPort(cliConfig.Host, strconv.Itoa(port))
+	logrus.Infof("will bind http server on %s", address)
 
 	// init service
 	if err := service.Init(config.ConfigPtr(config.Global())); err != nil {
 		panic(err)
 	}
 
-	if err := r.Run(":" + strconv.Itoa(port)); err != nil {
+	if err := r.Run(address); err != nil {
 		panic(err)
 	}
 	defer routine.Wait()
 }
 
 type CliArgsConfig struct {
+	// 默认监听全部接口；隔离验证时可指定 127.0.0.1。
+	Host string
 	// 配置端口号
 	Port int
 	// 配置文件路径
@@ -72,6 +75,7 @@ func GetConfig() *CliArgsConfig {
 	conf := &CliArgsConfig{}
 
 	flag.IntVar(&conf.Port, "port", -1, "http server 端口号,默认为空")
+	flag.StringVar(&conf.Host, "host", "", "http server 监听地址，默认为全部接口")
 	flag.StringVar(&conf.ConfigPath, "conf", "/etc/home_server/conf.yaml", "配置文件路径")
 
 	// 从arguments中解析注册的flag。必须在所有flag都注册好而未访问其值时执行。未注册却使用flag -help时，会返回ErrHelp。
