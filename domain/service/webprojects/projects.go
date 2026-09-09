@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -673,7 +674,7 @@ func ReleaseContentRoot(conf *config.WebProjectsConfig, release *model.WebProjec
 func ResolveContentPath(contentRoot, requested string) (string, error) {
 	clean, err := validateRelativePath(requested, 64)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: invalid content path: %w", ErrInvalid, err)
 	}
 	root := filepath.Clean(contentRoot)
 	target := filepath.Clean(filepath.Join(root, filepath.FromSlash(clean)))
@@ -682,11 +683,28 @@ func ResolveContentPath(contentRoot, requested string) (string, error) {
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: resolve content root: %w", ErrDependency, err)
+	}
+	rootInfo, err := os.Stat(resolvedRoot)
+	if err != nil {
+		return "", fmt.Errorf("%w: inspect content root: %w", ErrDependency, err)
+	}
+	if !rootInfo.IsDir() {
+		return "", fmt.Errorf("%w: content root is not a directory", ErrDependency)
 	}
 	resolvedTarget, err := filepath.EvalSymlinks(target)
 	if err != nil {
-		return "", err
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+			currentRoot, rootErr := os.Stat(resolvedRoot)
+			if rootErr != nil {
+				return "", fmt.Errorf("%w: content root changed: %w", ErrDependency, rootErr)
+			}
+			if !currentRoot.IsDir() {
+				return "", fmt.Errorf("%w: content root is not a directory", ErrDependency)
+			}
+			return "", err
+		}
+		return "", fmt.Errorf("%w: resolve content file: %w", ErrDependency, err)
 	}
 	if resolvedTarget == resolvedRoot || !strings.HasPrefix(resolvedTarget, resolvedRoot+string(os.PathSeparator)) {
 		return "", ErrInvalid

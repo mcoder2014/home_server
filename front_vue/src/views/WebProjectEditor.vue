@@ -398,7 +398,7 @@ export default {
     },
     async deleteProject() {
       try {
-        await ElMessageBox.confirm('删除后项目进入回收期并立即停止访问。', '确认删除', {type: 'warning'})
+        await ElMessageBox.confirm('删除后项目进入回收期并立即停止访问，原路径不会自动释放。需要复用该路径时，请先修改项目路径再删除。', '确认删除', {type: 'warning'})
       } catch (error) {
         return
       }

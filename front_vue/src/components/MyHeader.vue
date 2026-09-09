@@ -60,10 +60,11 @@ export default {
 
       apiBase.post("/passport/logout").then((response) => {
         if (response.data.code !== 0) {
-          alert("login failed")
+          alert("退出失败，请稍后重试")
+          return
         }
 
-        // 最终都需要退出
+        // 服务端确认 token 失效后再清理本地身份，保持内容 Cookie 与界面状态一致。
         localStorage.removeItem('token')
         localStorage.removeItem('user_name')
         this.hasLogin = false

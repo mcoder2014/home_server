@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/mcoder2014/home_server/config"
@@ -218,6 +219,32 @@ func TestValidateStorageIsolationRejectsWebDAVOverlap(t *testing.T) {
 	require.Error(t, ValidateStorageIsolation(privateRoot, root))
 	require.Error(t, ValidateStorageIsolation(root, privateRoot))
 	require.NoError(t, ValidateStorageIsolation(privateRoot, filepath.Join(root, "share")))
+}
+
+func TestResolveContentPathClassifiesContentRootFailures(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "missing-content")
+	_, err := ResolveContentPath(missingRoot, "asset.js")
+	require.ErrorIs(t, err, ErrDependency)
+
+	rootFile := filepath.Join(t.TempDir(), "content-is-a-file")
+	require.NoError(t, os.WriteFile(rootFile, []byte("broken"), 0600))
+	_, err = ResolveContentPath(rootFile, "asset.js")
+	require.ErrorIs(t, err, ErrDependency)
+}
+
+func TestResolveContentPathKeepsMissingResourceDistinctFromRootFailure(t *testing.T) {
+	contentRoot := t.TempDir()
+	_, err := ResolveContentPath(contentRoot, "missing.js")
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.NotErrorIs(t, err, ErrDependency)
+
+	require.NoError(t, os.WriteFile(filepath.Join(contentRoot, "index.html"), []byte("ok"), 0600))
+	_, err = ResolveContentPath(contentRoot, "index.html/child")
+	require.ErrorIs(t, err, syscall.ENOTDIR)
+	require.NotErrorIs(t, err, ErrDependency)
+
+	_, err = ResolveContentPath(contentRoot, "../secret")
+	require.ErrorIs(t, err, ErrInvalid)
 }
 
 type maxReadSizeReader struct {

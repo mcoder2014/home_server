@@ -72,6 +72,8 @@ sudo journalctl --unit home_client.service
 | 下线或删除 | 后续页面和资源请求返回 404；删除有 7 天回收期。 |
 | 回滚 | 重新发布历史版本，只恢复文件，不恢复旧 URL 或旧权限。 |
 
+删除不会自动释放原路径，回收期到期只清理版本文件，保留项目元数据。需要让新项目复用某个路径时，应先修改旧项目的路径，再删除旧项目；新项目的访问权限独立配置。
+
 访问范围为 `owner`（仅自己）、`members`（指定用户）、`authenticated`（全部登录用户）和 `public`（匿名公开）。查看权限不包含修改、上传或删除权限。账号来自现有 `passport.mock_data`，使用稳定用户 ID 关联项目。
 
 项目共享浏览器源，适合本人和受信任维护者上传的网页。服务端检查每个 HTML、JS、图片和附件请求，但不提供不可信 JavaScript 的项目间隔离。
@@ -111,11 +113,15 @@ web_projects:
 
 ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平台不在服务器执行包中的 npm、Python、Shell 或其他后端代码。
 
+版本下载先在私有 `staging` 目录生成完整 ZIP，并核对文件数和总字节数，再开始发送。入口缺失、文件读写失败或元数据不符时返回 503；请求结束后删除本次生成的临时 ZIP。
+
 ### 登录与自动化接口
 
 管理 API 继续使用现有 `passport` 请求头。前端调用同源 `POST /api/web-projects/browser-login`，校验该 token 后设置 `Secure`、`HttpOnly` 的内容 Cookie；浏览器打开 `/p/` 及加载资源时自动携带。Cookie 不能代替管理 API 的请求头认证，退出原账号后内容访问也随 token 失效。
 
 登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
+
+退出操作只有在服务端确认 token 已失效后才清理本地身份。服务端报错或网络失败时保留当前登录状态并提示重试，避免界面显示已退出而内容 Cookie 仍有效。
 
 | API | 用途 |
 | --- | --- |
@@ -133,6 +139,8 @@ AI 工具可以复用这些接口和已授权的登录 token。凭证通过受�
 ### 验证与恢复
 
 验证时使用独立数据库、数据目录和空闲端口，从运行配置派生副本，不覆盖正在使用的 systemd 配置。现有部分测试会写数据库或更新 DNS，不能直接使用运行凭证执行全量测试。
+
+GitHub Actions 使用 Go 1.21.12 构建全部 Go 包，只运行可离线执行的 `api/webprojects`、`domain/service/webprojects`、`domain/service/passport`、`domain/service/rsa`、`utils` 和 `utils/md` 测试。依赖数据库、外部 RPC/DNS 或特定网卡的集成测试需要单独配置隔离条件；CI 的离线测试不能替代数据库及 HTTPS 链路验收。
 
 服务端可使用 `-host 127.0.0.1 -port 18180 -conf /path/to/test-config.yaml` 只监听本机测试端口；省略 `-host` 保持既有监听行为。前端隔离构建可设置 `VUE_APP_API_BASE_URL=https://127.0.0.1:18443`，使登录请求也进入测试 HTTPS 代理；未设置时沿用原 API 地址。
 
