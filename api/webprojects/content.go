@@ -15,33 +15,33 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/api/middleware"
+	application "github.com/mcoder2014/home_server/app/webprojects"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
+	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
 func serveProjectContent(c *gin.Context) {
-	project, release, err := service.GetPublishedProject(c.Param("slug"))
+	project, release, err := application.Default.GetPublishedProject(c.Param("slug"))
 	if err != nil {
-		failWithError(c, err)
+		ginfmt.Fail(c, err)
 		return
 	}
 	userID := int64(0)
-	if project.AccessMode != service.AccessModePublic {
-		cookie, cookieErr := c.Cookie("__Host-web_projects_session")
-		if cookieErr == nil {
-			user, loginErr := service.CheckContentUser(ginfmt.RPCContext(c), cookie)
-			if loginErr == nil && user != nil {
-				userID = user.ID
-			} else if loginErr != nil && service.IsDependencyError(loginErr) {
-				failWithError(c, loginErr)
+	explicitCredentials := c.GetHeader("Authorization") != "" || c.GetHeader(middleware.HeaderKey) != ""
+	if project.AccessMode != service.AccessModePublic || explicitCredentials {
+		principal, loginErr := middleware.ResolveIdentity(c, "web-projects:read", true, false)
+		if loginErr == nil {
+			userID = principal.UserID
+		} else {
+			if !errors.Is(loginErr, service.ErrUnauthorized) || explicitCredentials {
+				ginfmt.Fail(c, loginErr)
 				return
-			} else {
-				clearContentCookie(c)
 			}
-		}
-		if userID == 0 {
+			utils.ClearBrowserSession(c)
 			if isDocumentNavigation(c.Request.Method, c.Request.URL.Path, c.GetHeader("Accept")) {
 				target := c.Request.URL.RequestURI()
 				if validateProjectTarget(target) == nil {
@@ -50,24 +50,24 @@ func serveProjectContent(c *gin.Context) {
 					return
 				}
 			}
-			failWithError(c, service.ErrUnauthorized)
+			ginfmt.Fail(c, service.ErrUnauthorized)
 			return
 		}
 	}
 	isMember := false
 	if project.AccessMode == service.AccessModeMembers && userID != project.OwnerUserID {
-		isMember, err = service.IsMember(project.ID, userID)
+		isMember, err = application.Default.IsMember(project.ID, userID)
 		if err != nil {
-			failWithError(c, service.ErrDependency)
+			ginfmt.Fail(c, service.ErrDependency)
 			return
 		}
 	}
 	if !service.CanReadProject(project.AccessMode, project.OwnerUserID, userID, isMember) {
-		failWithError(c, service.ErrNotFound)
+		ginfmt.Fail(c, service.ErrNotFound)
 		return
 	}
 	if c.GetHeader("Service-Worker") != "" {
-		failWithError(c, service.ErrForbidden)
+		ginfmt.Fail(c, service.ErrForbidden)
 		return
 	}
 	if c.Param("path") == "" {
@@ -82,7 +82,7 @@ func serveProjectContent(c *gin.Context) {
 	conf := config.Global().WebProjects
 	contentRoot, err := service.ReleaseContentRoot(&conf, release)
 	if err != nil {
-		failWithError(c, err)
+		ginfmt.Fail(c, err)
 		return
 	}
 	requested := strings.TrimPrefix(c.Param("path"), "/")
@@ -121,17 +121,17 @@ func serveProjectContent(c *gin.Context) {
 func downloadRelease(c *gin.Context) {
 	projectID, err := service.ParsePositiveID(c.Param("id"))
 	if err != nil {
-		failWithError(c, err)
+		ginfmt.Fail(c, err)
 		return
 	}
 	releaseID, err := service.ParsePositiveID(c.Param("release_id"))
 	if err != nil {
-		failWithError(c, err)
+		ginfmt.Fail(c, err)
 		return
 	}
-	release, err := service.GetReleaseForDownload(currentUserID(c), projectID, releaseID)
+	release, err := application.Default.GetReleaseForDownload(currentUserID(c), projectID, releaseID)
 	if err != nil {
-		failWithError(c, err)
+		ginfmt.Fail(c, err)
 		return
 	}
 	conf := config.Global().WebProjects
@@ -140,17 +140,17 @@ func downloadRelease(c *gin.Context) {
 
 func serveReleaseDownload(c *gin.Context, conf *config.WebProjectsConfig, release *model.WebProjectRelease) {
 	if conf == nil || release == nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	contentRoot, err := service.ReleaseContentRoot(conf, release)
 	if err != nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	temp, err := os.CreateTemp(filepath.Join(conf.StorageRoot, "staging"), "download-*.zip")
 	if err != nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	tempPath := temp.Name()
@@ -159,16 +159,16 @@ func serveReleaseDownload(c *gin.Context, conf *config.WebProjectsConfig, releas
 		_ = os.Remove(tempPath)
 	}()
 	if err := writeReleaseArchive(temp, contentRoot, release); err != nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	info, err := temp.Stat()
 	if err != nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	if _, err := temp.Seek(0, io.SeekStart); err != nil {
-		failWithError(c, service.ErrDependency)
+		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
 	c.Header("Content-Type", "application/zip")
@@ -265,10 +265,6 @@ func writeReleaseArchive(destination io.Writer, contentRoot string, release *mod
 	return nil
 }
 
-func clearContentCookie(c *gin.Context) {
-	http.SetCookie(c.Writer, &http.Cookie{Name: "__Host-web_projects_session", Value: "", Path: "/", MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-}
-
 func contentFailureStatus(err error, isEntry, isRegular bool) int {
 	if errors.Is(err, service.ErrInvalid) {
 		return http.StatusNotFound
@@ -293,8 +289,8 @@ func contentFailureStatus(err error, isEntry, isRegular bool) int {
 
 func failContentFile(c *gin.Context, status int) {
 	if status == http.StatusNotFound {
-		failWithError(c, service.ErrNotFound)
+		ginfmt.Fail(c, service.ErrNotFound)
 		return
 	}
-	failWithError(c, service.ErrDependency)
+	ginfmt.Fail(c, service.ErrDependency)
 }

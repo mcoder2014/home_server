@@ -1,5 +1,7 @@
+// URL control characters are rejected before redirects are returned to the browser.
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
-const PROJECT_PATH = /^\/p\/[a-z0-9][a-z0-9-]{1,46}[a-z0-9](?:\/|$)/
+const PROJECT_PATH = /^\/p\/[a-z0-9][a-z0-9-]{1,254}[a-z0-9](?:\/|$)/
 
 function parseInternalPath(value) {
     if (typeof value !== 'string' || value.length === 0 || value.startsWith('//')) {
@@ -36,7 +38,10 @@ function normalizeInternalRedirect(value, inheritedHash = '') {
     if (parsed === null) {
         return '/'
     }
-    if (!PROJECT_PATH.test(parsed.pathname) && parsed.pathname !== '/web-projects' && !parsed.pathname.startsWith('/web-projects/')) {
+    if (!PROJECT_PATH.test(parsed.pathname)
+        && parsed.pathname !== '/applications'
+        && parsed.pathname !== '/web-projects'
+        && !parsed.pathname.startsWith('/web-projects/')) {
         return '/'
     }
     if (inheritedHash && !value.includes('#')) {

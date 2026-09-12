@@ -80,7 +80,7 @@ sudo journalctl --unit home_client.service
 
 ### 部署配置
 
-先检查现有 `login_token` 的索引；网页资源会逐请求验证 token，需要以 `token` 为首列的索引。增量迁移 `domain/dal/migrations/20260909_web_projects.sql` 包含普通 token 索引和三张新表，已有等价 token 索引时跳过相应建索引语句，不假设历史 token 数据唯一。迁移在目标数据库执行并核对后，再添加服务端配置：
+先检查现有 `login_token` 的索引；网页资源会逐请求验证 token，需要以 `token` 为首列的索引。首次安装的 `domain/dal/migrations/20260909_web_projects.sql` 包含普通 token 索引和三张新表，已有等价 token 索引时跳过相应建索引语句，不假设历史 token 数据唯一。已安装旧 PR 文字枚举表的环境改用 `20260912_web_projects_refactor.sql`，两者不能对同一个库重复执行；升级脚本遇到未知枚举会中止，修正数据后可重跑。迁移在目标数据库执行并核对后，再添加服务端配置：
 
 ```yaml
 web_projects:
@@ -93,7 +93,7 @@ web_projects:
 
 数据目录需要服务账号有写权限，并且必须位于 WebDAV 共享目录、管理前端 `dist` 及其他公共静态目录之外。数据库保存项目、成员和版本信息，文件保存在 `storage_root` 的独立版本目录中；应同时备份数据库和文件。
 
-在提供前端的现有 HTTPS Nginx `server` 中引入 `config/nginx/web_projects_locations.conf`，根据实际位置修改该文件中的后端地址。保留现有 Vue 的页面 fallback。该片段让 `/p/` 和新 API 经过服务端，并禁止代理缓存；不能另外用 `root` 或 `alias` 直接暴露项目文件。
+在提供前端的现有 HTTPS Nginx `server` 中引入 `config/nginx/web_projects_locations.conf` 和 `config/nginx/api_auth_locations.conf`，根据实际位置修改该文件中的后端地址。保留现有 Vue 的页面 fallback。该片段让 `/p/` 和新 API 经过服务端，并禁止代理缓存；不能另外用 `root` 或 `alias` 直接暴露项目文件。
 
 升级顺序为迁移、后端和同源代理、最后前端。模块关闭时仍应保留同源 API 代理，由后端返回明确的 404，兼容旧登录；不能让登录同步请求落到静态页面 fallback。
 
@@ -117,7 +117,7 @@ ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平�
 
 ### 登录与自动化接口
 
-管理 API 继续使用现有 `passport` 请求头。前端调用同源 `POST /api/web-projects/browser-login`，校验该 token 后设置 `Secure`、`HttpOnly` 的内容 Cookie；浏览器打开 `/p/` 及加载资源时自动携带。Cookie 不能代替管理 API 的请求头认证，退出原账号后内容访问也随 token 失效。
+用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
 
 登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
 
@@ -140,7 +140,7 @@ AI 工具可以复用这些接口和已授权的登录 token。凭证通过受�
 
 验证时使用独立数据库、数据目录和空闲端口，从运行配置派生副本，不覆盖正在使用的 systemd 配置。现有部分测试会写数据库或更新 DNS，不能直接使用运行凭证执行全量测试。
 
-GitHub Actions 使用 Go 1.21.12 构建全部 Go 包，只运行可离线执行的 `api/webprojects`、`domain/service/webprojects`、`domain/service/passport`、`domain/service/rsa`、`utils` 和 `utils/md` 测试。依赖数据库、外部 RPC/DNS 或特定网卡的集成测试需要单独配置隔离条件；CI 的离线测试不能替代数据库及 HTTPS 链路验收。
+GitHub Actions 使用 Go 1.21.12 构建全部 Go 包，运行已核对的离线 API、app、model、repository、领域服务及公共工具测试，并运行 Python AI 客户端测试。依赖数据库、外部 RPC/DNS 或特定网卡的集成测试需要单独配置隔离条件；CI 的离线测试不能替代数据库及 HTTPS 链路验收。
 
 服务端可使用 `-host 127.0.0.1 -port 18180 -conf /path/to/test-config.yaml` 只监听本机测试端口；省略 `-host` 保持既有监听行为。前端隔离构建可设置 `VUE_APP_API_BASE_URL=https://127.0.0.1:18443`，使登录请求也进入测试 HTTPS 代理；未设置时沿用原 API 地址。
 
@@ -160,6 +160,101 @@ go build -o output/bin/web-projects-audit ./cmd/web-projects-audit
 命令只读取 `storage_root/projects/<project_id>/releases/<release_id>` 目录元数据和数据库中的 `id`、`project_id`、`storage_key`，不读取网页内容，不启动周期清理，也不修改或删除文件。默认忽略最近一小时创建的目录，并跳过非数字目录、异常目录和软链接。数据库查询失败时命令返回失败，不会把数据库当成空库。
 
 JSON 输出包含候选目录、原因和扫描统计。候选只表示“缺少数据库引用”或“`storage_key` 不一致”，不等于可以删除；回收前应停止上传，核对数据库与文件备份，并由维护者按明确目录人工处理。该命令没有自动删除能力，也不提供删除参数。
+
+## 应用身份与 AK/SK
+
+### 创建和保管
+
+登录后从“应用凭证”进入管理页。每个应用固定归属于创建用户，其他用户无法列表、读取、修改、轮换或吊销它。应用身份只能使用授予的业务权限，不能管理凭证、退出用户账号或建立用户浏览器 Session。
+
+AK 是公开标识，SK 是高熵秘密。两者由 `crypto/rand` 生成；数据库仅保存 SK 和访问 Token 的 SHA-256 摘要，不能读取回原文。创建或轮换时只返回一次 SK；关闭弹窗后无法再次查看，遗失时需要轮换。前端不把 SK 存进 localStorage、URL 或日志。
+
+| 设置 | 行为 |
+| --- | --- |
+| 默认权限 | 仅 `web-projects:read`，写权限需要显式选择；同一业务的 write 包含 read。 |
+| 到期 | 凭证默认 90 天，配置默认上限 365 天。Token 默认 900 秒，可在服务端配置，最大 3600 秒。 |
+| 停用 / 启用 | 停用后不能换取或使用 Token；重新启用也不会让旧 Token 复活。 |
+| 轮换 | 返回新 SK，旧 SK 和旧 Token 的后续鉴权立即失败。更新客户端凭证后重新换取 Token。 |
+| 吊销 | 永久停止该应用，不能恢复；需要时创建新应用。 |
+| 并发修改 | PATCH、轮换、吊销必须携带 `If-Match: revision`；旧修订返回 409。 |
+
+每用户默认最多 20 个未吊销应用。数据库唯一 active slot 与事务共同保护并发上限，调低配置时原高位 slot 仍计入总数。`last_issued_at` 表示最近一次成功换取 Token，不是每次业务调用时间；业务鉴权不为此逐请求写数据库。
+
+### 调用与权限边界
+
+通过 HTTPS 向 `POST /api/auth/token` 发送 `application/x-www-form-urlencoded`：`grant_type=client_credentials`，并使用 HTTP Basic `AK:SK`。也支持 form 的 `client_id` / `client_secret`，两种方式不可混传。返回标准 `access_token`、`token_type`、`expires_in`、`scope`，没有 refresh token。服务仅实现所需的 client_credentials 子集，不提供授权码登录、开放客户端注册或每请求 HMAC 签名。
+
+后续使用 `Authorization: Bearer <access_token>` 调用业务接口。SK/Token 不放在 URL；重复、混合或无效的显式认证信息不会降级到其他身份。换发接口不接受 query，访问日志对凭证字段和值脱敏；代理认证接口关闭访问日志，应用审计仅记录用户/应用 ID、动作和结果。
+
+| 接口范围 | 应用权限 | 保持的资源边界 |
+| --- | --- | --- |
+| `/api/web-projects` 及子接口、受保护的 `/p/` | `web-projects:read` / `web-projects:write` | 应用继承所属用户的项目管理或成员读取权限，不能访问其他用户的私有项目。 |
+| `/bookinfo/query`、`/library/*` | `library:read` / `library:write` | 沿用现有图书共享语义。 |
+| `/webdav/*`、`/webdav_dev/*` | `webdav:read` / `webdav:write` | 沿用现有共享目录；GET/HEAD/OPTIONS/PROPFIND 为读，其他已注册方法为写。 |
+| `/api/applications*`、用户退出、browser-login | 不允许应用身份 | 需要用户 `passport` token；浏览器 Cookie 也不能代替它。 |
+| 原公开 DDNS、ping 等 | 保持原公开行为 | 不把公开接口当成应用权限隔离的一部分。 |
+
+AK/SK 管理在服务端按用户隔离；应用不是新的共享管理员账号。已有图书和 WebDAV 共享规则没有改成每用户独立存储。同源网页仍仅适合受信任代码：同源脚本并不具备浏览器级隔离，凭证管理不能改变这一既定边界。
+
+长时间运行的 AI/SDK 应在有效期内复用 Token，避免每个业务请求都重新换取。当前换发接口没有专门的速率限制；过期记录按索引有界回收，客户端应处理 401、403、409、429 和 503。
+
+### 管理 API
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET/POST /api/applications` | 按用户分页列表 / 创建，创建响应包含一次性 `secret_key`。 |
+| `GET/PATCH /api/applications/{id}` | 详情 / 名称、描述、权限、期限及启停设置。 |
+| `POST /api/applications/{id}/rotate` | 轮换 SK，返回一次性 `secret_key`。 |
+| `DELETE /api/applications/{id}` | 永久吊销。 |
+
+创建请求为 `{name, description, scopes, expires_in_days}`；省略有效期使用默认值，显式 0 无效。应用视图中的 ID 使用十进制字符串，状态和 scope 使用可读字符串；列表和详情从不返回 SK、摘要或 Token。
+
+### 配置和迁移
+
+1. 已有旧网页项目表先执行 `domain/dal/migrations/20260912_web_projects_refactor.sql`；首次安装仅执行新的 `20260909_web_projects.sql`。升级保留 HTTP 字符串枚举，但数据库使用 INT；name/slug/幂等键为 256，entry_file 为 2048，诊断信息进入 `extra TEXT` JSON。
+2. 启用应用身份前执行 `domain/dal/migrations/20260912_applications.sql`，创建应用和访问 Token 表。数据库账号仅授予目标库权限，先在隔离库验证，不直接导入包含 `USE home_server` 的历史建表文件。
+3. 在配置增加下列字段，更新同源 Nginx 片段并设置实际后端端口，再部署后端和前端。
+
+```yaml
+auth:
+  applications_enabled: true
+  site_origin: https://home.example.com
+  token_ttl_seconds: 900
+  default_credential_ttl_days: 90
+  max_credential_ttl_days: 365
+  max_applications_per_user: 20
+  trusted_proxy_cidrs:
+    - 127.0.0.1/32
+    - ::1/128
+```
+
+浏览器 Origin 未设置且网页项目已启用时，会在路由注册前复用 `web_projects.site_origin`；停用模块的残留 Origin 不会自动启用 Session。只信任真实 TLS 或明确配置的代理地址提供的 `X-Forwarded-Proto: https`，不信任任意客户端伪造该头。
+
+Nginx 引入 `config/nginx/api_auth_locations.conf`，将固定 `/api/auth/*`、`/api/applications*` 及既有受保护业务 API 转给后端。两个模块停用时也应保留代理，让后端明确返回 404，避免 API 落入 SPA fallback。不要启用请求/响应体或认证头日志。
+
+### AI 客户端
+
+仓库提供无第三方依赖的 `script/home_server_api.py`。从管理页下载凭证 JSON 后放到 Git 之外的受控路径，并设置权限为 600。也可以通过 `CQ_HOME_SERVER_ACCESS_KEY`、`CQ_HOME_SERVER_SECRET_KEY` 和 `CQ_HOME_SERVER_BASE_URL` 由受控环境注入；不支持把 SK 写成命令行参数。
+
+```bash
+chmod 600 ~/.config/cq-home-server/credentials.json
+python3 script/home_server_api.py \
+  --base-url https://home.example.com \
+  --credentials-file ~/.config/cq-home-server/credentials.json \
+  --method GET --path '/api/web-projects?limit=20'
+```
+
+上传网页版本使用 `--method POST --path /api/web-projects/项目ID/releases --upload-file /path/to/site.zip`；ZIP 可加 `--entry-file index.html`。写 JSON 用 `--json-file`，修改时加 `--if-match`；下载二进制用 `--output`。只有单 HTML/ZIP 上传会构造 multipart，它不是通用 WebDAV 上传器。
+
+客户端校验证书和主机名，自签名测试证书使用 `--ca-file`；不提供关闭校验的选项。它固定同一 HTTPS origin，不跟随重定向，不自动重试写请求，不把短期 Token 存盘，终端输出会脱敏。
+
+### 代码结构与公共约定
+
+HTTP 适配位于 `api/`，网页和应用管理用例位于 `app/`，领域规则、校验与文件操作位于 `domain/service/`；`domain/repository/` 负责事务与多表结果组合，`domain/dal/` 只执行显式列、有界单表 SQL。网页回收不再使用 JOIN、EXISTS、COUNT/SUM 聚合，关联和汇总在 Go 中完成。
+
+通用错误码统一位于 `errors/`，新 API 使用 `utils/ginfmt.Success/Fail`。旧接口保留原 HTTP 约定并正确传递包装后的错误码；新模块不再私设 501～510 的重复类别。Cookie 和身份上下文分别由 `utils/session.go`、`utils.Principal` 统一管理，应用 Token 不进入用户 Session。
+
+协议依据：[OAuth 2.0 client_credentials](https://www.rfc-editor.org/rfc/rfc6749#section-4.4)、[Bearer Token](https://www.rfc-editor.org/rfc/rfc6750#section-2.1)、[OWASP 密钥生命周期](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)。
 
 ## FAQ
 

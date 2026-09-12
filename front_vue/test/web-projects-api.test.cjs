@@ -53,7 +53,7 @@ test('browser login is a same-origin POST with no token in its URL or body', asy
 
     assert.deepEqual(transport.calls[0], {
         method: 'post',
-        url: '/api/web-projects/browser-login',
+        url: '/api/auth/browser-login',
         headers: {passport: 'secret-token'},
     })
 })
@@ -66,7 +66,7 @@ test('browser login can explicitly use the newly returned token', async () => {
 
     assert.deepEqual(transport.calls[0], {
         method: 'post',
-        url: '/api/web-projects/browser-login',
+        url: '/api/auth/browser-login',
         headers: {passport: 'new-token'},
     })
 })

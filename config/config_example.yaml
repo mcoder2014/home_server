@@ -31,3 +31,17 @@ web_projects:
   max_concurrent_uploads_per_user: 2
   max_concurrent_extracts: 4
   delete_retention_days: 7
+
+auth:
+  # Enable after application tables and same-origin HTTPS proxy are installed.
+  applications_enabled: false
+  # Set the actual HTTPS origin; an enabled web_projects origin is reused when empty.
+  site_origin: ''
+  token_ttl_seconds: 900
+  default_credential_ttl_days: 90
+  max_credential_ttl_days: 365
+  max_applications_per_user: 20
+  # Trust forwarded HTTPS only from these backend-facing proxy addresses.
+  trusted_proxy_cidrs:
+    - 127.0.0.1/32
+    - ::1/128

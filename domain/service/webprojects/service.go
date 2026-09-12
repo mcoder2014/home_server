@@ -8,13 +8,14 @@ import (
 	"strings"
 
 	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/domain/model"
 )
 
 const (
-	AccessModeOwner         = "owner"
-	AccessModeMembers       = "members"
-	AccessModeAuthenticated = "authenticated"
-	AccessModePublic        = "public"
+	AccessModeOwner         = model.WebProjectAccessOwner
+	AccessModeMembers       = model.WebProjectAccessMembers
+	AccessModeAuthenticated = model.WebProjectAccessAuthenticated
+	AccessModePublic        = model.WebProjectAccessPublic
 )
 
 func Init(conf *config.WebProjectsConfig) error {
@@ -109,7 +110,7 @@ func applyDefaults(conf *config.WebProjectsConfig) {
 	}
 }
 
-func CanReadProject(mode string, ownerUserID, userID int64, isMember bool) bool {
+func CanReadProject(mode model.WebProjectAccess, ownerUserID, userID int64, isMember bool) bool {
 	switch mode {
 	case AccessModePublic:
 		return true

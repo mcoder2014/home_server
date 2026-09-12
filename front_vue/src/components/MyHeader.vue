@@ -14,6 +14,9 @@
         <router-link to="/book/list" :class="{active: $route.path.startsWith('/book/')}">
           <el-icon><Reading /></el-icon>图书管理
         </router-link>
+        <router-link to="/applications" :class="{active: $route.path === '/applications'}">
+          <el-icon><Key /></el-icon>应用凭证
+        </router-link>
       </nav>
 
       <!-- 右侧用户信息 -->
@@ -34,11 +37,11 @@
 
 <script>
 import axios from "axios";
-import {Monitor, Reading} from '@element-plus/icons-vue'
+import {Key, Monitor, Reading} from '@element-plus/icons-vue'
 
 export default {
   name: "MyHeader",
-  components: {Monitor, Reading},
+  components: {Key, Monitor, Reading},
   data() {
     return {
       user: {
@@ -111,8 +114,8 @@ export default {
 .username { font-size: 13px; color: var(--text-secondary); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 820px) {
   .header-inner { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 14px 20px 10px; }
-  .header-nav { grid-row: 2; grid-column: 1 / -1; margin-top: 12px; }
-  .header-nav a { flex: 1; }
+  .header-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-row: 2; grid-column: 1 / -1; margin-top: 12px; width: 100%; }
+  .header-nav a { min-width: 0; padding-left: 6px; padding-right: 6px; }
   .header-user { grid-column: 2; grid-row: 1; }
 }
 @media (max-width: 480px) {
@@ -121,5 +124,8 @@ export default {
   .username { display: none; }
   .user-avatar { width: 26px; height: 26px; }
   .header-user { gap: 6px; }
+  .header-nav { gap: 2px; }
+  .header-nav a { font-size: 12px; gap: 0; padding-left: 3px; padding-right: 3px; }
+  .header-nav a .el-icon { display: none; }
 }
 </style>

@@ -40,6 +40,12 @@
           <p>输入 ISBN 或扫描条码，<br>把新发现加入你的书架。</p>
           <span class="service-link">添加一本书 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
+        <router-link class="service-card" to="/applications">
+          <div class="service-top"><span class="service-icon credentials-icon"><el-icon :size="25"><Key /></el-icon></span><span class="service-label">CREDENTIALS</span></div>
+          <h3>应用凭证</h3>
+          <p>为脚本创建独立 AK/SK，<br>按服务控制读取与写入权限。</p>
+          <span class="service-link">管理凭证 <el-icon><ArrowRight /></el-icon></span>
+        </router-link>
       </div>
       <footer class="home-footer"><span>CQ Home Server</span><span>留给生活的一点数字空间</span></footer>
     </main>
@@ -48,11 +54,11 @@
 
 <script>
 import MyHeader from '../components/MyHeader'
-import {ArrowRight, Monitor, Plus, Reading} from '@element-plus/icons-vue'
+import {ArrowRight, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
 
 export default {
   name: 'MyIndex',
-  components: {MyHeader, Monitor, Plus, Reading, ArrowRight},
+  components: {MyHeader, Monitor, Plus, Reading, Key, ArrowRight},
   computed: {
     username() {
       return localStorage.getItem('user_name') || '访客'
@@ -81,13 +87,14 @@ export default {
 .services-heading { display: flex; align-items: center; justify-content: space-between; margin: 36px 0 18px; gap: 12px; }
 .services-heading h2 { font-size: 18px; font-weight: 650; margin: 0; }
 .services-heading > span { color: var(--text-secondary); font-size: 12px; }
-.service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.service-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
 .service-card { display: flex; flex-direction: column; text-decoration: none; padding: 28px; border: 1px solid var(--border-color); border-radius: 16px; background: #fff; color: var(--text-primary); box-shadow: var(--card-shadow); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
 .service-card:hover { transform: translateY(-3px); border-color: #b4cdc0; box-shadow: 0 12px 28px #1d352d0a; }
 .service-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 22px; }
 .service-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 13px; background: #e9f3ed; color: var(--primary-color); }
 .books-icon { background: #f7efe1; color: #aa8244; }
 .add-icon { background: #eff1f8; color: #7b83ab; }
+.credentials-icon { background: #edf4ef; color: #4f7d68; }
 .service-label { color: #7f8d87; font-size: 9px; font-weight: 600; letter-spacing: 1.1px; }
 .service-card h3 { font-size: 20px; font-weight: 650; margin: 0 0 10px; }
 .service-card p { font-size: 13px; line-height: 1.9; color: var(--text-secondary); margin: 0 0 26px; }
@@ -103,6 +110,7 @@ export default {
   .home-illustration { width: 210px; transform: scale(0.85); transform-origin: right center; }
   .service-card { padding: 22px; }
   .service-label { display: none; }
+  .service-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .welcome-banner { padding: 28px 24px; }

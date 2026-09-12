@@ -9,76 +9,17 @@ import (
 	"time"
 
 	"github.com/mcoder2014/home_server/config"
-	"github.com/mcoder2014/home_server/domain/dal"
-	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	repository "github.com/mcoder2014/home_server/domain/repository/webprojects"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
 const (
-	releaseStatusDeleting      = "deleting"
+	releaseStatusDeleting      = model.WebProjectReleaseDeleting
 	expiredProjectBatchSize    = 100
 	expiredReleaseBatchSize    = 100
 	maintenanceCleanupInterval = time.Hour
 )
-
-// PruneProjectReleases selects old non-current releases while the caller holds
-// the project row lock. It only changes database state; disk deletion happens
-// after the surrounding upload transaction commits.
-func PruneProjectReleases(tx *gorm.DB, project *model.WebProject, conf *config.WebProjectsConfig, incomingBytes int64) ([]*model.WebProjectRelease, error) {
-	if tx == nil || project == nil || conf == nil || incomingBytes < 0 || conf.MaxProjectBytes <= 0 || conf.MaxReleases <= 0 {
-		return nil, ErrInvalid
-	}
-	usage, err := dal.QueryReadyWebProjectReleaseUsage(tx, project.ID)
-	if err != nil {
-		return nil, fmt.Errorf("%w: query release usage: %v", ErrDependency, err)
-	}
-	if usage.TotalBytes+incomingBytes <= conf.MaxProjectBytes && usage.ReleaseCount+1 <= int64(conf.MaxReleases) {
-		return nil, nil
-	}
-
-	candidates, err := dal.ListOldestPrunableWebProjectReleases(tx, project.ID, project.CurrentReleaseID, int(usage.ReleaseCount))
-	if err != nil {
-		return nil, fmt.Errorf("%w: list releases for pruning: %v", ErrDependency, err)
-	}
-	remainingBytes := usage.TotalBytes
-	remainingCount := usage.ReleaseCount
-	retired := make([]*model.WebProjectRelease, 0, len(candidates))
-	for _, release := range candidates {
-		if remainingBytes+incomingBytes <= conf.MaxProjectBytes && remainingCount+1 <= int64(conf.MaxReleases) {
-			break
-		}
-		retired = append(retired, release)
-		remainingBytes -= release.TotalBytes
-		if remainingBytes < 0 {
-			remainingBytes = 0
-		}
-		remainingCount--
-	}
-	if remainingBytes+incomingBytes > conf.MaxProjectBytes {
-		return nil, ErrTooLarge
-	}
-	if remainingCount+1 > int64(conf.MaxReleases) {
-		return nil, ErrRateLimited
-	}
-
-	releaseIDs := make([]int64, 0, len(retired))
-	for _, release := range retired {
-		releaseIDs = append(releaseIDs, release.ID)
-	}
-	rows, err := dal.MarkWebProjectReleasesDeleting(tx, project.ID, releaseIDs, true)
-	if err != nil {
-		return nil, fmt.Errorf("%w: mark pruned releases: %v", ErrDependency, err)
-	}
-	if rows != int64(len(retired)) {
-		return nil, fmt.Errorf("%w: release state changed while pruning", ErrConflict)
-	}
-	for _, release := range retired {
-		release.Status = releaseStatusDeleting
-	}
-	return retired, nil
-}
 
 // RemoveRetiredReleases removes only database-confirmed deleting releases. A
 // failure leaves the row in deleting so the next maintenance run can retry.
@@ -86,13 +27,14 @@ func RemoveRetiredReleases(conf *config.WebProjectsConfig, releases []*model.Web
 	if conf == nil || conf.StorageRoot == "" {
 		return ErrInvalid
 	}
+	store := repository.New()
 	var result error
 	for _, candidate := range releases {
 		if candidate == nil || candidate.ProjectID <= 0 || candidate.ID <= 0 {
 			result = errors.Join(result, fmt.Errorf("%w: invalid retired release identity", ErrInvalid))
 			continue
 		}
-		release, err := dal.QueryDeletingWebProjectRelease(candidate.ProjectID, candidate.ID)
+		release, err := store.FindRemovableDeletingRelease(candidate.ProjectID, candidate.ID)
 		if err != nil {
 			result = errors.Join(result, fmt.Errorf("%w: query deleting release: %v", ErrDependency, err))
 			continue
@@ -111,7 +53,7 @@ func RemoveRetiredReleases(conf *config.WebProjectsConfig, releases []*model.Web
 				continue
 			}
 		}
-		deleted, err := dal.DeleteDeletingWebProjectRelease(release.ProjectID, release.ID)
+		deleted, err := store.DeleteDeletingRelease(release.ProjectID, release.ID)
 		if err != nil {
 			result = errors.Join(result, fmt.Errorf("%w: delete release row: %v", ErrDependency, err))
 			continue
@@ -134,28 +76,48 @@ func CleanupExpiredProjects(conf *config.WebProjectsConfig) error {
 		return nil
 	}
 	cutoff := time.Now().Add(-time.Duration(conf.DeleteRetentionDays) * 24 * time.Hour)
-	projectIDs, err := dal.ListExpiredWebProjectIDs(cutoff, expiredProjectBatchSize)
+	store := repository.New()
 	var result error
 	processedReleaseIDs := make(map[int64]struct{})
-	if err != nil {
-		result = errors.Join(result, fmt.Errorf("%w: list expired projects: %v", ErrDependency, err))
-	} else {
-		for _, projectID := range projectIDs {
-			releases, prepareErr := prepareExpiredProjectCleanup(projectID, cutoff)
+	var afterDeletedAt *time.Time
+	var afterID int64
+	preparedProjects := 0
+	for preparedProjects < expiredProjectBatchSize {
+		projects, err := store.ListExpiredProjects(cutoff, afterDeletedAt, afterID, expiredProjectBatchSize)
+		if err != nil {
+			result = errors.Join(result, fmt.Errorf("%w: list expired projects: %v", ErrDependency, err))
+			break
+		}
+		if len(projects) == 0 {
+			break
+		}
+		for _, project := range projects {
+			afterDeletedAt, afterID = project.DeletedAt, project.ID
+			releases, prepareErr := store.PrepareExpiredProjectCleanup(project.ID, cutoff, expiredReleaseBatchSize)
 			if prepareErr != nil {
-				result = errors.Join(result, prepareErr)
+				result = errors.Join(result, fmt.Errorf("%w: prepare expired project %d: %v", ErrDependency, project.ID, prepareErr))
 				continue
 			}
+			if len(releases) == 0 {
+				continue
+			}
+			preparedProjects++
 			for _, release := range releases {
 				processedReleaseIDs[release.ID] = struct{}{}
 			}
 			if err := RemoveRetiredReleases(conf, releases); err != nil {
-				result = errors.Join(result, fmt.Errorf("cleanup expired project %d: %w", projectID, err))
+				result = errors.Join(result, fmt.Errorf("cleanup expired project %d: %w", project.ID, err))
 			}
+			if preparedProjects >= expiredProjectBatchSize {
+				break
+			}
+		}
+		if len(projects) < expiredProjectBatchSize {
+			break
 		}
 	}
 
-	retryReleases, err := dal.ListDeletingWebProjectReleases(expiredReleaseBatchSize)
+	retryReleases, err := store.ListDeletingReleases(expiredReleaseBatchSize)
 	if err != nil {
 		result = errors.Join(result, fmt.Errorf("%w: list deleting releases: %v", ErrDependency, err))
 		return result
@@ -170,6 +132,42 @@ func CleanupExpiredProjects(conf *config.WebProjectsConfig) error {
 		result = errors.Join(result, fmt.Errorf("retry deleting releases: %w", err))
 	}
 	return result
+}
+
+// SelectReleasesForPruning computes release count and bytes in Go from a
+// bounded, oldest-first DAL result. The current release contributes to quota
+// but is never selected, preserving the content served during concurrent upload.
+func SelectReleasesForPruning(releases []*model.WebProjectRelease, currentReleaseID *int64, maxBytes int64, maxReleases int, incomingBytes int64) ([]*model.WebProjectRelease, error) {
+	if maxBytes <= 0 || maxReleases <= 0 || incomingBytes < 0 {
+		return nil, ErrInvalid
+	}
+	var totalBytes int64
+	for _, release := range releases {
+		if release == nil || release.TotalBytes < 0 {
+			return nil, ErrInvalid
+		}
+		totalBytes += release.TotalBytes
+	}
+	remainingCount := len(releases)
+	retired := make([]*model.WebProjectRelease, 0)
+	for _, release := range releases {
+		if totalBytes+incomingBytes <= maxBytes && remainingCount+1 <= maxReleases {
+			break
+		}
+		if currentReleaseID != nil && release.ID == *currentReleaseID {
+			continue
+		}
+		retired = append(retired, release)
+		totalBytes -= release.TotalBytes
+		remainingCount--
+	}
+	if totalBytes+incomingBytes > maxBytes {
+		return nil, ErrTooLarge
+	}
+	if remainingCount+1 > maxReleases {
+		return nil, ErrRateLimited
+	}
+	return retired, nil
 }
 
 func StartMaintenance(conf config.WebProjectsConfig) {
@@ -188,49 +186,6 @@ func StartMaintenance(conf config.WebProjectsConfig) {
 			}
 		}
 	}()
-}
-
-func prepareExpiredProjectCleanup(projectID int64, cutoff time.Time) ([]*model.WebProjectRelease, error) {
-	var releases []*model.WebProjectRelease
-	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
-		project, err := dal.LockWebProjectByID(tx, projectID)
-		if err != nil {
-			return err
-		}
-		if project == nil || project.Status != ProjectStatusDeleted || project.DeletedAt == nil || !project.DeletedAt.Before(cutoff) {
-			return nil
-		}
-		releases, err = dal.ListWebProjectReleasesForCleanup(tx, projectID, expiredReleaseBatchSize)
-		if err != nil || len(releases) == 0 {
-			return err
-		}
-		releaseIDs := make([]int64, 0, len(releases))
-		for _, release := range releases {
-			releaseIDs = append(releaseIDs, release.ID)
-		}
-		rows, err := dal.MarkWebProjectReleasesDeleting(tx, projectID, releaseIDs, false)
-		if err != nil {
-			return err
-		}
-		if rows != int64(len(releases)) {
-			return fmt.Errorf("release state changed while preparing cleanup")
-		}
-		cleared, err := dal.ClearExpiredWebProjectCurrentRelease(tx, projectID, cutoff)
-		if err != nil {
-			return err
-		}
-		if !cleared {
-			return fmt.Errorf("project state changed while preparing cleanup")
-		}
-		for _, release := range releases {
-			release.Status = releaseStatusDeleting
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: prepare expired project %d: %v", ErrDependency, projectID, err)
-	}
-	return releases, nil
 }
 
 func validatedReleaseDirectory(conf *config.WebProjectsConfig, release *model.WebProjectRelease) (string, bool, error) {

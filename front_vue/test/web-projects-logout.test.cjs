@@ -15,7 +15,7 @@ async function runLogout(response, reject = false) {
         .replace(/^import .*$/gm, '')
         .replace('export default', 'module.exports =')
     const sandbox = {
-        module: {exports: {}}, Monitor: {}, Reading: {},
+        module: {exports: {}}, Key: {}, Monitor: {}, Reading: {},
         axios: {create: () => ({post: () => reject ? Promise.reject(response) : Promise.resolve(response)})},
         localStorage: {getItem: (key) => stored.get(key), removeItem: (key) => stored.delete(key)},
         alert: (message) => alerts.push(message),

@@ -75,10 +75,7 @@ func Login(c *gin.Context) {
 		ginfmt.FormatWithError(c, errors.New("res should not be nil, user not found"))
 		return
 	}
-	utils.SetSession(c, map[string]interface{}{
-		"user_id":   res.ID,
-		"user_name": res.UserName,
-	})
+
 	token, err := passport.GenToken(res)
 	if err != nil {
 		ginfmt.FormatWithError(c, err)
@@ -103,5 +100,6 @@ func Logout(c *gin.Context) {
 		ginfmt.FormatWithError(c, err)
 		return
 	}
+	utils.ClearBrowserSession(c)
 	ginfmt.FormatWithData(c, nil)
 }

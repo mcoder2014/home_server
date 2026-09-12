@@ -25,13 +25,13 @@
 
             <el-form ref="projectForm" :model="form" :rules="rules" label-position="top">
               <el-form-item label="项目名称" prop="name">
-                <el-input v-model="form.name" maxlength="80" show-word-limit />
+                <el-input v-model="form.name" maxlength="256" show-word-limit />
               </el-form-item>
               <el-form-item label="项目说明" prop="description">
                 <el-input v-model="form.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
               </el-form-item>
               <el-form-item label="项目路径" prop="slug">
-                <el-input v-model="form.slug" maxlength="48">
+                <el-input v-model="form.slug" maxlength="256">
                   <template #prepend>/p/</template>
                   <template #append>/</template>
                 </el-input>
@@ -111,7 +111,7 @@
               </template>
             </el-upload>
             <el-form-item label="ZIP 入口文件（可选）" class="entry-file-field">
-              <el-input v-model="entryFile" placeholder="index.html" />
+              <el-input v-model="entryFile" maxlength="2048" placeholder="index.html" show-word-limit />
             </el-form-item>
             <div class="form-actions">
               <el-button :disabled="!uploadFile" :loading="uploading" @click="uploadRelease(false)">仅上传版本</el-button>
@@ -212,7 +212,7 @@ export default {
         name: [{required: true, message: '请输入项目名称', trigger: 'blur'}],
         slug: [
           {required: true, message: '请输入相对 URL', trigger: 'blur'},
-          {pattern: /^[a-z0-9](?:[a-z0-9-]{1,46}[a-z0-9])$/, message: '请输入 3～48 位小写字母、数字或连字符，首尾不能是连字符', trigger: 'blur'},
+          {pattern: /^[a-z0-9](?:[a-z0-9-]{1,254}[a-z0-9])$/, message: '请输入 3～256 位小写字母、数字或连字符，首尾不能是连字符', trigger: 'blur'},
         ],
       },
       eligibleUsers: [],

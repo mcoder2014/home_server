@@ -25,4 +25,7 @@ jobs:
       # DAL/RPC/DDNS and device tests need an explicitly isolated integration environment.
       env:
         HOME_SERVER_LOG_FILE: ${{ runner.temp }}/home_server_test.log
-      run: go test -v ./api/webprojects ./domain/service/webprojects ./domain/service/passport ./domain/service/rsa ./utils ./utils/md
+      run: go test -v ./api/webprojects ./api/applications ./api/auth ./api/middleware ./app/... ./domain/model ./domain/repository/... ./domain/service/webprojects ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./utils ./utils/md ./utils/log ./utils/ginfmt
+
+    - name: Test AI API client
+      run: python3 script/test_home_server_api.py -v

@@ -137,7 +137,7 @@ function createWebProjectsApi(transport, getToken) {
             }
         },
         createBrowserLogin(token) {
-            return request({method: 'post', url: '/api/web-projects/browser-login', headers: headers(null, token)})
+            return request({method: 'post', url: '/api/auth/browser-login', headers: headers(null, token)})
         },
         async probeProjectSession(target) {
             try {

@@ -5,6 +5,7 @@ import MyIndex from '../views/Index'
 import BookInfo from "@/views/BookInfo"
 import BookList from "@/views/BookList"
 import AddBook from "@/views/AddBook"
+import Applications from '@/views/Applications'
 import ScanCodePage from "../views/ScanCodePage"
 import WebProjectEditor from '@/views/WebProjectEditor'
 import WebProjectList from '@/views/WebProjectList'
@@ -63,6 +64,15 @@ const routes = [
         meta: {
             title: '扫码录入',
             requireAuth: false
+        }
+    },
+    {
+        path: '/applications',
+        name: 'Applications',
+        component: Applications,
+        meta: {
+            title: '应用凭证',
+            requireAuth: true
         }
     },
     {

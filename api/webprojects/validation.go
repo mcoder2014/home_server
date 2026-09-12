@@ -7,6 +7,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	service "github.com/mcoder2014/home_server/domain/service/webprojects"
 )
 
 func parseIfMatch(value string) (int64, error) {
@@ -37,7 +39,7 @@ func validateProjectTarget(target string) error {
 		return fmt.Errorf("invalid project target")
 	}
 	parts := strings.Split(strings.TrimPrefix(parsed.Path, "/p/"), "/")
-	if len(parts) == 0 || !validSlug(parts[0]) || path.Clean(parsed.Path) == "/p" {
+	if len(parts) == 0 || !service.ValidProjectSlug(parts[0]) || path.Clean(parsed.Path) == "/p" {
 		return fmt.Errorf("invalid project target")
 	}
 	return nil
@@ -49,16 +51,4 @@ func isDocumentNavigation(method, requestPath, accept string) bool {
 	}
 	ext := strings.ToLower(path.Ext(requestPath))
 	return ext == "" || ext == ".html" || ext == ".htm"
-}
-
-func validSlug(slug string) bool {
-	if len(slug) < 3 || len(slug) > 48 || slug[0] == '-' || slug[len(slug)-1] == '-' {
-		return false
-	}
-	for _, char := range slug {
-		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
-			return false
-		}
-	}
-	return true
 }

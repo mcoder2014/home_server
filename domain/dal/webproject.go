@@ -17,7 +17,7 @@ const (
 )
 
 var projectColumns = []string{"id", "owner_user_id", "name", "description", "slug", "access_mode", "status", "current_release_id", "revision", "client_request_id", "deleted_at", "create_time", "update_time"}
-var releaseColumns = []string{"id", "project_id", "uploaded_by", "storage_key", "status", "entry_file", "sha256", "file_count", "total_bytes", "idempotency_key", "error_message", "create_time", "update_time"}
+var releaseColumns = []string{"id", "project_id", "uploaded_by", "storage_key", "status", "entry_file", "sha256", "file_count", "total_bytes", "idempotency_key", "extra", "create_time", "update_time"}
 
 func CreateWebProject(tx *gorm.DB, project *model.WebProject) error {
 	return tx.Table(WebProjectTable).Create(project).Error
@@ -51,6 +51,15 @@ func QueryWebProjectBySlug(slug string) (*model.WebProject, error) {
 	return &project, err
 }
 
+func QueryWebProjectByID(projectID int64) (*model.WebProject, error) {
+	var project model.WebProject
+	err := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("id = ?", projectID).Take(&project).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &project, err
+}
+
 func QueryWebProjectByRequestID(ownerUserID int64, requestID string) (*model.WebProject, error) {
 	var project model.WebProject
 	err := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ? AND client_request_id = ?", ownerUserID, requestID).Take(&project).Error
@@ -60,13 +69,13 @@ func QueryWebProjectByRequestID(ownerUserID int64, requestID string) (*model.Web
 	return &project, err
 }
 
-func ListOwnedWebProjects(ownerUserID, cursor int64, limit int, status string) ([]*model.WebProject, error) {
+func ListOwnedWebProjects(ownerUserID, cursor int64, limit int, status model.WebProjectStatus) ([]*model.WebProject, error) {
 	query := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ?", ownerUserID)
 	if cursor > 0 {
 		query = query.Where("id < ?", cursor)
 	}
-	if status == "" {
-		query = query.Where("status <> ?", "deleted")
+	if status == 0 {
+		query = query.Where("status <> ?", model.WebProjectStatusDeleted)
 	} else {
 		query = query.Where("status = ?", status)
 	}
@@ -112,9 +121,12 @@ func ReplaceWebProjectMembers(tx *gorm.DB, projectID, createdBy int64, userIDs [
 }
 
 func IsWebProjectMember(projectID, userID int64) (bool, error) {
-	var count int64
-	err := db.MasterDB().Table(WebProjectMemberTable).Where("project_id = ? AND user_id = ?", projectID, userID).Limit(1).Count(&count).Error
-	return count > 0, err
+	var member model.WebProjectMember
+	err := db.MasterDB().Table(WebProjectMemberTable).Select("project_id", "user_id").Where("project_id = ? AND user_id = ?", projectID, userID).Take(&member).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func CreateWebProjectRelease(tx *gorm.DB, release *model.WebProjectRelease) error {
@@ -128,6 +140,9 @@ func QueryWebProjectRelease(projectID, releaseID int64, tx ...*gorm.DB) (*model.
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	if err == nil {
+		err = release.DecodeExtra()
+	}
 	return &release, err
 }
 
@@ -136,6 +151,9 @@ func LockWebProjectRelease(tx *gorm.DB, projectID, releaseID int64) (*model.WebP
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Table(WebProjectReleaseTable).Select(releaseColumns).Where("project_id = ? AND id = ?", projectID, releaseID).Take(&release).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
+	}
+	if err == nil {
+		err = release.DecodeExtra()
 	}
 	return &release, err
 }
@@ -147,6 +165,9 @@ func QueryWebProjectReleaseByIdempotencyKey(projectID int64, key string, tx ...*
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	if err == nil {
+		err = release.DecodeExtra()
+	}
 	return &release, err
 }
 
@@ -157,6 +178,13 @@ func ListWebProjectReleases(projectID, cursor int64, limit int) ([]*model.WebPro
 	}
 	var releases []*model.WebProjectRelease
 	err := query.Order("id DESC").Limit(limit).Find(&releases).Error
+	if err == nil {
+		for _, release := range releases {
+			if decodeErr := release.DecodeExtra(); decodeErr != nil {
+				return nil, decodeErr
+			}
+		}
+	}
 	return releases, err
 }
 

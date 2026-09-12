@@ -9,8 +9,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/domain/model"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +51,7 @@ func TestInitEnabledAppliesLimitsAndCreatesPrivateRoots(t *testing.T) {
 func TestCanReadProject(t *testing.T) {
 	tests := []struct {
 		name     string
-		mode     string
+		mode     model.WebProjectAccess
 		ownerID  int64
 		userID   int64
 		isMember bool
@@ -73,8 +75,33 @@ func TestCanReadProject(t *testing.T) {
 
 func TestValidateProjectInputCountsNameCharacters(t *testing.T) {
 	name := strings.Repeat("项", 60)
-	_, err := validateProjectInput(name, "", "valid-slug", AccessModeOwner, nil, true)
+	_, err := ValidateProjectInput(name, "", "valid-slug", AccessModeOwner.String(), nil, true)
 	require.NoError(t, err)
+}
+
+func TestValidateProjectInputAcceptsDocumentedLengthBoundaries(t *testing.T) {
+	_, err := ValidateProjectInput(strings.Repeat("项", 256), "", strings.Repeat("a", 256), AccessModeOwner.String(), nil, true)
+	require.NoError(t, err)
+
+	_, err = ValidateProjectInput(strings.Repeat("项", 257), "", "valid-slug", AccessModeOwner.String(), nil, true)
+	require.ErrorIs(t, err, ErrInvalid)
+
+	_, err = ValidateProjectInput("valid", "", strings.Repeat("a", 257), AccessModeOwner.String(), nil, true)
+	require.ErrorIs(t, err, ErrInvalid)
+}
+
+func TestProjectStatusFieldsPreservesRestoreRetentionAndEnumValue(t *testing.T) {
+	now := time.Now()
+	deletedAt := now.Add(-6 * 24 * time.Hour)
+	project := &model.WebProject{Status: ProjectStatusDeleted, DeletedAt: &deletedAt}
+
+	fields, err := ProjectStatusFields(project, "restore", 7, now)
+	require.NoError(t, err)
+	require.Equal(t, ProjectStatusDisabled, fields["status"])
+	require.Nil(t, fields["deleted_at"])
+
+	_, err = ProjectStatusFields(project, "restore", 5, now)
+	require.ErrorIs(t, err, ErrNotFound)
 }
 
 func TestStoreUploadNormalizesSingleHTMLToIndex(t *testing.T) {
@@ -116,6 +143,21 @@ func TestStoreUploadRejectsMissingEntryFile(t *testing.T) {
 
 	_, err = StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
 	require.ErrorContains(t, err, "entry")
+}
+
+func TestStoreUploadRejectsEntryPathLongerThanDatabaseBoundary(t *testing.T) {
+	conf := testStorageConfig(t)
+	entryFile := strings.Repeat("a", 2044) + ".html"
+	var body bytes.Buffer
+	zw := zip.NewWriter(&body)
+	w, err := zw.Create(entryFile)
+	require.NoError(t, err)
+	_, err = w.Write([]byte("ok"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	_, err = StoreUpload(&conf, "101", "201", "site.zip", entryFile, &body)
+	require.ErrorIs(t, err, ErrUnprocessable)
 }
 
 func TestStoreUploadAcceptsNormalZIPDirectoryEntries(t *testing.T) {
@@ -189,7 +231,7 @@ func TestClassifyStorageErrorKeepsFilesystemFailureAsDependency(t *testing.T) {
 	}
 
 	_, storageErr := StoreUpload(&conf, "101", "201", "page.html", "", bytes.NewBufferString("ok"))
-	classified := classifyStorageError(storageErr)
+	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrDependency)
 	var pathErr *os.PathError
 	require.ErrorAs(t, classified, &pathErr)
@@ -199,7 +241,7 @@ func TestClassifyStorageErrorKeepsReaderFailureAsDependency(t *testing.T) {
 	conf := testStorageConfig(t)
 	readErr := errors.New("forced upload read failure")
 	_, storageErr := StoreUpload(&conf, "101", "201", "page.html", "", &failingReader{err: readErr})
-	classified := classifyStorageError(storageErr)
+	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrDependency)
 	require.ErrorIs(t, classified, readErr)
 }
@@ -207,7 +249,7 @@ func TestClassifyStorageErrorKeepsReaderFailureAsDependency(t *testing.T) {
 func TestClassifyStorageErrorKeepsInvalidZIPAsUnprocessable(t *testing.T) {
 	conf := testStorageConfig(t)
 	_, storageErr := StoreUpload(&conf, "101", "201", "site.zip", "index.html", bytes.NewBufferString("not a zip"))
-	classified := classifyStorageError(storageErr)
+	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrUnprocessable)
 	require.NotErrorIs(t, classified, ErrDependency)
 }

@@ -15,6 +15,8 @@ import (
 	"github.com/mcoder2014/home_server/config"
 )
 
+const maxStoredRelativePathBytes = 2048
+
 type Artifact struct {
 	StorageKey string
 	EntryFile  string
@@ -226,12 +228,18 @@ func extractZipFile(file *zip.File, contentRoot, cleanName string, maxFileBytes 
 }
 
 func validateRelativePath(name string, maxDepth int) (string, error) {
-	if name == "" || strings.Contains(name, "\\") || strings.ContainsRune(name, 0) || strings.HasPrefix(name, "/") {
+	if name == "" || len(name) > maxStoredRelativePathBytes || strings.Contains(name, "\\") || strings.ContainsRune(name, 0) || strings.HasPrefix(name, "/") {
 		return "", fmt.Errorf("path is not relative")
 	}
 	clean := path.Clean(name)
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != name || len(strings.Split(clean, "/")) > maxDepth {
+	components := strings.Split(clean, "/")
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean != name || len(components) > maxDepth {
 		return "", fmt.Errorf("path is unsafe")
+	}
+	for _, component := range components {
+		if len(component) > 255 {
+			return "", fmt.Errorf("path component is too long")
+		}
 	}
 	return clean, nil
 }

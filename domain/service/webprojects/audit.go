@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/mcoder2014/home_server/config"
-	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
+	repository "github.com/mcoder2014/home_server/domain/repository/webprojects"
 )
 
 const (
@@ -67,7 +67,7 @@ type auditReferenceQuery func([]int64) ([]*model.WebProjectRelease, error)
 // AuditStorage reports old generated release directories whose database
 // reference is missing or inconsistent. It never changes database or disk.
 func AuditStorage(conf *config.WebProjectsConfig, minAge time.Duration) (*StorageAuditReport, error) {
-	return auditStorageAt(conf, minAge, time.Now(), dal.QueryWebProjectReleaseReferences)
+	return auditStorageAt(conf, minAge, time.Now(), repository.New().FindReleaseReferences)
 }
 
 func auditStorageAt(conf *config.WebProjectsConfig, minAge time.Duration, now time.Time, query auditReferenceQuery) (*StorageAuditReport, error) {

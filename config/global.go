@@ -43,6 +43,19 @@ type Config struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
 	WebProjects WebProjectsConfig `json:"web_projects" yaml:"web_projects"`
+	Auth        AuthConfig        `json:"auth" yaml:"auth"`
+}
+
+// AuthConfig controls machine credentials and the common browser session origin.
+// Application auth is opt-in; existing user-token and Basic login remain available.
+type AuthConfig struct {
+	ApplicationsEnabled      bool     `json:"applications_enabled" yaml:"applications_enabled"`
+	SiteOrigin               string   `json:"site_origin" yaml:"site_origin"`
+	TokenTTLSeconds          int      `json:"token_ttl_seconds" yaml:"token_ttl_seconds"`
+	DefaultCredentialTTLDays int      `json:"default_credential_ttl_days" yaml:"default_credential_ttl_days"`
+	MaxCredentialTTLDays     int      `json:"max_credential_ttl_days" yaml:"max_credential_ttl_days"`
+	MaxApplicationsPerUser   int      `json:"max_applications_per_user" yaml:"max_applications_per_user"`
+	TrustedProxyCIDRs        []string `json:"trusted_proxy_cidrs" yaml:"trusted_proxy_cidrs"`
 }
 
 // WebProjectsConfig controls the isolated storage and hard safety limits for hosted web projects.
@@ -69,16 +82,22 @@ func Global() Config {
 	return globalConfig
 }
 
+// Normalize shared configuration before any router or service consumes it.
+// An unused/disabled module origin must not unexpectedly enable browser sessions.
 func SetGlobalConfig(c Config) {
+	if c.Auth.SiteOrigin == "" && c.WebProjects.Enabled {
+		c.Auth.SiteOrigin = c.WebProjects.SiteOrigin
+	}
 	globalConfig = c
 }
 
 // InitGlobalConfig 从指定配置文件中读取配置信息
 func InitGlobalConfig(filepath string) error {
-	err := utils.BindConfig(filepath, &globalConfig)
-	if err != nil {
+	var loaded Config
+	if err := utils.BindConfig(filepath, &loaded); err != nil {
 		return err
 	}
+	SetGlobalConfig(loaded)
 	logrus.Infof("InitGlobalConfig config file path: %v", filepath)
 	return nil
 }

@@ -7,7 +7,10 @@ const {
 } = require('../src/utils/web_projects_navigation.cjs')
 
 test('accepts only project content paths as open targets', () => {
+    const maxLengthSlug = `a${'b'.repeat(254)}c`
     assert.equal(isSafeProjectTarget('/p/report/'), true)
+    assert.equal(isSafeProjectTarget(`/p/${maxLengthSlug}/`), true)
+    assert.equal(isSafeProjectTarget(`/p/${maxLengthSlug}x/`), false)
     assert.equal(isSafeProjectTarget('/p/report/assets/app.js?version=1#top'), true)
     assert.equal(isSafeProjectTarget('/p/report'), true)
 
@@ -23,6 +26,7 @@ test('accepts only project content paths as open targets', () => {
 })
 
 test('limits login redirects to project management and project content paths', () => {
+    assert.equal(normalizeInternalRedirect('/applications'), '/applications')
     assert.equal(normalizeInternalRedirect('/web-projects'), '/web-projects')
     assert.equal(normalizeInternalRedirect('/web-projects/123?tab=releases'), '/web-projects/123?tab=releases')
     assert.equal(

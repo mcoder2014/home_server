@@ -23,60 +23,12 @@ var (
 	cleanupIDCounter int64
 )
 
-func TestPruneProjectReleasesRemovesOldestHistoryAndProtectsCurrent(t *testing.T) {
-	database := requireCleanupTestDB(t)
-	baseID := nextCleanupTestID()
-	currentID := baseID + 3
-	project := newCleanupProject(baseID, ProjectStatusEnabled, &currentID, nil)
-	releases := []*model.WebProjectRelease{
-		newCleanupRelease(baseID+1, project.ID, ReleaseStatusReady, 10, time.Now().Add(-3*time.Hour)),
-		newCleanupRelease(baseID+2, project.ID, ReleaseStatusReady, 20, time.Now().Add(-2*time.Hour)),
-		newCleanupRelease(currentID, project.ID, ReleaseStatusReady, 30, time.Now().Add(-time.Hour)),
-	}
-	seedCleanupRecords(t, database, project, releases)
-
-	tx := database.Begin()
-	require.NoError(t, tx.Error)
-	defer tx.Rollback()
-	retired, err := PruneProjectReleases(tx, project, &config.WebProjectsConfig{MaxProjectBytes: 100, MaxReleases: 3}, 70)
-	require.NoError(t, err)
-	require.Equal(t, []int64{baseID + 1, baseID + 2}, releaseIDs(retired))
-	require.Equal(t, "deleting", queryCleanupReleaseStatus(t, tx, baseID+1))
-	require.Equal(t, "deleting", queryCleanupReleaseStatus(t, tx, baseID+2))
-	require.Equal(t, ReleaseStatusReady, queryCleanupReleaseStatus(t, tx, currentID))
-}
-
-func TestPruneProjectReleasesFailsWhenOnlyCurrentCanSatisfyQuota(t *testing.T) {
-	database := requireCleanupTestDB(t)
-	baseID := nextCleanupTestID()
-	currentID := baseID + 1
-	project := newCleanupProject(baseID, ProjectStatusEnabled, &currentID, nil)
-	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{
-		newCleanupRelease(currentID, project.ID, ReleaseStatusReady, 80, time.Now()),
-	})
-
-	t.Run("bytes", func(t *testing.T) {
-		tx := database.Begin()
-		defer tx.Rollback()
-		_, err := PruneProjectReleases(tx, project, &config.WebProjectsConfig{MaxProjectBytes: 100, MaxReleases: 2}, 30)
-		require.ErrorIs(t, err, ErrTooLarge)
-		require.Equal(t, ReleaseStatusReady, queryCleanupReleaseStatus(t, tx, currentID))
-	})
-	t.Run("release count", func(t *testing.T) {
-		tx := database.Begin()
-		defer tx.Rollback()
-		_, err := PruneProjectReleases(tx, project, &config.WebProjectsConfig{MaxProjectBytes: 100, MaxReleases: 1}, 1)
-		require.ErrorIs(t, err, ErrRateLimited)
-		require.Equal(t, ReleaseStatusReady, queryCleanupReleaseStatus(t, tx, currentID))
-	})
-}
-
 func TestRemoveRetiredReleasesDeletesDirectoryThenDatabaseRow(t *testing.T) {
 	database := requireCleanupTestDB(t)
 	conf := cleanupStorageConfig(t)
 	baseID := nextCleanupTestID()
 	project := newCleanupProject(baseID, ProjectStatusDisabled, nil, nil)
-	release := newCleanupRelease(baseID+1, project.ID, "deleting", 10, time.Now())
+	release := newCleanupRelease(baseID+1, project.ID, model.WebProjectReleaseDeleting, 10, time.Now())
 	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{release})
 	releaseDir := createCleanupReleaseDirectory(t, conf.StorageRoot, project.ID, release.ID)
 
@@ -91,7 +43,7 @@ func TestRemoveRetiredReleasesRejectsSymlinkAncestorAndRetries(t *testing.T) {
 	conf := cleanupStorageConfig(t)
 	baseID := nextCleanupTestID()
 	project := newCleanupProject(baseID, ProjectStatusDisabled, nil, nil)
-	release := newCleanupRelease(baseID+1, project.ID, "deleting", 10, time.Now())
+	release := newCleanupRelease(baseID+1, project.ID, model.WebProjectReleaseDeleting, 10, time.Now())
 	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{release})
 
 	outsideProject := filepath.Join(t.TempDir(), "outside-project")
@@ -120,7 +72,7 @@ func TestRemoveRetiredReleasesRejectsUnexpectedStorageKey(t *testing.T) {
 	conf := cleanupStorageConfig(t)
 	baseID := nextCleanupTestID()
 	project := newCleanupProject(baseID, ProjectStatusDisabled, nil, nil)
-	release := newCleanupRelease(baseID+1, project.ID, "deleting", 10, time.Now())
+	release := newCleanupRelease(baseID+1, project.ID, model.WebProjectReleaseDeleting, 10, time.Now())
 	release.StorageKey = "projects/wrong/releases/wrong/content"
 	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{release})
 	releaseDir := createCleanupReleaseDirectory(t, conf.StorageRoot, project.ID, release.ID)
@@ -136,7 +88,7 @@ func TestRemoveRetiredReleasesTreatsMissingDirectoryAsCleaned(t *testing.T) {
 	conf := cleanupStorageConfig(t)
 	baseID := nextCleanupTestID()
 	project := newCleanupProject(baseID, ProjectStatusDisabled, nil, nil)
-	release := newCleanupRelease(baseID+1, project.ID, "deleting", 10, time.Now())
+	release := newCleanupRelease(baseID+1, project.ID, model.WebProjectReleaseDeleting, 10, time.Now())
 	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{release})
 
 	require.NoError(t, RemoveRetiredReleases(&conf, []*model.WebProjectRelease{release}))
@@ -213,12 +165,12 @@ func nextCleanupTestID() int64 {
 	return time.Now().UnixNano()/1000 + atomic.AddInt64(&cleanupIDCounter, 100)
 }
 
-func newCleanupProject(id int64, status string, currentReleaseID *int64, deletedAt *time.Time) *model.WebProject {
+func newCleanupProject(id int64, status model.WebProjectStatus, currentReleaseID *int64, deletedAt *time.Time) *model.WebProject {
 	now := time.Now()
 	return &model.WebProject{ID: id, OwnerUserID: id, Name: "cleanup-test", Description: "cleanup-test", Slug: fmt.Sprintf("cleanup-%d", id), AccessMode: AccessModeOwner, Status: status, CurrentReleaseID: currentReleaseID, Revision: 1, DeletedAt: deletedAt, CreateTime: now, UpdateTime: now}
 }
 
-func newCleanupRelease(id, projectID int64, status string, totalBytes int64, createdAt time.Time) *model.WebProjectRelease {
+func newCleanupRelease(id, projectID int64, status model.WebProjectReleaseStatus, totalBytes int64, createdAt time.Time) *model.WebProjectRelease {
 	storageKey := filepath.ToSlash(filepath.Join("projects", fmt.Sprint(projectID), "releases", fmt.Sprint(id), "content"))
 	return &model.WebProjectRelease{ID: id, ProjectID: projectID, UploadedBy: projectID, StorageKey: storageKey, Status: status, EntryFile: "index.html", SHA256: fmt.Sprintf("%064x", id), FileCount: 1, TotalBytes: totalBytes, CreateTime: createdAt, UpdateTime: createdAt}
 }
@@ -250,18 +202,10 @@ func createCleanupReleaseDirectory(t *testing.T, root string, projectID, release
 	return releaseDir
 }
 
-func queryCleanupReleaseStatus(t *testing.T, database *gorm.DB, releaseID int64) string {
+func queryCleanupReleaseStatus(t *testing.T, database *gorm.DB, releaseID int64) model.WebProjectReleaseStatus {
 	t.Helper()
-	var status string
+	var status model.WebProjectReleaseStatus
 	err := database.Table(dal.WebProjectReleaseTable).Select("status").Where("id = ?", releaseID).Scan(&status).Error
 	require.NoError(t, err)
 	return status
-}
-
-func releaseIDs(releases []*model.WebProjectRelease) []int64 {
-	ids := make([]int64, 0, len(releases))
-	for _, release := range releases {
-		ids = append(ids, release.ID)
-	}
-	return ids
 }

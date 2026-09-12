@@ -3,10 +3,14 @@ package api
 import (
 	"sync"
 
+	"github.com/mcoder2014/home_server/api/applications"
+	"github.com/mcoder2014/home_server/api/auth"
 	"github.com/mcoder2014/home_server/api/library"
+	"github.com/mcoder2014/home_server/api/middleware"
 	"github.com/mcoder2014/home_server/api/passport"
 	"github.com/mcoder2014/home_server/api/webdav"
 	"github.com/mcoder2014/home_server/api/webprojects"
+	"github.com/mcoder2014/home_server/config"
 )
 
 var routeInit sync.Once
@@ -15,6 +19,9 @@ var routeInit sync.Once
 func InitRouter() error {
 	var err error
 	routeInit.Do(func() {
+		if err = middleware.ConfigureAuthentication(config.Global().Auth); err != nil {
+			return
+		}
 
 		for _, initFunc := range []func() error{
 			// DDNS 相关接口
@@ -27,6 +34,8 @@ func InitRouter() error {
 			webdav.InitRouter,
 			// 静态网页项目相关接口
 			webprojects.InitRouter,
+			auth.InitRouter,
+			applications.InitRouter,
 		} {
 			err = initFunc()
 			if err != nil {

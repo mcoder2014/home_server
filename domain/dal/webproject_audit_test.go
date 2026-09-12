@@ -20,13 +20,13 @@ func TestQueryWebProjectReleaseReferencesSelectsRequestedRows(t *testing.T) {
 	baseID := time.Now().UnixNano()/1000 + atomic.AddInt64(&auditTestIDCounter, 10)
 	project := &model.WebProject{
 		ID: baseID, OwnerUserID: baseID, Name: "audit-test", Description: "audit-test",
-		Slug: fmt.Sprintf("audit-%d", baseID), AccessMode: "owner", Status: "draft", Revision: 1,
+		Slug: fmt.Sprintf("audit-%d", baseID), AccessMode: model.WebProjectAccessOwner, Status: model.WebProjectStatusDraft, Revision: 1,
 		CreateTime: time.Now(), UpdateTime: time.Now(),
 	}
 	release := &model.WebProjectRelease{
 		ID: baseID + 1, ProjectID: project.ID, UploadedBy: project.ID,
 		StorageKey: fmt.Sprintf("projects/%d/releases/%d/content", project.ID, baseID+1),
-		Status:     "ready", EntryFile: "index.html", SHA256: fmt.Sprintf("%064x", baseID+1),
+		Status:     model.WebProjectReleaseReady, EntryFile: "index.html", SHA256: fmt.Sprintf("%064x", baseID+1),
 		FileCount: 1, TotalBytes: 1, CreateTime: time.Now(), UpdateTime: time.Now(),
 	}
 	require.NoError(t, database.Table(WebProjectTable).Create(project).Error)

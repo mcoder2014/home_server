@@ -3,8 +3,6 @@ package route
 import (
 	"fmt"
 
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api"
 	"github.com/mcoder2014/home_server/api/middleware"
@@ -20,15 +18,12 @@ func InitRoute() *gin.Engine {
 	}
 
 	engine := gin.New()
-	engine.Use(gin.LoggerWithWriter(log.GetDefaultOutput()), gin.RecoveryWithWriter(log.GetDefaultOutput()))
+	engine.Use(gin.LoggerWithConfig(gin.LoggerConfig{Output: log.GetDefaultOutput(), Formatter: middleware.AccessLogFormatter}), gin.RecoveryWithWriter(log.GetDefaultOutput()))
 	engine.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",
 		})
 	})
-	// session
-	store := cookie.NewStore([]byte("secret11111"))
-	engine.Use(sessions.Sessions("home_server", store))
 	// 加入中间件
 	engine.Use(middleware.AddLogID, middleware.CORS())
 
