@@ -14,7 +14,7 @@
 - Watch Dog: 或者叫 heart beat，用于记录设备心跳数据，包含一些辅助数据，可以快速发现设备是否掉线；
 - 家庭图书管理能力: 以 isbn 为基础，快速管理家庭中的纸质书及电子书；
 - WebDAV: 使用同一套账号体系，通过 WebDAV 协议实现外部文档访问，地址为 [https://www.server.com:port/webdav](https://www.server.com:port/webdav)；
-- 网页项目：动态管理 HTML 文档和纯前端工具，通过同域 `/p/{slug}/` 访问，由服务端控制公开或指定账号可见。
+- 网页托管：动态管理 HTML 文档和纯前端工具，通过同域 `/p/{slug}/` 访问，由服务端控制公开或指定账号可见。
 
 ## 安装说明
 
@@ -26,14 +26,14 @@
 npm run build
 ```
 
-管理站点统一使用 **CQ Home Server** 品牌，首页提供网页项目、家庭藏书与图书录入入口。导航、登录页、项目列表和设置页共用配色与组件样式；窄屏下导航分行，项目列表显示为卡片。
+管理站点统一使用 **CQ Home Server** 品牌，首页提供网页托管、家庭藏书与图书录入入口。导航、登录页、项目列表和设置页共用配色与组件样式；窄屏下导航分行，项目列表显示为卡片。
 
 浏览器标题采用 `CQ Home Server · 页面内容`：
 
 | 页面 | 标题示例 |
 | --- | --- |
 | 首页、登录 | `CQ Home Server · 首页`、`CQ Home Server · 登录` |
-| 网页项目列表、创建 | `CQ Home Server · 网页项目`、`CQ Home Server · 新建网页项目` |
+| 网页托管列表、创建 | `CQ Home Server · 网页托管`、`CQ Home Server · 新建网页托管` |
 | 项目详情 | 加载后显示项目名称，保存改名后同步更新。 |
 | 图书页面 | `CQ Home Server · 图书列表`、`CQ Home Server · 录入图书`等。 |
 
@@ -57,11 +57,11 @@ npm run build
 sudo journalctl --unit home_client.service
 ```
 
-## 网页项目
+## 网页托管
 
 ### 使用方式
 
-从首页或导航进入“网页项目”，创建项目，上传单个 HTML 或静态文件 ZIP，再发布。新增、改名、下线及删除只更新数据库，不需要逐项目修改 Nginx 或重启 home_server。
+从首页或导航进入“网页托管”，创建项目，上传单个 HTML 或静态文件 ZIP，再发布。新增、改名、下线及删除只更新数据库，不需要逐项目修改 Nginx 或重启 home_server。
 
 | 操作 | 结果 |
 | --- | --- |
@@ -91,7 +91,19 @@ web_projects:
 
 `site_origin` 必须是浏览器实际使用的 HTTPS Origin，非默认端口需要一并填写，不能包含路径。旧配置缺少 `web_projects` 时模块默认关闭。
 
-数据目录需要服务账号有写权限，并且必须位于 WebDAV 共享目录、管理前端 `dist` 及其他公共静态目录之外。数据库保存项目、成员和版本信息，文件保存在 `storage_root` 的独立版本目录中；应同时备份数据库和文件。
+数据目录需要服务账号有写权限，并且必须位于 WebDAV 共享目录、管理前端 `dist` 及其他公共静态目录之外。数据库保存托管网页、成员和版本信息，文件按所有者用户 ID 隔离；应同时备份数据库和文件。
+
+```text
+storage_root/
+  <user_id>/upload/html/
+    .staging/                           # 本用户的上传、解包和下载临时文件
+    <project_id>/releases/
+      <release_id>/content/              # 完整的静态网页版本
+```
+
+`user_id` 由服务端验证后的所有者身份确定。应用身份使用应用所属用户 ID；上传文件名、分享 URL 和请求参数不能覆盖它。目录创建权限为 0700、文件为 0600，用户目录中的软链接不作为存储路径。其他用户即使拥有查看权限，也不会在自己的目录复制该网页。修改网页名称或 slug 只修改元数据，不搬动版本文件。
+
+新上传只写入上述用户目录；已有 `projects/<project_id>/releases/<release_id>/content` 版本保持受控读取、下载和清理兼容。离线迁移完成前不删除旧目录。
 
 在提供前端的现有 HTTPS Nginx `server` 中引入 `config/nginx/web_projects_locations.conf` 和 `config/nginx/api_auth_locations.conf`，根据实际位置修改该文件中的后端地址。保留现有 Vue 的页面 fallback。该片段让 `/p/` 和新 API 经过服务端，并禁止代理缓存；不能另外用 `root` 或 `alias` 直接暴露项目文件。
 
@@ -113,11 +125,13 @@ web_projects:
 
 ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平台不在服务器执行包中的 npm、Python、Shell 或其他后端代码。
 
-版本下载先在私有 `staging` 目录生成完整 ZIP，并核对文件数和总字节数，再开始发送。入口缺失、文件读写失败或元数据不符时返回 503；请求结束后删除本次生成的临时 ZIP。
+版本下载先在所属用户的私有 `<user_id>/upload/html/.staging` 目录生成完整 ZIP，并核对文件数和总字节数，再开始发送。入口缺失、文件读写失败或元数据不符时返回 503；请求结束后删除本次生成的临时 ZIP。
 
 ### 登录与自动化接口
 
-用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
+管理页面使用 `/web-share`，主 API 使用 `/api/web-share`。旧 `/web-projects` 页面地址和 `/api/web-projects` API 保留兼容；写 API 直接调用相同处理逻辑，不依赖重定向。已有 `/p/{slug}/` 分享链接不变，已授权的 `web-projects:read/write` scope 值也保持不变。
+
+用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，`/api/web-share/browser-login` 和旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
 
 登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
 
@@ -125,12 +139,12 @@ ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平�
 
 | API | 用途 |
 | --- | --- |
-| `POST /api/web-projects` | 创建项目。 |
-| `GET/PATCH/DELETE /api/web-projects/{id}` | 读取、修改或删除自己的项目。 |
-| `POST /api/web-projects/{id}/releases` | 用 multipart `file` 上传 HTML/ZIP。 |
-| `POST /api/web-projects/{id}/publish` | 指定 `release_id` 发布或回滚。 |
-| `POST /api/web-projects/{id}/disable`、`restore` | 下线或恢复。 |
-| `GET /api/web-projects/eligible-users` | 取得可见用户选择所需的账号 ID 和用户名。 |
+| `POST /api/web-share` | 创建项目。 |
+| `GET/PATCH/DELETE /api/web-share/{id}` | 读取、修改或删除自己的项目。 |
+| `POST /api/web-share/{id}/releases` | 用 multipart `file` 上传 HTML/ZIP。 |
+| `POST /api/web-share/{id}/publish` | 指定 `release_id` 发布或回滚。 |
+| `POST /api/web-share/{id}/disable`、`restore` | 下线或恢复。 |
+| `GET /api/web-share/eligible-users` | 取得可见用户选择所需的账号 ID 和用户名。 |
 
 更新、发布、下线、删除及恢复需要 `If-Match` 携带详情返回的 `revision`。旧 revision 返回 409，调用者需要重新读取当前状态。创建可使用 `client_request_id`，上传可使用 `Idempotency-Key`，避免网络重试重复生成项目或版本。
 
@@ -150,16 +164,39 @@ GitHub Actions 使用 Go 1.21.12 构建全部 Go 包，运行已核对的离线 
 
 #### 存储引用审计
 
-进程可能在完整版本目录完成原子移动后、数据库版本记录提交前异常退出。维护者可以在停止网页项目写入后运行只读审计命令，查找生成目录与数据库引用不一致的候选：
+进程可能在完整版本目录完成原子移动后、数据库版本记录提交前异常退出。维护者可以在停止网页托管写入后运行只读审计命令，查找生成目录与数据库引用不一致的候选：
 
 ```shell
 go build -o output/bin/web-projects-audit ./cmd/web-projects-audit
 ./output/bin/web-projects-audit -conf /etc/home_server/conf.yaml -min-age 1h
 ```
 
-命令只读取 `storage_root/projects/<project_id>/releases/<release_id>` 目录元数据和数据库中的 `id`、`project_id`、`storage_key`，不读取网页内容，不启动周期清理，也不修改或删除文件。默认忽略最近一小时创建的目录，并跳过非数字目录、异常目录和软链接。数据库查询失败时命令返回失败，不会把数据库当成空库。
+命令同时扫描旧 `projects/<project_id>/releases/<release_id>` 和新 `<user_id>/upload/html/<project_id>/releases/<release_id>` 目录元数据，批量核对数据库版本引用、上传者和网页所有者。不读取网页内容，不启动周期清理，也不修改或删除文件。默认忽略最近一小时创建的目录，并跳过非数字目录、异常目录和软链接。数据库查询失败时命令返回失败，不会把数据库当成空库。
 
-JSON 输出包含候选目录、原因和扫描统计。候选只表示“缺少数据库引用”或“`storage_key` 不一致”，不等于可以删除；回收前应停止上传，核对数据库与文件备份，并由维护者按明确目录人工处理。该命令没有自动删除能力，也不提供删除参数。
+JSON 输出包含候选目录、原因和扫描统计。候选可能表示缺少数据库引用、路径不一致或所有者不匹配，不等于可以删除；回收前应停止上传，核对数据库与文件备份，并由维护者按明确目录人工处理。该命令没有自动删除能力，也不提供删除参数。
+
+#### 旧版本迁入用户目录
+
+新服务可直接读取旧目录；只有需要统一已有文件布局时才运行迁移。先备份数据库和文件，并停止所有会访问此存储根的 home_server 实例、上传脚本、定时清理和其他迁移进程；从预览开始到恢复服务前始终保持停止状态。
+
+```shell
+go build -o output/bin/web-projects-storage-migrate ./cmd/web-projects-storage-migrate
+
+# 单版本预览：不创建目录，不搬文件，不修改数据库。
+./output/bin/web-projects-storage-migrate -conf /etc/home_server/conf.yaml -project-id 101 -release-id 201
+
+# 核对 owner_id、源目录和目标目录后，执行同一版本的迁移。
+./output/bin/web-projects-storage-migrate -conf /etc/home_server/conf.yaml -project-id 101 -release-id 201 -apply
+```
+
+| 情况 | 处理 |
+| --- | --- |
+| 预览通过 | 返回 `planned`，源文件和数据库保持不变。 |
+| 执行成功 | 返回 `migrated`；只迁移版本目录与 `storage_key`，URL、权限、revision 和当前版本指针不变。 |
+| 目标已存在、软链接或所有者不符 | 拒绝执行，不合并目录、不覆盖文件。 |
+| 文件已搬动，数据库结果不确定 | 返回失败并保留目标目录及 `<user_id>/upload/html/.migration` 中的私有日志；保持服务停止，用相同参数重跑。 |
+
+迁移日志绑定用户、网页、版本、源目标路径和目录的设备号/inode。重跑只接受匹配的日志和目录，不能手工删除日志或随意改动目标路径。恢复机制面向进程中断，不代替数据库与文件备份；遇到日志损坏、存储卷损坏或身份不一致，需要根据备份人工核对。迁移完成后先运行只读审计，再恢复服务并验证网页访问与版本下载。
 
 ## 应用身份与 AK/SK
 
@@ -188,7 +225,7 @@ AK 是公开标识，SK 是高熵秘密。两者由 `crypto/rand` 生成；数�
 
 | 接口范围 | 应用权限 | 保持的资源边界 |
 | --- | --- | --- |
-| `/api/web-projects` 及子接口、受保护的 `/p/` | `web-projects:read` / `web-projects:write` | 应用继承所属用户的项目管理或成员读取权限，不能访问其他用户的私有项目。 |
+| `/api/web-share` 及子接口、受保护的 `/p/` | `web-projects:read` / `web-projects:write` | 应用继承所属用户的项目管理或成员读取权限，不能访问其他用户的私有项目。 |
 | `/bookinfo/query`、`/library/*` | `library:read` / `library:write` | 沿用现有图书共享语义。 |
 | `/webdav/*`、`/webdav_dev/*` | `webdav:read` / `webdav:write` | 沿用现有共享目录；GET/HEAD/OPTIONS/PROPFIND 为读，其他已注册方法为写。 |
 | `/api/applications*`、用户退出、browser-login | 不允许应用身份 | 需要用户 `passport` token；浏览器 Cookie 也不能代替它。 |
@@ -211,7 +248,7 @@ AK/SK 管理在服务端按用户隔离；应用不是新的共享管理员账�
 
 ### 配置和迁移
 
-1. 已有旧网页项目表先执行 `domain/dal/migrations/20260912_web_projects_refactor.sql`；首次安装仅执行新的 `20260909_web_projects.sql`。升级保留 HTTP 字符串枚举，但数据库使用 INT；name/slug/幂等键为 256，entry_file 为 2048，诊断信息进入 `extra TEXT` JSON。
+1. 已有旧网页托管表先执行 `domain/dal/migrations/20260912_web_projects_refactor.sql`；首次安装仅执行新的 `20260909_web_projects.sql`。升级保留 HTTP 字符串枚举，但数据库使用 INT；name/slug/幂等键为 256，entry_file 为 2048，诊断信息进入 `extra TEXT` JSON。
 2. 启用应用身份前执行 `domain/dal/migrations/20260912_applications.sql`，创建应用和访问 Token 表。数据库账号仅授予目标库权限，先在隔离库验证，不直接导入包含 `USE home_server` 的历史建表文件。
 3. 在配置增加下列字段，更新同源 Nginx 片段并设置实际后端端口，再部署后端和前端。
 
@@ -228,7 +265,7 @@ auth:
     - ::1/128
 ```
 
-浏览器 Origin 未设置且网页项目已启用时，会在路由注册前复用 `web_projects.site_origin`；停用模块的残留 Origin 不会自动启用 Session。只信任真实 TLS 或明确配置的代理地址提供的 `X-Forwarded-Proto: https`，不信任任意客户端伪造该头。
+浏览器 Origin 未设置且网页托管已启用时，会在路由注册前复用 `web_projects.site_origin`；停用模块的残留 Origin 不会自动启用 Session。只信任真实 TLS 或明确配置的代理地址提供的 `X-Forwarded-Proto: https`，不信任任意客户端伪造该头。
 
 Nginx 引入 `config/nginx/api_auth_locations.conf`，将固定 `/api/auth/*`、`/api/applications*` 及既有受保护业务 API 转给后端。两个模块停用时也应保留代理，让后端明确返回 404，避免 API 落入 SPA fallback。不要启用请求/响应体或认证头日志。
 
@@ -241,10 +278,10 @@ chmod 600 ~/.config/cq-home-server/credentials.json
 python3 script/home_server_api.py \
   --base-url https://home.example.com \
   --credentials-file ~/.config/cq-home-server/credentials.json \
-  --method GET --path '/api/web-projects?limit=20'
+  --method GET --path '/api/web-share?limit=20'
 ```
 
-上传网页版本使用 `--method POST --path /api/web-projects/项目ID/releases --upload-file /path/to/site.zip`；ZIP 可加 `--entry-file index.html`。写 JSON 用 `--json-file`，修改时加 `--if-match`；下载二进制用 `--output`。只有单 HTML/ZIP 上传会构造 multipart，它不是通用 WebDAV 上传器。
+上传网页版本使用 `--method POST --path /api/web-share/项目ID/releases --upload-file /path/to/site.zip`；ZIP 可加 `--entry-file index.html`。写 JSON 用 `--json-file`，修改时加 `--if-match`；下载二进制用 `--output`。只有单 HTML/ZIP 上传会构造 multipart，它不是通用 WebDAV 上传器。
 
 客户端校验证书和主机名，自签名测试证书使用 `--ca-file`；不提供关闭校验的选项。它固定同一 HTTPS origin，不跟随重定向，不自动重试写请求，不把短期 Token 存盘，终端输出会脱敏。
 

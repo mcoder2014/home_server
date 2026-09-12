@@ -32,7 +32,7 @@ func InitRouter() error {
 			passport.InitRouter,
 			// webDAV 相关接口
 			webdav.InitRouter,
-			// 静态网页项目相关接口
+			// 静态网页托管相关接口
 			webprojects.InitRouter,
 			auth.InitRouter,
 			applications.InitRouter,

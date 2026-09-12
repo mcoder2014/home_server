@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/mcoder2014/home_server/config"
@@ -42,7 +40,7 @@ func RemoveRetiredReleases(conf *config.WebProjectsConfig, releases []*model.Web
 		if release == nil {
 			continue
 		}
-		releaseDir, missing, err := validatedReleaseDirectory(conf, release)
+		releaseDir, missing, err := ReleaseDirectory(conf, release)
 		if err != nil {
 			result = errors.Join(result, err)
 			continue
@@ -186,40 +184,4 @@ func StartMaintenance(conf config.WebProjectsConfig) {
 			}
 		}
 	}()
-}
-
-func validatedReleaseDirectory(conf *config.WebProjectsConfig, release *model.WebProjectRelease) (string, bool, error) {
-	projectID := strconv.FormatInt(release.ProjectID, 10)
-	releaseID := strconv.FormatInt(release.ID, 10)
-	expectedStorageKey := filepath.ToSlash(filepath.Join("projects", projectID, "releases", releaseID, "content"))
-	if release.StorageKey != expectedStorageKey {
-		return "", false, fmt.Errorf("%w: unexpected storage key for release %d", ErrInvalid, release.ID)
-	}
-	root, err := filepath.Abs(conf.StorageRoot)
-	if err != nil {
-		return "", false, fmt.Errorf("resolve storage root: %w", err)
-	}
-	root, err = filepath.EvalSymlinks(root)
-	if err != nil {
-		return "", false, fmt.Errorf("resolve storage root symlinks: %w", err)
-	}
-	components := []string{"projects", projectID, "releases", releaseID}
-	current := root
-	for _, component := range components {
-		current = filepath.Join(current, component)
-		info, statErr := os.Lstat(current)
-		if errors.Is(statErr, os.ErrNotExist) {
-			return filepath.Join(root, filepath.Join(components...)), true, nil
-		}
-		if statErr != nil {
-			return "", false, fmt.Errorf("inspect release directory: %w", statErr)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", false, fmt.Errorf("%w: symlink in release directory ancestry", ErrInvalid)
-		}
-		if !info.IsDir() {
-			return "", false, fmt.Errorf("%w: release directory ancestry is not a directory", ErrInvalid)
-		}
-	}
-	return current, false, nil
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -244,19 +243,25 @@ func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ow
 	if len(idempotencyKey) > 256 {
 		return nil, service.ErrInvalid
 	}
+	if err := application.CheckUploadOwner(ownerUserID, projectID); err != nil {
+		return nil, err
+	}
 	releaseID, err := newID()
 	if err != nil {
 		return nil, err
 	}
-	artifact, err := service.StoreUpload(conf, strconv.FormatInt(projectID, 10), strconv.FormatInt(releaseID, 10), fileName, entryFile, src)
+	artifact, err := service.StoreUpload(conf, strconv.FormatInt(ownerUserID, 10), strconv.FormatInt(projectID, 10), strconv.FormatInt(releaseID, 10), fileName, entryFile, src)
 	if err != nil {
 		return nil, service.ClassifyStorageError(err)
 	}
-	releaseDir := filepath.Join(conf.StorageRoot, "projects", strconv.FormatInt(projectID, 10), "releases", strconv.FormatInt(releaseID, 10))
 	now := time.Now()
 	release := &model.WebProjectRelease{ID: releaseID, ProjectID: projectID, UploadedBy: ownerUserID, StorageKey: artifact.StorageKey, Status: service.ReleaseStatusReady, EntryFile: artifact.EntryFile, SHA256: artifact.SHA256, FileCount: artifact.FileCount, TotalBytes: artifact.TotalBytes, CreateTime: now, UpdateTime: now}
 	if idempotencyKey != "" {
 		release.IdempotencyKey = &idempotencyKey
+	}
+	releaseDir, missing, err := service.ReleaseDirectory(conf, release)
+	if err != nil || missing {
+		return nil, service.ErrDependency
 	}
 	var existing *model.WebProjectRelease
 	var retired []*model.WebProjectRelease
@@ -373,6 +378,9 @@ func (application *Application) PublishRelease(conf *config.WebProjectsConfig, o
 		if release == nil || release.Status != service.ReleaseStatusReady {
 			return service.ErrNotFound
 		}
+		if release.UploadedBy != project.OwnerUserID || release.UploadedBy <= 0 {
+			return service.ErrDependency
+		}
 		contentRoot, pathErr := service.ReleaseContentRoot(conf, release)
 		if pathErr != nil {
 			return service.ErrDependency
@@ -415,6 +423,9 @@ func (application *Application) GetReleaseForDownload(ownerUserID, projectID, re
 	if release == nil || release.Status != service.ReleaseStatusReady {
 		return nil, service.ErrNotFound
 	}
+	if release.UploadedBy != aggregate.Project.OwnerUserID || release.UploadedBy <= 0 {
+		return nil, service.ErrDependency
+	}
 	return release, nil
 }
 
@@ -427,6 +438,9 @@ func (application *Application) GetPublishedProject(slug string) (*model.WebProj
 		return nil, nil, service.ErrNotFound
 	}
 	if release == nil || release.Status != service.ReleaseStatusReady {
+		return nil, nil, service.ErrDependency
+	}
+	if release.ProjectID != project.ID || release.UploadedBy != project.OwnerUserID || release.UploadedBy <= 0 {
 		return nil, nil, service.ErrDependency
 	}
 	return project, release, nil

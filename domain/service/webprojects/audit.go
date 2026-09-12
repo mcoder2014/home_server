@@ -3,6 +3,7 @@ package webprojects
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,17 +15,22 @@ import (
 	repository "github.com/mcoder2014/home_server/domain/repository/webprojects"
 )
 
-const (
-	auditReferenceBatchSize = 200
+const auditReferenceBatchSize = 200
 
+const (
 	AuditReasonMissingDatabaseReference = "missing_database_reference"
+	AuditReasonMissingProjectReference  = "missing_project_reference"
 	AuditReasonStorageKeyMismatch       = "storage_key_mismatch"
 	AuditReasonProjectMismatch          = "project_mismatch"
+	AuditReasonOwnerMismatch            = "owner_mismatch"
+	AuditReasonDirectoryOwnerMismatch   = "directory_owner_mismatch"
 )
 
 var ErrAuditDatabase = errors.New("web project audit database unavailable")
 
 type AuditCandidate struct {
+	OwnerID             string    `json:"owner_id,omitempty"`
+	DirectoryOwnerID    string    `json:"directory_owner_id,omitempty"`
 	ProjectID           string    `json:"project_id"`
 	ReleaseID           string    `json:"release_id"`
 	RelativePath        string    `json:"relative_path"`
@@ -35,6 +41,7 @@ type AuditCandidate struct {
 }
 
 type AuditStats struct {
+	OwnerEntries                 int `json:"owner_entries"`
 	ProjectEntries               int `json:"project_entries"`
 	ReleaseEntries               int `json:"release_entries"`
 	AuditedReleaseDirectories    int `json:"audited_release_directories"`
@@ -55,6 +62,7 @@ type StorageAuditReport struct {
 }
 
 type auditReleaseDirectory struct {
+	ownerID      int64
 	projectID    int64
 	releaseID    int64
 	relativePath string
@@ -62,25 +70,33 @@ type auditReleaseDirectory struct {
 	modifyTime   time.Time
 }
 
-type auditReferenceQuery func([]int64) ([]*model.WebProjectRelease, error)
-
-// AuditStorage reports old generated release directories whose database
-// reference is missing or inconsistent. It never changes database or disk.
-func AuditStorage(conf *config.WebProjectsConfig, minAge time.Duration) (*StorageAuditReport, error) {
-	return auditStorageAt(conf, minAge, time.Now(), repository.New().FindReleaseReferences)
+type auditReferenceQueries struct {
+	queryReleases func([]int64) ([]*model.WebProjectRelease, error)
+	queryProjects func([]int64) ([]*model.WebProject, error)
 }
 
-func auditStorageAt(conf *config.WebProjectsConfig, minAge time.Duration, now time.Time, query auditReferenceQuery) (*StorageAuditReport, error) {
-	if conf == nil || !filepath.IsAbs(conf.StorageRoot) || minAge < 0 || query == nil {
+type auditReferences struct {
+	releases map[int64]*model.WebProjectRelease
+	projects map[int64]*model.WebProject
+}
+
+// AuditStorage verifies storage ownership with two bounded single-table query
+// streams. The owner encoded in a filesystem path is never treated as trusted.
+func AuditStorage(conf *config.WebProjectsConfig, minAge time.Duration) (*StorageAuditReport, error) {
+	webProjectRepository := repository.New()
+	return auditStorageAt(conf, minAge, time.Now(), auditReferenceQueries{
+		queryReleases: webProjectRepository.FindReleaseReferences,
+		queryProjects: webProjectRepository.FindProjectOwnerReferences,
+	})
+}
+
+func auditStorageAt(conf *config.WebProjectsConfig, minAge time.Duration, now time.Time, queries auditReferenceQueries) (*StorageAuditReport, error) {
+	if conf == nil || !filepath.IsAbs(conf.StorageRoot) || minAge < 0 || queries.queryReleases == nil || queries.queryProjects == nil {
 		return nil, ErrInvalid
 	}
-	root, err := filepath.EvalSymlinks(filepath.Clean(conf.StorageRoot))
+	root, err := resolveAuditStorageRoot(conf.StorageRoot)
 	if err != nil {
-		return nil, fmt.Errorf("resolve storage root: %w", err)
-	}
-	rootInfo, err := os.Stat(root)
-	if err != nil || !rootInfo.IsDir() {
-		return nil, fmt.Errorf("storage root is not a directory")
+		return nil, err
 	}
 	report := &StorageAuditReport{
 		GeneratedAt:   now,
@@ -92,145 +108,260 @@ func auditStorageAt(conf *config.WebProjectsConfig, minAge time.Duration, now ti
 	if err != nil {
 		return nil, err
 	}
-
-	references := make(map[int64]*model.WebProjectRelease, len(directories))
-	uniqueIDs := make([]int64, 0, len(directories))
-	seenIDs := make(map[int64]struct{}, len(directories))
-	for _, directory := range directories {
-		if _, exists := seenIDs[directory.releaseID]; !exists {
-			seenIDs[directory.releaseID] = struct{}{}
-			uniqueIDs = append(uniqueIDs, directory.releaseID)
-		}
+	references, err := loadAuditReferences(directories, queries, &report.Stats)
+	if err != nil {
+		return nil, err
 	}
-	for start := 0; start < len(uniqueIDs); start += int(auditReferenceBatchSize) {
-		end := start + int(auditReferenceBatchSize)
-		if end > len(uniqueIDs) {
-			end = len(uniqueIDs)
-		}
-		rows, queryErr := query(uniqueIDs[start:end])
-		if queryErr != nil {
-			return nil, fmt.Errorf("%w: %v", ErrAuditDatabase, queryErr)
-		}
-		report.Stats.DatabaseBatches++
-		for _, release := range rows {
-			if release != nil {
-				references[release.ID] = release
-			}
-		}
-	}
-
 	for _, directory := range directories {
-		release := references[directory.releaseID]
-		reason := ""
-		databaseStorageKey := ""
-		switch {
-		case release == nil:
-			reason = AuditReasonMissingDatabaseReference
-		case release.ProjectID != directory.projectID:
-			reason = AuditReasonProjectMismatch
-			databaseStorageKey = release.StorageKey
-		case release.StorageKey != directory.storageKey:
-			reason = AuditReasonStorageKeyMismatch
-			databaseStorageKey = release.StorageKey
-		default:
+		candidate, referenced := inspectAuditReference(directory, references)
+		if referenced {
 			report.Stats.ReferencedReleaseDirectories++
 			continue
 		}
-		report.Candidates = append(report.Candidates, AuditCandidate{
-			ProjectID:           strconv.FormatInt(directory.projectID, 10),
-			ReleaseID:           strconv.FormatInt(directory.releaseID, 10),
-			RelativePath:        directory.relativePath,
-			ExpectedStorageKey:  directory.storageKey,
-			DatabaseStorageKey:  databaseStorageKey,
-			Reason:              reason,
-			DirectoryModifyTime: directory.modifyTime,
-		})
+		report.Candidates = append(report.Candidates, candidate)
 	}
 	sort.Slice(report.Candidates, func(i, j int) bool {
-		leftProject, _ := strconv.ParseInt(report.Candidates[i].ProjectID, 10, 64)
-		rightProject, _ := strconv.ParseInt(report.Candidates[j].ProjectID, 10, 64)
-		if leftProject == rightProject {
-			leftRelease, _ := strconv.ParseInt(report.Candidates[i].ReleaseID, 10, 64)
-			rightRelease, _ := strconv.ParseInt(report.Candidates[j].ReleaseID, 10, 64)
+		left := report.Candidates[i]
+		right := report.Candidates[j]
+		if left.ProjectID != right.ProjectID {
+			leftProject, _ := strconv.ParseInt(left.ProjectID, 10, 64)
+			rightProject, _ := strconv.ParseInt(right.ProjectID, 10, 64)
+			return leftProject < rightProject
+		}
+		if left.ReleaseID != right.ReleaseID {
+			leftRelease, _ := strconv.ParseInt(left.ReleaseID, 10, 64)
+			rightRelease, _ := strconv.ParseInt(right.ReleaseID, 10, 64)
 			return leftRelease < rightRelease
 		}
-		return leftProject < rightProject
+		return left.RelativePath < right.RelativePath
 	})
 	report.Stats.CandidateDirectories = len(report.Candidates)
 	return report, nil
 }
 
+func resolveAuditStorageRoot(storageRoot string) (string, error) {
+	root, err := filepath.EvalSymlinks(filepath.Clean(storageRoot))
+	if err != nil {
+		return "", fmt.Errorf("resolve storage root: %w", err)
+	}
+	rootInfo, err := os.Stat(root)
+	if err != nil || !rootInfo.IsDir() {
+		return "", fmt.Errorf("storage root is not a directory")
+	}
+	return root, nil
+}
+
+func loadAuditReferences(directories []auditReleaseDirectory, queries auditReferenceQueries, stats *AuditStats) (*auditReferences, error) {
+	releaseIDs := make([]int64, 0, len(directories))
+	seenReleaseIDs := make(map[int64]struct{}, len(directories))
+	for _, directory := range directories {
+		if _, exists := seenReleaseIDs[directory.releaseID]; exists {
+			continue
+		}
+		seenReleaseIDs[directory.releaseID] = struct{}{}
+		releaseIDs = append(releaseIDs, directory.releaseID)
+	}
+	sort.Slice(releaseIDs, func(i, j int) bool { return releaseIDs[i] < releaseIDs[j] })
+
+	releases := make(map[int64]*model.WebProjectRelease, len(releaseIDs))
+	for start := 0; start < len(releaseIDs); start += auditReferenceBatchSize {
+		end := start + auditReferenceBatchSize
+		if end > len(releaseIDs) {
+			end = len(releaseIDs)
+		}
+		rows, err := queries.queryReleases(releaseIDs[start:end])
+		if err != nil {
+			return nil, fmt.Errorf("%w: release references: %v", ErrAuditDatabase, err)
+		}
+		stats.DatabaseBatches++
+		for _, release := range rows {
+			if release != nil {
+				releases[release.ID] = release
+			}
+		}
+	}
+
+	projectIDs := make([]int64, 0, len(releases))
+	seenProjectIDs := make(map[int64]struct{}, len(releases))
+	for _, release := range releases {
+		if release.ProjectID <= 0 {
+			continue
+		}
+		if _, exists := seenProjectIDs[release.ProjectID]; exists {
+			continue
+		}
+		seenProjectIDs[release.ProjectID] = struct{}{}
+		projectIDs = append(projectIDs, release.ProjectID)
+	}
+	sort.Slice(projectIDs, func(i, j int) bool { return projectIDs[i] < projectIDs[j] })
+
+	projects := make(map[int64]*model.WebProject, len(projectIDs))
+	for start := 0; start < len(projectIDs); start += auditReferenceBatchSize {
+		end := start + auditReferenceBatchSize
+		if end > len(projectIDs) {
+			end = len(projectIDs)
+		}
+		rows, err := queries.queryProjects(projectIDs[start:end])
+		if err != nil {
+			return nil, fmt.Errorf("%w: project references: %v", ErrAuditDatabase, err)
+		}
+		stats.DatabaseBatches++
+		for _, project := range rows {
+			if project != nil {
+				projects[project.ID] = project
+			}
+		}
+	}
+	return &auditReferences{releases: releases, projects: projects}, nil
+}
+
+func inspectAuditReference(directory auditReleaseDirectory, references *auditReferences) (AuditCandidate, bool) {
+	candidate := AuditCandidate{
+		ProjectID:           strconv.FormatInt(directory.projectID, 10),
+		ReleaseID:           strconv.FormatInt(directory.releaseID, 10),
+		RelativePath:        directory.relativePath,
+		ExpectedStorageKey:  directory.storageKey,
+		DirectoryModifyTime: directory.modifyTime,
+	}
+	if directory.ownerID > 0 {
+		candidate.DirectoryOwnerID = strconv.FormatInt(directory.ownerID, 10)
+	}
+	release := references.releases[directory.releaseID]
+	if release == nil {
+		candidate.Reason = AuditReasonMissingDatabaseReference
+		return candidate, false
+	}
+	candidate.DatabaseStorageKey = release.StorageKey
+	if release.ProjectID != directory.projectID {
+		candidate.Reason = AuditReasonProjectMismatch
+		return candidate, false
+	}
+	project := references.projects[release.ProjectID]
+	if project == nil {
+		candidate.Reason = AuditReasonMissingProjectReference
+		return candidate, false
+	}
+	if project.OwnerUserID <= 0 || release.UploadedBy <= 0 || project.OwnerUserID != release.UploadedBy {
+		candidate.Reason = AuditReasonOwnerMismatch
+		return candidate, false
+	}
+	candidate.OwnerID = strconv.FormatInt(project.OwnerUserID, 10)
+	if directory.ownerID > 0 && directory.ownerID != project.OwnerUserID {
+		candidate.Reason = AuditReasonDirectoryOwnerMismatch
+		return candidate, false
+	}
+	if release.StorageKey != directory.storageKey {
+		candidate.Reason = AuditReasonStorageKeyMismatch
+		return candidate, false
+	}
+	return candidate, true
+}
+
+// scanAuditReleaseDirectories reads metadata for both legacy and owner-scoped
+// layouts. It does not open hosted content and never follows a symlink.
 func scanAuditReleaseDirectories(root string, minAge time.Duration, now time.Time, stats *AuditStats) ([]auditReleaseDirectory, error) {
-	projectsRoot := filepath.Join(root, "projects")
-	projectsInfo, err := os.Lstat(projectsRoot)
-	if err != nil {
-		return nil, fmt.Errorf("inspect projects directory: %w", err)
-	}
-	if projectsInfo.Mode()&os.ModeSymlink != 0 || !projectsInfo.IsDir() {
-		return nil, fmt.Errorf("projects path is not a regular directory")
-	}
-	projects, err := os.ReadDir(projectsRoot)
-	if err != nil {
-		return nil, fmt.Errorf("read projects directory: %w", err)
-	}
 	directories := make([]auditReleaseDirectory, 0)
-	for _, projectEntry := range projects {
-		stats.ProjectEntries++
-		projectID, ok := generatedDirectoryID(projectEntry.Name())
-		if projectEntry.Type()&os.ModeSymlink != 0 {
+	legacyRoot := filepath.Join(root, "projects")
+	if entries, ok := auditDirectoryEntries(legacyRoot, stats); ok {
+		directories = append(directories, scanAuditProjects(root, legacyRoot, 0, entries, minAge, now, stats)...)
+	}
+
+	rootEntries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("read storage root: %w", err)
+	}
+	for _, ownerEntry := range rootEntries {
+		if ownerEntry.Name() == "projects" || ownerEntry.Name() == "staging" {
+			continue
+		}
+		stats.OwnerEntries++
+		ownerID, validOwner := generatedDirectoryID(ownerEntry.Name())
+		ownerInfo, infoErr := ownerEntry.Info()
+		if infoErr == nil && ownerInfo.Mode()&os.ModeSymlink != 0 {
 			stats.SkippedSymlinks++
 			continue
 		}
+		if !validOwner || infoErr != nil || !ownerInfo.IsDir() {
+			stats.SkippedAbnormalEntries++
+			continue
+		}
+		uploadRoot := filepath.Join(root, ownerEntry.Name(), "upload")
+		if _, ok := auditDirectoryEntries(uploadRoot, stats); !ok {
+			continue
+		}
+		htmlRoot := filepath.Join(uploadRoot, "html")
+		projectEntries, ok := auditDirectoryEntries(htmlRoot, stats)
+		if !ok {
+			continue
+		}
+		filtered := make([]os.DirEntry, 0, len(projectEntries))
+		for _, entry := range projectEntries {
+			if entry.Name() != ".staging" && entry.Name() != ".migration" {
+				filtered = append(filtered, entry)
+			}
+		}
+		directories = append(directories, scanAuditProjects(root, htmlRoot, ownerID, filtered, minAge, now, stats)...)
+	}
+	return directories, nil
+}
+
+func auditDirectoryEntries(path string, stats *AuditStats) ([]os.DirEntry, bool) {
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, false
+	}
+	if err != nil {
+		stats.SkippedAbnormalEntries++
+		return nil, false
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		stats.SkippedSymlinks++
+		return nil, false
+	}
+	if !info.IsDir() {
+		stats.SkippedAbnormalEntries++
+		return nil, false
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		stats.SkippedAbnormalEntries++
+		return nil, false
+	}
+	return entries, true
+}
+
+func scanAuditProjects(root, projectsRoot string, ownerID int64, projectEntries []os.DirEntry, minAge time.Duration, now time.Time, stats *AuditStats) []auditReleaseDirectory {
+	directories := make([]auditReleaseDirectory, 0)
+	for _, projectEntry := range projectEntries {
+		stats.ProjectEntries++
+		projectID, validProject := generatedDirectoryID(projectEntry.Name())
 		projectInfo, infoErr := projectEntry.Info()
-		if !ok || infoErr != nil || !projectInfo.IsDir() {
+		if infoErr == nil && projectInfo.Mode()&os.ModeSymlink != 0 {
+			stats.SkippedSymlinks++
+			continue
+		}
+		if !validProject || infoErr != nil || !projectInfo.IsDir() {
 			stats.SkippedAbnormalEntries++
 			continue
 		}
 		releasesRoot := filepath.Join(projectsRoot, projectEntry.Name(), "releases")
-		releasesInfo, statErr := os.Lstat(releasesRoot)
-		if errors.Is(statErr, os.ErrNotExist) {
+		releaseEntries, ok := auditDirectoryEntries(releasesRoot, stats)
+		if !ok {
 			continue
 		}
-		if statErr != nil {
-			stats.SkippedAbnormalEntries++
-			continue
-		}
-		if releasesInfo.Mode()&os.ModeSymlink != 0 {
-			stats.SkippedSymlinks++
-			continue
-		}
-		if !releasesInfo.IsDir() {
-			stats.SkippedAbnormalEntries++
-			continue
-		}
-		releases, readErr := os.ReadDir(releasesRoot)
-		if readErr != nil {
-			stats.SkippedAbnormalEntries++
-			continue
-		}
-		for _, releaseEntry := range releases {
+		for _, releaseEntry := range releaseEntries {
 			stats.ReleaseEntries++
-			releaseID, releaseOK := generatedDirectoryID(releaseEntry.Name())
-			if releaseEntry.Type()&os.ModeSymlink != 0 {
-				stats.SkippedSymlinks++
-				continue
-			}
-			releaseInfo, releaseInfoErr := releaseEntry.Info()
-			if !releaseOK || releaseInfoErr != nil || !releaseInfo.IsDir() {
+			releaseID, validRelease := generatedDirectoryID(releaseEntry.Name())
+			releasePath := filepath.Join(releasesRoot, releaseEntry.Name())
+			if !validRelease {
 				stats.SkippedAbnormalEntries++
 				continue
 			}
-			contentPath := filepath.Join(releasesRoot, releaseEntry.Name(), "content")
-			contentInfo, contentErr := os.Lstat(contentPath)
-			if contentErr != nil {
-				stats.SkippedAbnormalEntries++
+			if !auditReleasePath(releasePath, releaseEntry, stats) {
 				continue
 			}
-			if contentInfo.Mode()&os.ModeSymlink != 0 {
-				stats.SkippedSymlinks++
-				continue
-			}
-			if !contentInfo.IsDir() {
+			releaseInfo, err := releaseEntry.Info()
+			if err != nil {
 				stats.SkippedAbnormalEntries++
 				continue
 			}
@@ -238,18 +369,73 @@ func scanAuditReleaseDirectories(root string, minAge time.Duration, now time.Tim
 				stats.SkippedRecentDirectories++
 				continue
 			}
-			relativePath := filepath.ToSlash(filepath.Join("projects", projectEntry.Name(), "releases", releaseEntry.Name()))
+			var storageKey string
+			if ownerID > 0 {
+				storageKey, err = ReleaseStorageKey(ownerID, projectID, releaseID)
+			} else {
+				storageKey, err = LegacyReleaseStorageKey(projectID, releaseID)
+			}
+			if err != nil {
+				stats.SkippedAbnormalEntries++
+				continue
+			}
 			directories = append(directories, auditReleaseDirectory{
+				ownerID:      ownerID,
 				projectID:    projectID,
 				releaseID:    releaseID,
-				relativePath: relativePath,
-				storageKey:   relativePath + "/content",
+				relativePath: filepath.ToSlash(filepath.Dir(storageKey)),
+				storageKey:   storageKey,
 				modifyTime:   releaseInfo.ModTime(),
 			})
 			stats.AuditedReleaseDirectories++
 		}
 	}
-	return directories, nil
+	return directories
+}
+
+func auditReleasePath(releasePath string, releaseEntry os.DirEntry, stats *AuditStats) bool {
+	releaseInfo, err := releaseEntry.Info()
+	if err == nil && releaseInfo.Mode()&os.ModeSymlink != 0 {
+		stats.SkippedSymlinks++
+		return false
+	}
+	if err != nil || !releaseInfo.IsDir() {
+		stats.SkippedAbnormalEntries++
+		return false
+	}
+	contentInfo, err := os.Lstat(filepath.Join(releasePath, "content"))
+	if err == nil && contentInfo.Mode()&os.ModeSymlink != 0 {
+		stats.SkippedSymlinks++
+		return false
+	}
+	if err != nil || !contentInfo.IsDir() {
+		stats.SkippedAbnormalEntries++
+		return false
+	}
+	hasSymlink := false
+	walkErr := filepath.WalkDir(releasePath, func(_ string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			hasSymlink = true
+			return fs.SkipDir
+		}
+		return nil
+	})
+	if walkErr != nil {
+		stats.SkippedAbnormalEntries++
+		return false
+	}
+	if hasSymlink {
+		stats.SkippedSymlinks++
+		return false
+	}
+	return true
 }
 
 func generatedDirectoryID(name string) (int64, bool) {

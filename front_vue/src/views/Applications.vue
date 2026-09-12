@@ -202,8 +202,8 @@ export default {
       },
       statusText: {enabled: '已启用', disabled: '已停用', revoked: '已永久吊销'},
       scopeOptions: [
-        {name: 'web-projects:read', resource: 'web-projects', action: 'read', label: '网页项目 · 读取', description: '查看项目与版本'},
-        {name: 'web-projects:write', resource: 'web-projects', action: 'write', label: '网页项目 · 写入', description: '可发布、修改和删除项目'},
+        {name: 'web-projects:read', resource: 'web-projects', action: 'read', label: '网页托管 · 读取', description: '查看托管内容与版本'},
+        {name: 'web-projects:write', resource: 'web-projects', action: 'write', label: '网页托管 · 写入', description: '可发布、修改和删除托管内容'},
         {name: 'library:read', resource: 'library', action: 'read', label: '家庭藏书 · 读取', description: '查看图书信息'},
         {name: 'library:write', resource: 'library', action: 'write', label: '家庭藏书 · 写入', description: '可新增、修改和删除图书'},
         {name: 'webdav:read', resource: 'webdav', action: 'read', label: 'WebDAV · 读取', description: '读取 WebDAV 文件'},

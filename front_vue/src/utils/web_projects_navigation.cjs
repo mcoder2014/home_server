@@ -18,8 +18,8 @@ function parseInternalPath(value) {
     }
 
     try {
-        const parsed = new URL(value, 'https://web-projects.invalid')
-        if (parsed.origin !== 'https://web-projects.invalid' || !value.startsWith('/')) {
+        const parsed = new URL(value, 'https://web-share.invalid')
+        if (parsed.origin !== 'https://web-share.invalid' || !value.startsWith('/')) {
             return null
         }
         return parsed
@@ -40,6 +40,8 @@ function normalizeInternalRedirect(value, inheritedHash = '') {
     }
     if (!PROJECT_PATH.test(parsed.pathname)
         && parsed.pathname !== '/applications'
+        && parsed.pathname !== '/web-share'
+        && !parsed.pathname.startsWith('/web-share/')
         && parsed.pathname !== '/web-projects'
         && !parsed.pathname.startsWith('/web-projects/')) {
         return '/'

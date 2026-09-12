@@ -11,14 +11,14 @@ import (
 	"github.com/mcoder2014/home_server/utils"
 )
 
-type CreateRequest struct {
+type CreateApplicationCredentialRequest struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description"`
 	Scopes        []string `json:"scopes"`
 	ExpiresInDays *int     `json:"expires_in_days"`
 }
 
-type UpdateRequest struct {
+type UpdateApplicationCredentialRequest struct {
 	Name          *string   `json:"name"`
 	Description   *string   `json:"description"`
 	Scopes        *[]string `json:"scopes"`
@@ -26,7 +26,7 @@ type UpdateRequest struct {
 	Status        *string   `json:"status"`
 }
 
-type ApplicationView struct {
+type ApplicationCredentialView struct {
 	ID            string     `json:"id"`
 	Name          string     `json:"name"`
 	Description   string     `json:"description"`
@@ -41,23 +41,23 @@ type ApplicationView struct {
 	LastIssuedAt  *time.Time `json:"last_issued_at"`
 }
 
-type CredentialResponse struct {
-	Application ApplicationView `json:"application"`
-	SecretKey   string          `json:"secret_key"`
+type IssuedApplicationCredential struct {
+	Application ApplicationCredentialView `json:"application"`
+	SecretKey   string                    `json:"secret_key"`
 }
 
-type ListResponse struct {
-	Items      []ApplicationView `json:"items"`
-	NextCursor string            `json:"next_cursor"`
-	HasMore    bool              `json:"has_more"`
+type ListApplicationCredentialsResponse struct {
+	Items      []ApplicationCredentialView `json:"items"`
+	NextCursor string                      `json:"next_cursor"`
+	HasMore    bool                        `json:"has_more"`
 }
 
-func Create(ctx context.Context, principal *utils.Principal, request CreateRequest) (*CredentialResponse, error) {
-	ownerID, err := requireOwner(principal)
+func CreateApplicationCredential(ctx context.Context, actor *utils.Principal, request CreateApplicationCredentialRequest) (*IssuedApplicationCredential, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -67,15 +67,15 @@ func Create(ctx context.Context, principal *utils.Principal, request CreateReque
 	if err != nil {
 		return nil, err
 	}
-	return &CredentialResponse{Application: newApplicationView(application), SecretKey: secret}, nil
+	return &IssuedApplicationCredential{Application: buildApplicationCredentialView(application), SecretKey: secret}, nil
 }
 
-func List(ctx context.Context, principal *utils.Principal, cursor int64, limit int) (*ListResponse, error) {
-	ownerID, err := requireOwner(principal)
+func ListApplicationCredentials(ctx context.Context, actor *utils.Principal, cursor int64, limit int) (*ListApplicationCredentialsResponse, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -83,9 +83,9 @@ func List(ctx context.Context, principal *utils.Principal, cursor int64, limit i
 	if err != nil {
 		return nil, err
 	}
-	response := &ListResponse{Items: make([]ApplicationView, 0, len(applications)), HasMore: hasMore}
+	response := &ListApplicationCredentialsResponse{Items: make([]ApplicationCredentialView, 0, len(applications)), HasMore: hasMore}
 	for _, application := range applications {
-		response.Items = append(response.Items, newApplicationView(application))
+		response.Items = append(response.Items, buildApplicationCredentialView(application))
 	}
 	if hasMore && len(applications) > 0 {
 		response.NextCursor = strconv.FormatInt(applications[len(applications)-1].ID, 10)
@@ -93,12 +93,12 @@ func List(ctx context.Context, principal *utils.Principal, cursor int64, limit i
 	return response, nil
 }
 
-func Get(ctx context.Context, principal *utils.Principal, applicationID int64) (*ApplicationView, error) {
-	ownerID, err := requireOwner(principal)
+func GetApplicationCredential(ctx context.Context, actor *utils.Principal, applicationID int64) (*ApplicationCredentialView, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -106,16 +106,16 @@ func Get(ctx context.Context, principal *utils.Principal, applicationID int64) (
 	if err != nil {
 		return nil, err
 	}
-	view := newApplicationView(application)
+	view := buildApplicationCredentialView(application)
 	return &view, nil
 }
 
-func Update(ctx context.Context, principal *utils.Principal, applicationID, revision int64, request UpdateRequest) (*ApplicationView, error) {
-	ownerID, err := requireOwner(principal)
+func UpdateApplicationCredential(ctx context.Context, actor *utils.Principal, applicationID, revision int64, request UpdateApplicationCredentialRequest) (*ApplicationCredentialView, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -125,16 +125,16 @@ func Update(ctx context.Context, principal *utils.Principal, applicationID, revi
 	if err != nil {
 		return nil, err
 	}
-	view := newApplicationView(application)
+	view := buildApplicationCredentialView(application)
 	return &view, nil
 }
 
-func Rotate(ctx context.Context, principal *utils.Principal, applicationID, revision int64) (*CredentialResponse, error) {
-	ownerID, err := requireOwner(principal)
+func RotateApplicationSecret(ctx context.Context, actor *utils.Principal, applicationID, revision int64) (*IssuedApplicationCredential, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -142,15 +142,15 @@ func Rotate(ctx context.Context, principal *utils.Principal, applicationID, revi
 	if err != nil {
 		return nil, err
 	}
-	return &CredentialResponse{Application: newApplicationView(application), SecretKey: secret}, nil
+	return &IssuedApplicationCredential{Application: buildApplicationCredentialView(application), SecretKey: secret}, nil
 }
 
-func Revoke(ctx context.Context, principal *utils.Principal, applicationID, revision int64) (*ApplicationView, error) {
-	ownerID, err := requireOwner(principal)
+func RevokeApplicationCredential(ctx context.Context, actor *utils.Principal, applicationID, revision int64) (*ApplicationCredentialView, error) {
+	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {
 		return nil, err
 	}
-	applicationService, err := serviceOrError()
+	applicationService, err := applicationCredentialServiceOrError()
 	if err != nil {
 		return nil, err
 	}
@@ -158,21 +158,21 @@ func Revoke(ctx context.Context, principal *utils.Principal, applicationID, revi
 	if err != nil {
 		return nil, err
 	}
-	view := newApplicationView(application)
+	view := buildApplicationCredentialView(application)
 	return &view, nil
 }
 
-func requireOwner(principal *utils.Principal) (int64, error) {
-	if principal == nil || principal.UserID <= 0 {
+func requireApplicationCredentialOwner(actor *utils.Principal) (int64, error) {
+	if actor == nil || actor.UserID <= 0 {
 		return 0, appErrors.ErrUnauthorized
 	}
-	if principal.Kind != "user" {
+	if actor.Kind != "user" {
 		return 0, appErrors.ErrForbidden
 	}
-	return principal.UserID, nil
+	return actor.UserID, nil
 }
 
-func serviceOrError() (*service.Service, error) {
+func applicationCredentialServiceOrError() (*service.Service, error) {
 	applicationService := service.Default()
 	if applicationService == nil {
 		return nil, appErrors.ErrDependency
@@ -180,16 +180,16 @@ func serviceOrError() (*service.Service, error) {
 	return applicationService, nil
 }
 
-func newApplicationView(application *model.Application) ApplicationView {
-	return ApplicationView{
+func buildApplicationCredentialView(application *model.Application) ApplicationCredentialView {
+	return ApplicationCredentialView{
 		ID: strconv.FormatInt(application.ID, 10), Name: application.Name, Description: application.Description,
-		AccessKey: application.AccessKey, Scopes: append([]string(nil), application.Scopes...), Status: statusName(application.Status),
+		AccessKey: application.AccessKey, Scopes: append([]string(nil), application.Scopes...), Status: applicationCredentialStatusName(application.Status),
 		Revision: application.Revision, SecretVersion: application.SecretVersion, CreateTime: application.CreateTime,
 		UpdateTime: application.UpdateTime, ExpiresAt: application.ExpiresAt, LastIssuedAt: application.LastIssuedAt,
 	}
 }
 
-func statusName(status int) string {
+func applicationCredentialStatusName(status int) string {
 	switch status {
 	case model.ApplicationStatusEnabled:
 		return service.StatusEnabledName

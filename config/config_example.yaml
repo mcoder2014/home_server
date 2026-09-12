@@ -19,6 +19,7 @@ webdav:
 web_projects:
   # Keep disabled until the migration, private storage directory and same-origin proxy are ready.
   enabled: false
+  # New files: <storage_root>/<owner_user_id>/upload/html/<project_id>/releases/<release_id>/content
   storage_root: /var/lib/home_server/web-projects
   site_origin: https://home.example.com
   max_upload_bytes: 52428800

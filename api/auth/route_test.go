@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestLegacyWebOriginRegistersCommonAndCompatibilitySessionEndpoints(t *testing.T) {
+func TestConfiguredWebShareOriginRegistersCommonAndCompatibilitySessionEndpoints(t *testing.T) {
 	originalConfig, originalRoutes := config.Global(), data.RouterMap
 	t.Cleanup(func() { config.SetGlobalConfig(originalConfig); data.RouterMap = originalRoutes })
 	data.RouterMap = map[string]map[string]data.HttpRoute{}
@@ -17,6 +17,7 @@ func TestLegacyWebOriginRegistersCommonAndCompatibilitySessionEndpoints(t *testi
 	config.SetGlobalConfig(conf)
 	require.NoError(t, InitRouter())
 	require.Contains(t, data.RouterMap, "/api/auth/browser-login")
+	require.Contains(t, data.RouterMap, "/api/web-share/browser-login")
 	require.Contains(t, data.RouterMap, "/api/web-projects/browser-login")
 }
 

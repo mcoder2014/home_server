@@ -41,11 +41,10 @@ func TestInitEnabledAppliesLimitsAndCreatesPrivateRoots(t *testing.T) {
 	require.EqualValues(t, 50<<20, conf.MaxUploadBytes)
 	require.EqualValues(t, 200<<20, conf.MaxExpandedBytes)
 	require.Equal(t, 5000, conf.MaxFileCount)
-	for _, name := range []string{"staging", "projects"} {
-		info, err := os.Stat(filepath.Join(root, name))
-		require.NoError(t, err)
-		require.True(t, info.IsDir())
-	}
+	info, err := os.Stat(root)
+	require.NoError(t, err)
+	require.True(t, info.IsDir())
+	require.Equal(t, os.FileMode(0700), info.Mode().Perm())
 }
 
 func TestCanReadProject(t *testing.T) {
@@ -106,7 +105,7 @@ func TestProjectStatusFieldsPreservesRestoreRetentionAndEnumValue(t *testing.T) 
 
 func TestStoreUploadNormalizesSingleHTMLToIndex(t *testing.T) {
 	conf := testStorageConfig(t)
-	artifact, err := StoreUpload(&conf, "101", "201", "report.html", "", bytes.NewBufferString("<h1>ok</h1>"))
+	artifact, err := StoreUpload(&conf, "11", "101", "201", "report.html", "", bytes.NewBufferString("<h1>ok</h1>"))
 	require.NoError(t, err)
 	require.Equal(t, "index.html", artifact.EntryFile)
 	require.Equal(t, 1, artifact.FileCount)
@@ -125,7 +124,7 @@ func TestStoreUploadRejectsZIPTraversal(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	_, err = StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
+	_, err = StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", &body)
 	require.ErrorContains(t, err, "path")
 	_, statErr := os.Stat(filepath.Join(conf.StorageRoot, "escape.html"))
 	require.ErrorIs(t, statErr, os.ErrNotExist)
@@ -141,7 +140,7 @@ func TestStoreUploadRejectsMissingEntryFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	_, err = StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
+	_, err = StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", &body)
 	require.ErrorContains(t, err, "entry")
 }
 
@@ -156,7 +155,7 @@ func TestStoreUploadRejectsEntryPathLongerThanDatabaseBoundary(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	_, err = StoreUpload(&conf, "101", "201", "site.zip", entryFile, &body)
+	_, err = StoreUpload(&conf, "11", "101", "201", "site.zip", entryFile, &body)
 	require.ErrorIs(t, err, ErrUnprocessable)
 }
 
@@ -176,7 +175,7 @@ func TestStoreUploadAcceptsNormalZIPDirectoryEntries(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	artifact, err := StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
+	artifact, err := StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", &body)
 	require.NoError(t, err)
 	require.Equal(t, 2, artifact.FileCount)
 }
@@ -189,7 +188,7 @@ func TestStoreUploadEntryMustBeARegularHTMLFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	_, err = StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
+	_, err = StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", &body)
 	require.ErrorContains(t, err, "entry")
 }
 
@@ -206,14 +205,14 @@ func TestStoreUploadCountsAllZIPEntries(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, zw.Close())
 
-	_, err = StoreUpload(&conf, "101", "201", "site.zip", "index.html", &body)
+	_, err = StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", &body)
 	require.ErrorContains(t, err, "file limits")
 }
 
 func TestStoreUploadStreamsSingleHTML(t *testing.T) {
 	conf := testStorageConfig(t)
 	reader := &maxReadSizeReader{reader: strings.NewReader(strings.Repeat("x", 128<<10)), max: 64 << 10}
-	_, err := StoreUpload(&conf, "101", "201", "page.html", "", reader)
+	_, err := StoreUpload(&conf, "11", "101", "201", "page.html", "", reader)
 	require.NoError(t, err)
 }
 
@@ -230,7 +229,7 @@ func TestClassifyStorageErrorKeepsFilesystemFailureAsDependency(t *testing.T) {
 		MaxDirectoryDepth: 4,
 	}
 
-	_, storageErr := StoreUpload(&conf, "101", "201", "page.html", "", bytes.NewBufferString("ok"))
+	_, storageErr := StoreUpload(&conf, "11", "101", "201", "page.html", "", bytes.NewBufferString("ok"))
 	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrDependency)
 	var pathErr *os.PathError
@@ -240,7 +239,7 @@ func TestClassifyStorageErrorKeepsFilesystemFailureAsDependency(t *testing.T) {
 func TestClassifyStorageErrorKeepsReaderFailureAsDependency(t *testing.T) {
 	conf := testStorageConfig(t)
 	readErr := errors.New("forced upload read failure")
-	_, storageErr := StoreUpload(&conf, "101", "201", "page.html", "", &failingReader{err: readErr})
+	_, storageErr := StoreUpload(&conf, "11", "101", "201", "page.html", "", &failingReader{err: readErr})
 	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrDependency)
 	require.ErrorIs(t, classified, readErr)
@@ -248,7 +247,7 @@ func TestClassifyStorageErrorKeepsReaderFailureAsDependency(t *testing.T) {
 
 func TestClassifyStorageErrorKeepsInvalidZIPAsUnprocessable(t *testing.T) {
 	conf := testStorageConfig(t)
-	_, storageErr := StoreUpload(&conf, "101", "201", "site.zip", "index.html", bytes.NewBufferString("not a zip"))
+	_, storageErr := StoreUpload(&conf, "11", "101", "201", "site.zip", "index.html", bytes.NewBufferString("not a zip"))
 	classified := ClassifyStorageError(storageErr)
 	require.ErrorIs(t, classified, ErrUnprocessable)
 	require.NotErrorIs(t, classified, ErrDependency)

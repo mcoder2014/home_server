@@ -27,6 +27,12 @@ test('accepts only project content paths as open targets', () => {
 
 test('limits login redirects to project management and project content paths', () => {
     assert.equal(normalizeInternalRedirect('/applications'), '/applications')
+    assert.equal(normalizeInternalRedirect('/web-share'), '/web-share')
+    assert.equal(normalizeInternalRedirect('/web-share/123?tab=releases'), '/web-share/123?tab=releases')
+    assert.equal(
+        normalizeInternalRedirect('/web-share/open?target=%2Fp%2Freport%2F'),
+        '/web-share/open?target=%2Fp%2Freport%2F',
+    )
     assert.equal(normalizeInternalRedirect('/web-projects'), '/web-projects')
     assert.equal(normalizeInternalRedirect('/web-projects/123?tab=releases'), '/web-projects/123?tab=releases')
     assert.equal(
@@ -36,6 +42,7 @@ test('limits login redirects to project management and project content paths', (
     assert.equal(normalizeInternalRedirect('/p/report/'), '/p/report/')
 
     assert.equal(normalizeInternalRedirect('/web-projects-evil'), '/')
+    assert.equal(normalizeInternalRedirect('/web-share-evil'), '/')
     assert.equal(normalizeInternalRedirect('//evil.example'), '/')
     assert.equal(normalizeInternalRedirect('https://evil.example'), '/')
     assert.equal(normalizeInternalRedirect('/web-projects\\evil'), '/')

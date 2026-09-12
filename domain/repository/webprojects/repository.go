@@ -125,6 +125,14 @@ func (repository *Repository) FindReleaseReferences(releaseIDs []int64) ([]*mode
 	return dal.QueryWebProjectReleaseReferences(releaseIDs)
 }
 
+func (repository *Repository) FindProjectOwnerReferences(projectIDs []int64) ([]*model.WebProject, error) {
+	return dal.QueryWebProjectOwnerReferences(projectIDs)
+}
+
+func (repository *Repository) CompareAndSwapReleaseStorageKey(releaseID, projectID, uploadedBy int64, oldStorageKey, newStorageKey string) (bool, error) {
+	return dal.CompareAndSwapWebProjectReleaseStorageKey(releaseID, projectID, uploadedBy, oldStorageKey, newStorageKey)
+}
+
 // Transaction exposes only web-project persistence operations. App services can
 // keep locks around rule evaluation without importing GORM or calling DAL.
 func (repository *Repository) Transaction(run func(*Transaction) error) error {

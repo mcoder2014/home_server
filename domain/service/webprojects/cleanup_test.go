@@ -59,7 +59,7 @@ func TestRemoveRetiredReleasesRejectsSymlinkAncestorAndRetries(t *testing.T) {
 	err := RemoveRetiredReleases(&conf, []*model.WebProjectRelease{release})
 	require.Error(t, err)
 	require.FileExists(t, marker)
-	require.Equal(t, "deleting", queryCleanupReleaseStatus(t, database, release.ID))
+	require.Equal(t, model.WebProjectReleaseDeleting, queryCleanupReleaseStatus(t, database, release.ID))
 
 	require.NoError(t, os.Remove(projectLink))
 	createCleanupReleaseDirectory(t, conf.StorageRoot, project.ID, release.ID)
@@ -80,7 +80,7 @@ func TestRemoveRetiredReleasesRejectsUnexpectedStorageKey(t *testing.T) {
 	err := RemoveRetiredReleases(&conf, []*model.WebProjectRelease{release})
 	require.Error(t, err)
 	require.DirExists(t, releaseDir)
-	require.Equal(t, "deleting", queryCleanupReleaseStatus(t, database, release.ID))
+	require.Equal(t, model.WebProjectReleaseDeleting, queryCleanupReleaseStatus(t, database, release.ID))
 }
 
 func TestRemoveRetiredReleasesTreatsMissingDirectoryAsCleaned(t *testing.T) {
@@ -208,4 +208,30 @@ func queryCleanupReleaseStatus(t *testing.T, database *gorm.DB, releaseID int64)
 	err := database.Table(dal.WebProjectReleaseTable).Select("status").Where("id = ?", releaseID).Scan(&status).Error
 	require.NoError(t, err)
 	return status
+}
+
+func TestRetiredReleaseCleanupChecksOwnerForCanonicalStorage(t *testing.T) {
+	database := requireCleanupTestDB(t)
+	conf := cleanupStorageConfig(t)
+	baseID := nextCleanupTestID()
+	project := newCleanupProject(baseID, ProjectStatusDisabled, nil, nil)
+	release := newCleanupRelease(baseID+1, project.ID, model.WebProjectReleaseDeleting, 10, time.Now())
+	key, err := ReleaseStorageKey(project.OwnerUserID, project.ID, release.ID)
+	require.NoError(t, err)
+	release.StorageKey = key
+	seedCleanupRecords(t, database, project, []*model.WebProjectRelease{release})
+	content := filepath.Join(conf.StorageRoot, key)
+	require.NoError(t, os.MkdirAll(content, 0700))
+	marker := filepath.Join(content, "index.html")
+	require.NoError(t, os.WriteFile(marker, []byte("owner content"), 0600))
+
+	// Corrupt owner metadata must never erase another owner's directory.
+	require.NoError(t, database.Table(dal.WebProjectReleaseTable).Where("id = ?", release.ID).Update("uploaded_by", baseID+99).Error)
+	require.Error(t, RemoveRetiredReleases(&conf, []*model.WebProjectRelease{release}))
+	require.FileExists(t, marker)
+	require.Equal(t, model.WebProjectReleaseDeleting, queryCleanupReleaseStatus(t, database, release.ID))
+	require.NoError(t, database.Table(dal.WebProjectReleaseTable).Where("id = ?", release.ID).Update("uploaded_by", project.OwnerUserID).Error)
+	require.NoError(t, RemoveRetiredReleases(&conf, []*model.WebProjectRelease{release}))
+	require.NoDirExists(t, filepath.Dir(content))
+	require.Empty(t, queryCleanupReleaseStatus(t, database, release.ID))
 }

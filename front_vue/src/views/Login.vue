@@ -65,7 +65,7 @@ import axios from "axios";
 import {JSEncrypt} from 'jsencrypt'
 import { User, Lock } from '@element-plus/icons-vue'
 
-const {synchronizeBrowserIdentity, webProjectsApi} = require('@/api/web_projects.cjs')
+const {synchronizeBrowserIdentity, webShareApi} = require('@/api/web_projects.cjs')
 const {isSafeProjectTarget, normalizeInternalRedirect} = require('@/utils/web_projects_navigation.cjs')
 
 let rsa = ""
@@ -124,7 +124,7 @@ export default {
 
       apiBase.post("/passport/login", loginParam).then(async function (response) {
         if (response.data.code === 0) {
-          const browserLoginAvailable = await synchronizeBrowserIdentity(webProjectsApi, response.data.data, (identity) => {
+          const browserLoginAvailable = await synchronizeBrowserIdentity(webShareApi, response.data.data, (identity) => {
             curStore.commit('SET_TOKEN', identity.token)
             localStorage.setItem("user_name", identity.user_name)
           })

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mcoder2014/home_server/config"
@@ -34,31 +35,35 @@ var allowedExtensions = map[string]bool{
 	".xml": true,
 }
 
-func StoreUpload(conf *config.WebProjectsConfig, projectID, releaseID, fileName, entryFile string, src io.Reader) (*Artifact, error) {
+// StoreUpload builds content inside the owner's private staging tree, reserves
+// a new release directory without replacing existing data, and moves complete
+// content into it. No database reference is published by this function.
+func StoreUpload(conf *config.WebProjectsConfig, ownerUserID, projectID, releaseID, fileName, entryFile string, src io.Reader) (*Artifact, error) {
 	if conf == nil || !conf.Enabled {
 		return nil, fmt.Errorf("%w: web projects are disabled", ErrDependency)
 	}
-	if !isGeneratedID(projectID) || !isGeneratedID(releaseID) {
-		return nil, fmt.Errorf("%w: invalid generated id", ErrDependency)
-	}
-	stagingDir := filepath.Join(conf.StorageRoot, "staging", releaseID)
-	if err := os.RemoveAll(stagingDir); err != nil {
-		return nil, fmt.Errorf("%w: clean staging directory: %w", ErrDependency, err)
-	}
-	if err := os.MkdirAll(filepath.Join(stagingDir, "content"), 0700); err != nil {
-		return nil, fmt.Errorf("%w: create staging directory: %w", ErrDependency, err)
-	}
-	succeeded := false
-	defer func() {
-		if !succeeded {
-			_ = os.RemoveAll(stagingDir)
+	ids := make([]int64, 3)
+	for i, value := range []string{ownerUserID, projectID, releaseID} {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed <= 0 || strconv.FormatInt(parsed, 10) != value {
+			return nil, fmt.Errorf("%w: invalid generated id", ErrInvalid)
 		}
-	}()
-
-	ext := strings.ToLower(filepath.Ext(fileName))
+		ids[i] = parsed
+	}
+	stagingRoot, err := UserStagingRoot(conf, ids[0])
+	if err != nil {
+		return nil, err
+	}
+	stagingDir, err := os.MkdirTemp(stagingRoot, "release-"+releaseID+"-")
+	if err != nil {
+		return nil, fmt.Errorf("%w: create staging directory: %v", ErrDependency, err)
+	}
+	defer os.RemoveAll(stagingDir)
+	if err := os.Mkdir(filepath.Join(stagingDir, "content"), 0700); err != nil {
+		return nil, fmt.Errorf("%w: create content directory: %v", ErrDependency, err)
+	}
 	var artifact *Artifact
-	var err error
-	switch ext {
+	switch strings.ToLower(filepath.Ext(fileName)) {
 	case ".html", ".htm":
 		artifact, err = storeHTML(conf, stagingDir, src)
 	case ".zip":
@@ -69,15 +74,20 @@ func StoreUpload(conf *config.WebProjectsConfig, projectID, releaseID, fileName,
 	if err != nil {
 		return nil, err
 	}
-	finalReleaseDir := filepath.Join(conf.StorageRoot, "projects", projectID, "releases", releaseID)
-	if err := os.MkdirAll(filepath.Dir(finalReleaseDir), 0700); err != nil {
-		return nil, fmt.Errorf("%w: create release parent: %w", ErrDependency, err)
+	storageKey, _ := ReleaseStorageKey(ids[0], ids[1], ids[2])
+	parent, _, err := storageDirectory(conf, path.Dir(path.Dir(storageKey)), true)
+	if err != nil {
+		return nil, err
 	}
-	if err := os.Rename(stagingDir, finalReleaseDir); err != nil {
-		return nil, fmt.Errorf("%w: publish complete release directory: %w", ErrDependency, err)
+	finalReleaseDir := filepath.Join(parent, releaseID)
+	if err := os.Mkdir(finalReleaseDir, 0700); err != nil {
+		return nil, fmt.Errorf("%w: reserve release directory: %v", ErrDependency, err)
 	}
-	artifact.StorageKey = filepath.ToSlash(filepath.Join("projects", projectID, "releases", releaseID, "content"))
-	succeeded = true
+	if err := os.Rename(filepath.Join(stagingDir, "content"), filepath.Join(finalReleaseDir, "content")); err != nil {
+		_ = os.Remove(finalReleaseDir)
+		return nil, fmt.Errorf("%w: publish complete release directory: %v", ErrDependency, err)
+	}
+	artifact.StorageKey = storageKey
 	return artifact, nil
 }
 

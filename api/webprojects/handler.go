@@ -234,7 +234,11 @@ func receiveMultipartUpload(c *gin.Context, conf *config.WebProjectsConfig) (str
 	if err != nil {
 		return "", "", "", service.ErrInvalid
 	}
-	temp, err := os.CreateTemp(filepath.Join(conf.StorageRoot, "staging"), "request-*.upload")
+	stagingRoot, err := service.UserStagingRoot(conf, currentUserID(c))
+	if err != nil {
+		return "", "", "", service.ErrDependency
+	}
+	temp, err := os.CreateTemp(stagingRoot, "request-*.upload")
 	if err != nil {
 		return "", "", "", service.ErrDependency
 	}

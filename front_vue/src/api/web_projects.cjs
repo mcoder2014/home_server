@@ -29,7 +29,7 @@ function requestError(error) {
     return error instanceof Error ? error : new Error('请求失败')
 }
 
-function createWebProjectsApi(transport, getToken) {
+function createWebShareApi(transport, getToken) {
     const client = transport || axios.create({
         baseURL: '/',
         withCredentials: true,
@@ -55,18 +55,18 @@ function createWebProjectsApi(transport, getToken) {
 
     return {
         listProjects(params) {
-            return request({method: 'get', url: '/api/web-projects', params, headers: headers()})
+            return request({method: 'get', url: '/api/web-share', params, headers: headers()})
         },
         createProject(data) {
-            return request({method: 'post', url: '/api/web-projects', data, headers: headers()})
+            return request({method: 'post', url: '/api/web-share', data, headers: headers()})
         },
         getProject(projectID) {
-            return request({method: 'get', url: `/api/web-projects/${encodeURIComponent(projectID)}`, headers: headers()})
+            return request({method: 'get', url: `/api/web-share/${encodeURIComponent(projectID)}`, headers: headers()})
         },
         updateProject(projectID, revision, data) {
             return request({
                 method: 'patch',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}`,
                 data,
                 headers: headers({'If-Match': String(revision)}),
             })
@@ -74,26 +74,26 @@ function createWebProjectsApi(transport, getToken) {
         disableProject(projectID, revision) {
             return request({
                 method: 'post',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}/disable`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}/disable`,
                 headers: headers({'If-Match': String(revision)}),
             })
         },
         deleteProject(projectID, revision) {
             return request({
                 method: 'delete',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}`,
                 headers: headers({'If-Match': String(revision)}),
             })
         },
         restoreProject(projectID, revision) {
             return request({
                 method: 'post',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}/restore`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}/restore`,
                 headers: headers({'If-Match': String(revision)}),
             })
         },
         listEligibleUsers() {
-            return request({method: 'get', url: '/api/web-projects/eligible-users', headers: headers()})
+            return request({method: 'get', url: '/api/web-share/eligible-users', headers: headers()})
         },
         uploadRelease(projectID, file, entryFile) {
             const data = new FormData()
@@ -103,7 +103,7 @@ function createWebProjectsApi(transport, getToken) {
             }
             return request({
                 method: 'post',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}/releases`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}/releases`,
                 data,
                 headers: headers(),
             })
@@ -111,7 +111,7 @@ function createWebProjectsApi(transport, getToken) {
         listReleases(projectID, params) {
             return request({
                 method: 'get',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}/releases`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}/releases`,
                 params,
                 headers: headers(),
             })
@@ -119,7 +119,7 @@ function createWebProjectsApi(transport, getToken) {
         publishRelease(projectID, revision, releaseID) {
             return request({
                 method: 'post',
-                url: `/api/web-projects/${encodeURIComponent(projectID)}/publish`,
+                url: `/api/web-share/${encodeURIComponent(projectID)}/publish`,
                 data: {release_id: releaseID},
                 headers: headers({'If-Match': String(revision)}),
             })
@@ -128,7 +128,7 @@ function createWebProjectsApi(transport, getToken) {
             try {
                 return await client.request({
                     method: 'get',
-                    url: `/api/web-projects/${encodeURIComponent(projectID)}/releases/${encodeURIComponent(releaseID)}/download`,
+                    url: `/api/web-share/${encodeURIComponent(projectID)}/releases/${encodeURIComponent(releaseID)}/download`,
                     responseType: 'blob',
                     headers: headers(),
                 })
@@ -150,10 +150,10 @@ function createWebProjectsApi(transport, getToken) {
     }
 }
 
-const webProjectsApi = createWebProjectsApi()
+const webShareApi = createWebShareApi()
 
 module.exports = {
-    createWebProjectsApi,
+    createWebShareApi,
     synchronizeBrowserIdentity,
-    webProjectsApi,
+    webShareApi,
 }

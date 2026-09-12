@@ -91,17 +91,16 @@ func serveDownloadForTest(conf *config.WebProjectsConfig, release *model.WebProj
 func downloadFixture(t *testing.T) (config.WebProjectsConfig, *model.WebProjectRelease, string) {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "staging"), 0700))
 	projectID, releaseID := int64(101), int64(201)
 	storageKey := filepath.ToSlash(filepath.Join("projects", fmt.Sprint(projectID), "releases", fmt.Sprint(releaseID), "content"))
 	contentRoot := filepath.Join(root, filepath.FromSlash(storageKey))
 	require.NoError(t, os.MkdirAll(contentRoot, 0700))
-	return config.WebProjectsConfig{Enabled: true, StorageRoot: root}, &model.WebProjectRelease{ID: releaseID, ProjectID: projectID, StorageKey: storageKey, EntryFile: "index.html"}, contentRoot
+	return config.WebProjectsConfig{Enabled: true, StorageRoot: root}, &model.WebProjectRelease{ID: releaseID, ProjectID: projectID, UploadedBy: 11, StorageKey: storageKey, EntryFile: "index.html"}, contentRoot
 }
 
 func matchingDownloadTemps(t *testing.T, root string) []string {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(root, "staging", "download-*.zip"))
+	matches, err := filepath.Glob(filepath.Join(root, "11", "upload", "html", ".staging", "download-*.zip"))
 	require.NoError(t, err)
 	return matches
 }

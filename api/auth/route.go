@@ -16,21 +16,26 @@ import (
 
 func InitRouter() error {
 	conf := config.Global()
+	// Browser login converts a user credential into an HttpOnly cookie. Registering
+	// it requires one configured origin so browserLogin can reject cross-site writes.
 	if conf.Auth.SiteOrigin != "" {
 		handlers := []gin.HandlerFunc{middleware.RequireHTTPS(), middleware.RequireIdentity("", true), browserLogin}
 		data.AddRoute(http.MethodPost, "/api/auth/browser-login", handlers...)
-		// Alias the original PR endpoint during rollout; both write one shared cookie.
+		// Web-share aliases use the same handler and shared session cookie.
 		if conf.WebProjects.Enabled {
+			data.AddRoute(http.MethodPost, "/api/web-share/browser-login", handlers...)
 			data.AddRoute(http.MethodPost, "/api/web-projects/browser-login", handlers...)
 		}
 	}
 	if conf.Auth.ApplicationsEnabled {
-		data.AddRoute(http.MethodPost, "/api/auth/token", middleware.RequireHTTPS(), applications.Token)
+		data.AddRoute(http.MethodPost, "/api/auth/token", middleware.RequireHTTPS(), applications.IssueApplicationAccessToken)
 	}
 	return nil
 }
 
 func browserLogin(c *gin.Context) {
+	// Strict equality is the CSRF boundary for the cookie-setting endpoint. Empty,
+	// missing, and foreign origins must not create an authenticated browser session.
 	if c.GetHeader("Origin") != config.Global().Auth.SiteOrigin {
 		ginfmt.Fail(c, apperrors.ErrForbidden)
 		return

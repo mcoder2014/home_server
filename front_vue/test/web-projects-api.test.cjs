@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const test = require('node:test')
 
 const {
-    createWebProjectsApi,
+    createWebShareApi,
     synchronizeBrowserIdentity,
 } = require('../src/api/web_projects.cjs')
 
@@ -19,14 +19,14 @@ function createTransport(responseData = {code: 0, message: 'success', data: {ok:
 
 test('management requests stay same-origin and carry the passport token', async () => {
     const transport = createTransport()
-    const api = createWebProjectsApi(transport, () => 'token-value')
+    const api = createWebShareApi(transport, () => 'token-value')
 
     const result = await api.listProjects({cursor: 'next', limit: 20, status: 'deleted'})
 
     assert.deepEqual(result, {ok: true})
     assert.deepEqual(transport.calls[0], {
         method: 'get',
-        url: '/api/web-projects',
+        url: '/api/web-share',
         params: {cursor: 'next', limit: 20, status: 'deleted'},
         headers: {passport: 'token-value'},
     })
@@ -34,20 +34,20 @@ test('management requests stay same-origin and carry the passport token', async 
 
 test('mutating an existing project sends its revision in If-Match', async () => {
     const transport = createTransport()
-    const api = createWebProjectsApi(transport, () => 'token-value')
+    const api = createWebShareApi(transport, () => 'token-value')
 
     await api.updateProject('12', 7, {slug: 'new-path'})
     await api.publishRelease('12', 8, '34')
 
     assert.equal(transport.calls[0].headers['If-Match'], '7')
-    assert.equal(transport.calls[0].url, '/api/web-projects/12')
+    assert.equal(transport.calls[0].url, '/api/web-share/12')
     assert.deepEqual(transport.calls[1].data, {release_id: '34'})
     assert.equal(transport.calls[1].headers['If-Match'], '8')
 })
 
 test('browser login is a same-origin POST with no token in its URL or body', async () => {
     const transport = createTransport()
-    const api = createWebProjectsApi(transport, () => 'secret-token')
+    const api = createWebShareApi(transport, () => 'secret-token')
 
     await api.createBrowserLogin()
 
@@ -60,7 +60,7 @@ test('browser login is a same-origin POST with no token in its URL or body', asy
 
 test('browser login can explicitly use the newly returned token', async () => {
     const transport = createTransport()
-    const api = createWebProjectsApi(transport, () => 'old-token')
+    const api = createWebShareApi(transport, () => 'old-token')
 
     await api.createBrowserLogin('new-token')
 
@@ -126,7 +126,7 @@ test('browser-login failure does not commit the new identity', async () => {
 
 test('checks the content Cookie with a credentialed HEAD and no passport header', async () => {
     const transport = createTransport()
-    const api = createWebProjectsApi(transport, () => 'secret-token')
+    const api = createWebShareApi(transport, () => 'secret-token')
 
     await api.probeProjectSession('/p/report/')
 
@@ -139,7 +139,7 @@ test('checks the content Cookie with a credentialed HEAD and no passport header'
 
 test('surfaces the server status and message for failed envelopes', async () => {
     const transport = createTransport({code: 41002, message: 'revision conflict'})
-    const api = createWebProjectsApi(transport, () => 'token-value')
+    const api = createWebShareApi(transport, () => 'token-value')
 
     await assert.rejects(
         () => api.getProject('12'),

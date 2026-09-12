@@ -41,7 +41,22 @@ func TestQueryWebProjectReleaseReferencesSelectsRequestedRows(t *testing.T) {
 	require.Len(t, references, 1)
 	require.Equal(t, release.ID, references[0].ID)
 	require.Equal(t, release.ProjectID, references[0].ProjectID)
+	require.Equal(t, release.UploadedBy, references[0].UploadedBy)
 	require.Equal(t, release.StorageKey, references[0].StorageKey)
+
+	projects, err := QueryWebProjectOwnerReferences([]int64{project.ID, project.ID + 100})
+	require.NoError(t, err)
+	require.Len(t, projects, 1)
+	require.Equal(t, project.ID, projects[0].ID)
+	require.Equal(t, project.OwnerUserID, projects[0].OwnerUserID)
+
+	newStorageKey := fmt.Sprintf("%d/upload/html/%d/releases/%d/content", project.OwnerUserID, project.ID, release.ID)
+	updated, err := CompareAndSwapWebProjectReleaseStorageKey(release.ID, project.ID, project.OwnerUserID, release.StorageKey, newStorageKey)
+	require.NoError(t, err)
+	require.True(t, updated)
+	updated, err = CompareAndSwapWebProjectReleaseStorageKey(release.ID, project.ID, project.OwnerUserID, release.StorageKey, newStorageKey)
+	require.NoError(t, err)
+	require.False(t, updated)
 }
 
 func requireAuditTestDB(t *testing.T) *gorm.DB {

@@ -30,10 +30,8 @@ func Init(conf *config.WebProjectsConfig) error {
 		return fmt.Errorf("web_projects.site_origin must be an https origin without path, query or fragment")
 	}
 	applyDefaults(conf)
-	for _, name := range []string{"staging", "projects"} {
-		if err := os.MkdirAll(filepath.Join(conf.StorageRoot, name), 0700); err != nil {
-			return fmt.Errorf("create web projects %s directory: %w", name, err)
-		}
+	if err := os.MkdirAll(conf.StorageRoot, 0700); err != nil {
+		return fmt.Errorf("create web storage root: %w", err)
 	}
 	return nil
 }

@@ -16,20 +16,20 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
-const maxManagementRequestBytes = 16 << 10
+const maxApplicationCredentialManagementRequestBytes = 16 << 10
 
-func list(c *gin.Context) {
-	cursor, err := parseOptionalPositiveInt64(c.Query("cursor"))
+func listApplicationCredentials(c *gin.Context) {
+	cursor, err := parseOptionalApplicationCredentialCursor(c.Query("cursor"))
 	if err != nil {
 		ginfmt.Fail(c, appErrors.ErrInvalid)
 		return
 	}
-	limit, err := parseOptionalInt(c.Query("limit"))
+	limit, err := parseApplicationCredentialListLimit(c.Query("limit"))
 	if err != nil {
 		ginfmt.Fail(c, appErrors.ErrInvalid)
 		return
 	}
-	response, err := applicationApp.List(c.Request.Context(), principal(c), cursor, limit)
+	response, err := applicationApp.ListApplicationCredentials(c.Request.Context(), applicationManagementActor(c), cursor, limit)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -37,13 +37,13 @@ func list(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
-func create(c *gin.Context) {
-	var request applicationApp.CreateRequest
-	if err := decodeJSON(c, &request); err != nil {
+func createApplicationCredential(c *gin.Context) {
+	var request applicationApp.CreateApplicationCredentialRequest
+	if err := decodeApplicationCredentialManagementJSON(c, &request); err != nil {
 		ginfmt.Fail(c, err)
 		return
 	}
-	response, err := applicationApp.Create(c.Request.Context(), principal(c), request)
+	response, err := applicationApp.CreateApplicationCredential(c.Request.Context(), applicationManagementActor(c), request)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -51,13 +51,13 @@ func create(c *gin.Context) {
 	ginfmt.Success(c, http.StatusCreated, response)
 }
 
-func get(c *gin.Context) {
-	applicationID, err := parsePositiveInt64(c.Param("id"))
+func getApplicationCredential(c *gin.Context) {
+	applicationID, err := parsePositiveApplicationManagementInt64(c.Param("id"))
 	if err != nil {
 		ginfmt.Fail(c, appErrors.ErrInvalid)
 		return
 	}
-	response, err := applicationApp.Get(c.Request.Context(), principal(c), applicationID)
+	response, err := applicationApp.GetApplicationCredential(c.Request.Context(), applicationManagementActor(c), applicationID)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -65,32 +65,18 @@ func get(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
-func update(c *gin.Context) {
-	applicationID, revision, err := managementTarget(c)
+func updateApplicationCredential(c *gin.Context) {
+	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
 	}
-	var request applicationApp.UpdateRequest
-	if err := decodeJSON(c, &request); err != nil {
+	var request applicationApp.UpdateApplicationCredentialRequest
+	if err := decodeApplicationCredentialManagementJSON(c, &request); err != nil {
 		ginfmt.Fail(c, err)
 		return
 	}
-	response, err := applicationApp.Update(c.Request.Context(), principal(c), applicationID, revision, request)
-	if err != nil {
-		ginfmt.Fail(c, err)
-		return
-	}
-	ginfmt.Success(c, http.StatusOK, response)
-}
-
-func rotate(c *gin.Context) {
-	applicationID, revision, err := managementTarget(c)
-	if err != nil {
-		ginfmt.Fail(c, err)
-		return
-	}
-	response, err := applicationApp.Rotate(c.Request.Context(), principal(c), applicationID, revision)
+	response, err := applicationApp.UpdateApplicationCredential(c.Request.Context(), applicationManagementActor(c), applicationID, revision, request)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -98,13 +84,13 @@ func rotate(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
-func revoke(c *gin.Context) {
-	applicationID, revision, err := managementTarget(c)
+func rotateApplicationSecret(c *gin.Context) {
+	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
 	}
-	response, err := applicationApp.Revoke(c.Request.Context(), principal(c), applicationID, revision)
+	response, err := applicationApp.RotateApplicationSecret(c.Request.Context(), applicationManagementActor(c), applicationID, revision)
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -112,19 +98,33 @@ func revoke(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
-func managementTarget(c *gin.Context) (int64, int64, error) {
-	applicationID, err := parsePositiveInt64(c.Param("id"))
+func revokeApplicationCredential(c *gin.Context) {
+	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
+	if err != nil {
+		ginfmt.Fail(c, err)
+		return
+	}
+	response, err := applicationApp.RevokeApplicationCredential(c.Request.Context(), applicationManagementActor(c), applicationID, revision)
+	if err != nil {
+		ginfmt.Fail(c, err)
+		return
+	}
+	ginfmt.Success(c, http.StatusOK, response)
+}
+
+func parseApplicationCredentialManagementTarget(c *gin.Context) (int64, int64, error) {
+	applicationID, err := parsePositiveApplicationManagementInt64(c.Param("id"))
 	if err != nil {
 		return 0, 0, appErrors.ErrInvalid
 	}
-	revision, err := parseIfMatch(c.GetHeader("If-Match"))
+	revision, err := parseApplicationCredentialRevision(c.GetHeader("If-Match"))
 	if err != nil {
 		return 0, 0, appErrors.ErrInvalid
 	}
 	return applicationID, revision, nil
 }
 
-func principal(c *gin.Context) *utils.Principal {
+func applicationManagementActor(c *gin.Context) *utils.Principal {
 	if value, ok := c.Get(utils.CtxKeyPrincipal); ok {
 		if principal, ok := value.(*utils.Principal); ok {
 			return principal
@@ -134,12 +134,12 @@ func principal(c *gin.Context) *utils.Principal {
 	return principal
 }
 
-func decodeJSON(c *gin.Context, destination interface{}) error {
+func decodeApplicationCredentialManagementJSON(c *gin.Context, destination interface{}) error {
 	if c.ContentType() != "application/json" {
 		return appErrors.ErrUnsupported
 	}
-	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxManagementRequestBytes+1))
-	if err != nil || len(body) > maxManagementRequestBytes {
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxApplicationCredentialManagementRequestBytes+1))
+	if err != nil || len(body) > maxApplicationCredentialManagementRequestBytes {
 		return appErrors.ErrInvalid
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
@@ -153,7 +153,7 @@ func decodeJSON(c *gin.Context, destination interface{}) error {
 	return nil
 }
 
-func parseIfMatch(value string) (int64, error) {
+func parseApplicationCredentialRevision(value string) (int64, error) {
 	if strings.HasPrefix(value, `W/`) || strings.Contains(value, ",") {
 		return 0, appErrors.ErrInvalid
 	}
@@ -161,17 +161,17 @@ func parseIfMatch(value string) (int64, error) {
 	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
 		value = value[1 : len(value)-1]
 	}
-	return parsePositiveInt64(value)
+	return parsePositiveApplicationManagementInt64(value)
 }
 
-func parseOptionalPositiveInt64(value string) (int64, error) {
+func parseOptionalApplicationCredentialCursor(value string) (int64, error) {
 	if value == "" {
 		return 0, nil
 	}
-	return parsePositiveInt64(value)
+	return parsePositiveApplicationManagementInt64(value)
 }
 
-func parsePositiveInt64(value string) (int64, error) {
+func parsePositiveApplicationManagementInt64(value string) (int64, error) {
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || parsed <= 0 {
 		return 0, appErrors.ErrInvalid
@@ -179,7 +179,7 @@ func parsePositiveInt64(value string) (int64, error) {
 	return parsed, nil
 }
 
-func parseOptionalInt(value string) (int, error) {
+func parseApplicationCredentialListLimit(value string) (int, error) {
 	if value == "" {
 		return 0, nil
 	}

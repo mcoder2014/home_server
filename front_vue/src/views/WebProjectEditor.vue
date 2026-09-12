@@ -3,7 +3,7 @@
     <MyHeader />
     <main class="page-container project-editor" :class="{'is-create': isCreate}">
       <div class="editor-heading">
-        <el-button text @click="$router.push('/web-projects')">
+        <el-button text @click="$router.push('/web-share')">
           <el-icon><ArrowLeft /></el-icon>
           返回列表
         </el-button>
@@ -13,24 +13,24 @@
       </div>
 
       <div class="project-page-heading">
-        <span class="page-eyebrow">WEB PROJECTS</span>
-        <h1>{{ isCreate ? '新建网页项目' : project.name || '项目设置' }}</h1>
-        <p>{{ isCreate ? '给它一个名字和地址，再选择谁可以访问。' : '管理项目的访问范围、网页内容与发布版本。' }}</p>
+        <span class="page-eyebrow">WEB HOSTING</span>
+        <h1>{{ isCreate ? '新建网页托管' : project.name || '托管设置' }}</h1>
+        <p>{{ isCreate ? '为网页设置名称、地址和可见范围。' : '管理托管网页的访问范围、内容与发布版本。' }}</p>
       </div>
       <el-row :gutter="24">
         <el-col :xs="24" :lg="isCreate ? 24 : 14">
           <section class="card editor-section">
             <h2 class="page-title">基本信息</h2>
-            <p class="section-desc">项目地址只使用小写字母、数字和连字符，修改后旧地址立即失效。</p>
+            <p class="section-desc">访问地址只使用小写字母、数字和连字符，修改后旧地址立即失效。</p>
 
             <el-form ref="projectForm" :model="form" :rules="rules" label-position="top">
-              <el-form-item label="项目名称" prop="name">
+              <el-form-item label="托管名称" prop="name">
                 <el-input v-model="form.name" maxlength="256" show-word-limit />
               </el-form-item>
-              <el-form-item label="项目说明" prop="description">
+              <el-form-item label="托管说明" prop="description">
                 <el-input v-model="form.description" type="textarea" :rows="3" maxlength="500" show-word-limit />
               </el-form-item>
-              <el-form-item label="项目路径" prop="slug">
+              <el-form-item label="访问路径" prop="slug">
                 <el-input v-model="form.slug" maxlength="256">
                   <template #prepend>/p/</template>
                   <template #append>/</template>
@@ -46,7 +46,7 @@
               </el-form-item>
               <el-alert
                 v-if="form.access_mode === 'public'"
-                title="任何人都能访问项目内的 HTML、脚本、图片和附件。"
+                title="任何人都能访问托管内容中的 HTML、脚本、图片和附件。"
                 type="warning"
                 :closable="false"
                 show-icon
@@ -66,12 +66,12 @@
               </el-form-item>
               <div class="form-actions">
                 <el-button type="primary" :loading="saving" @click="saveProject">
-                  {{ isCreate ? '创建项目' : '保存设置' }}
+                  {{ isCreate ? '创建托管' : '保存设置' }}
                 </el-button>
                 <template v-if="!isCreate">
                   <el-button v-if="project.status === 'enabled'" :loading="mutating" @click="disableProject">下线</el-button>
                   <el-button v-if="project.status !== 'deleted'" type="danger" plain :loading="mutating" @click="deleteProject">删除</el-button>
-                  <el-button v-else type="primary" plain :loading="mutating" @click="restoreProject">恢复项目</el-button>
+                  <el-button v-else type="primary" plain :loading="mutating" @click="restoreProject">恢复托管</el-button>
                 </template>
               </div>
             </el-form>
@@ -126,11 +126,11 @@
             <div class="project-url">{{ absoluteProjectUrl }}</div>
             <div class="form-actions">
               <el-button @click="copyProjectUrl">复制链接</el-button>
-              <el-button v-if="project.status === 'enabled'" type="primary" @click="openProject">打开项目</el-button>
+              <el-button v-if="project.status === 'enabled'" type="primary" @click="openProject">打开网页</el-button>
             </div>
             <el-alert
               v-if="project.status !== 'enabled'"
-              title="草稿、已下线或已删除的项目不能从正式地址访问。"
+              title="草稿、已下线或已删除的托管内容不能从正式地址访问。"
               type="info"
               :closable="false"
               show-icon
@@ -141,7 +141,7 @@
             <div class="section-title-row">
               <div>
                 <h2 class="page-title">发布历史</h2>
-                <p class="section-desc">发布旧版本就是回滚，项目 URL 和可见范围不会改变。</p>
+                <p class="section-desc">发布旧版本就是回滚，访问 URL 和可见范围不会改变。</p>
               </div>
               <el-button :loading="loadingReleases" aria-label="刷新发布历史" circle @click="loadReleases(true)">
                 <el-icon><Refresh /></el-icon>
@@ -188,11 +188,11 @@ import {ElMessage, ElMessageBox} from 'element-plus'
 import {ArrowLeft, Refresh, UploadFilled} from '@element-plus/icons-vue'
 import MyHeader from '@/components/MyHeader'
 
-const {webProjectsApi} = require('@/api/web_projects.cjs')
+const {webShareApi} = require('@/api/web_projects.cjs')
 const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projects_behavior.cjs')
 
 export default {
-  name: 'WebProjectEditor',
+  name: 'WebShareEditor',
   components: {MyHeader, ArrowLeft, Refresh, UploadFilled},
   data() {
     return {
@@ -209,7 +209,7 @@ export default {
         member_user_ids: [],
       },
       rules: {
-        name: [{required: true, message: '请输入项目名称', trigger: 'blur'}],
+        name: [{required: true, message: '请输入托管名称', trigger: 'blur'}],
         slug: [
           {required: true, message: '请输入相对 URL', trigger: 'blur'},
           {pattern: /^[a-z0-9](?:[a-z0-9-]{1,254}[a-z0-9])$/, message: '请输入 3～256 位小写字母、数字或连字符，首尾不能是连字符', trigger: 'blur'},
@@ -232,7 +232,7 @@ export default {
   },
   computed: {
     isCreate() {
-      return this.$route.name === 'WebProjectCreate'
+      return this.$route.name === 'WebShareCreate'
     },
     absoluteProjectUrl() {
       if (!this.project.url) {
@@ -247,7 +247,7 @@ export default {
   watch: {
     project(project) {
       // 仅让当前详情更新标题，离开页面后的异步响应不能覆盖其他页面。
-      if (this.$route.name === 'WebProjectDetail' && String(project.id) === this.$route.params.id) {
+      if (this.$route.name === 'WebShareDetail' && String(project.id) === this.$route.params.id) {
         document.title = `CQ Home Server · ${project.name}`
       }
     },
@@ -278,14 +278,14 @@ export default {
     },
     async loadProject() {
       try {
-        this.applyProject(await webProjectsApi.getProject(this.$route.params.id))
+        this.applyProject(await webShareApi.getProject(this.$route.params.id))
       } catch (error) {
         this.handleError(error)
       }
     },
     async loadEligibleUsers() {
       try {
-        const data = await webProjectsApi.listEligibleUsers()
+        const data = await webShareApi.listEligibleUsers()
         this.eligibleUsers = data.items || []
       } catch (error) {
         this.handleError(error)
@@ -294,7 +294,7 @@ export default {
     async loadReleases(reset) {
       this.loadingReleases = true
       try {
-        const data = await webProjectsApi.listReleases(this.$route.params.id, {
+        const data = await webShareApi.listReleases(this.$route.params.id, {
           cursor: reset ? '' : this.releaseCursor,
           limit: 20,
         })
@@ -325,11 +325,11 @@ export default {
       this.saving = true
       try {
         const project = this.isCreate
-          ? await webProjectsApi.createProject(this.projectPayload())
-          : await webProjectsApi.updateProject(this.project.id, this.project.revision, this.projectPayload())
-        ElMessage.success(this.isCreate ? '项目已创建' : '项目设置已保存')
+          ? await webShareApi.createProject(this.projectPayload())
+          : await webShareApi.updateProject(this.project.id, this.project.revision, this.projectPayload())
+        ElMessage.success(this.isCreate ? '网页托管已创建' : '托管设置已保存')
         if (this.isCreate) {
-          await this.$router.replace(`/web-projects/${project.id}`)
+          await this.$router.replace(`/web-share/${project.id}`)
           this.applyProject(project)
           await this.loadReleases(true)
         } else {
@@ -359,10 +359,10 @@ export default {
       }
       this.uploading = true
       try {
-        const release = await webProjectsApi.uploadRelease(this.project.id, this.uploadFile, this.entryFile.trim())
+        const release = await webShareApi.uploadRelease(this.project.id, this.uploadFile, this.entryFile.trim())
         ElMessage.success('版本上传完成')
         if (publishNow) {
-          this.applyProject(await webProjectsApi.publishRelease(this.project.id, this.project.revision, release.id))
+          this.applyProject(await webShareApi.publishRelease(this.project.id, this.project.revision, release.id))
           ElMessage.success('新版本已发布')
         }
         this.uploadFile = null
@@ -380,7 +380,7 @@ export default {
       }
       this.mutating = true
       try {
-        this.applyProject(await webProjectsApi.publishRelease(this.project.id, this.project.revision, release.id))
+        this.applyProject(await webShareApi.publishRelease(this.project.id, this.project.revision, release.id))
         ElMessage.success('版本已发布')
       } catch (error) {
         this.handleError(error)
@@ -394,18 +394,18 @@ export default {
       } catch (error) {
         return
       }
-      await this.runProjectMutation(() => webProjectsApi.disableProject(this.project.id, this.project.revision), '项目已下线')
+      await this.runProjectMutation(() => webShareApi.disableProject(this.project.id, this.project.revision), '托管网页已下线')
     },
     async deleteProject() {
       try {
-        await ElMessageBox.confirm('删除后项目进入回收期并立即停止访问，原路径不会自动释放。需要复用该路径时，请先修改项目路径再删除。', '确认删除', {type: 'warning'})
+        await ElMessageBox.confirm('删除后托管内容进入回收期并立即停止访问，原路径不会自动释放。需要复用该路径时，请先修改访问路径再删除。', '确认删除', {type: 'warning'})
       } catch (error) {
         return
       }
-      await this.runProjectMutation(() => webProjectsApi.deleteProject(this.project.id, this.project.revision), '项目已删除')
+      await this.runProjectMutation(() => webShareApi.deleteProject(this.project.id, this.project.revision), '托管内容已删除')
     },
     async restoreProject() {
-      await this.runProjectMutation(() => webProjectsApi.restoreProject(this.project.id, this.project.revision), '项目已恢复为下线状态')
+      await this.runProjectMutation(() => webShareApi.restoreProject(this.project.id, this.project.revision), '托管内容已恢复为下线状态')
     },
     async runProjectMutation(action, successMessage) {
       this.mutating = true
@@ -444,7 +444,7 @@ export default {
     },
     async openProject() {
       try {
-        await webProjectsApi.createBrowserLogin()
+        await webShareApi.createBrowserLogin()
         window.location.assign(this.project.url)
       } catch (error) {
         this.handleError(error)
@@ -460,7 +460,7 @@ export default {
     },
     async downloadRelease(release) {
       try {
-        const response = await webProjectsApi.downloadRelease(this.project.id, release.id)
+        const response = await webShareApi.downloadRelease(this.project.id, release.id)
         const url = URL.createObjectURL(response.data)
         const link = document.createElement('a')
         link.href = url
@@ -488,7 +488,7 @@ export default {
         return
       }
       if (error.status === 409) {
-        ElMessage.error('项目已被其他操作修改，正在刷新最新数据')
+        ElMessage.error('托管内容已被其他操作修改，正在刷新最新数据')
         if (!this.isCreate) {
           this.loadProject()
         }

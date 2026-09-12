@@ -1,10 +1,29 @@
 package webprojects
 
 import (
+	"net/http"
 	"testing"
 
+	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/data"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInitRouterRegistersPrimaryAndCompatibilityWebShareAPIs(t *testing.T) {
+	originalConfig, originalRoutes := config.Global(), data.RouterMap
+	t.Cleanup(func() { config.SetGlobalConfig(originalConfig); data.RouterMap = originalRoutes })
+	data.RouterMap = map[string]map[string]data.HttpRoute{}
+	conf := config.Config{}
+	conf.WebProjects.Enabled = true
+	config.SetGlobalConfig(conf)
+
+	require.NoError(t, InitRouter())
+	for _, route := range []string{"/api/web-share", "/api/web-share/:id", "/api/web-projects", "/api/web-projects/:id"} {
+		require.Contains(t, data.RouterMap, route)
+	}
+	require.Contains(t, data.RouterMap["/api/web-share"], http.MethodGet)
+	require.Contains(t, data.RouterMap["/api/web-share"], http.MethodPost)
+}
 
 func TestParseIfMatch(t *testing.T) {
 	for _, value := range []string{"7", `"7"`} {

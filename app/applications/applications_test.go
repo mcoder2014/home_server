@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestApplicationViewNeverContainsCredentialDigestsOrOwner(t *testing.T) {
+func TestApplicationCredentialViewNeverContainsCredentialDigestsOrOwner(t *testing.T) {
 	now := time.Date(2026, 9, 12, 11, 0, 0, 0, time.UTC)
 	lastIssued := now.Add(-time.Minute)
 	application := &model.Application{
@@ -20,7 +20,7 @@ func TestApplicationViewNeverContainsCredentialDigestsOrOwner(t *testing.T) {
 		Revision: 4, SecretVersion: 2, CreateTime: now.Add(-time.Hour), UpdateTime: now, ExpiresAt: now.Add(24 * time.Hour), LastIssuedAt: &lastIssued,
 	}
 
-	view := newApplicationView(application)
+	view := buildApplicationCredentialView(application)
 	require.Equal(t, "123", view.ID)
 	require.Equal(t, "enabled", view.Status)
 	require.Equal(t, application.AccessKey, view.AccessKey)
@@ -31,19 +31,19 @@ func TestApplicationViewNeverContainsCredentialDigestsOrOwner(t *testing.T) {
 	require.NotContains(t, string(encoded), "owner_user_id")
 }
 
-func TestManagementRequiresUserPrincipal(t *testing.T) {
-	ownerID, err := requireOwner(&utils.Principal{Kind: "user", UserID: 101})
+func TestApplicationCredentialManagementRequiresUserActor(t *testing.T) {
+	ownerID, err := requireApplicationCredentialOwner(&utils.Principal{Kind: "user", UserID: 101})
 	require.NoError(t, err)
 	require.Equal(t, int64(101), ownerID)
-	_, err = requireOwner(&utils.Principal{Kind: "application", UserID: 101, ApplicationID: 22})
+	_, err = requireApplicationCredentialOwner(&utils.Principal{Kind: "application", UserID: 101, ApplicationID: 22})
 	require.Error(t, err)
-	_, err = requireOwner(nil)
+	_, err = requireApplicationCredentialOwner(nil)
 	require.Error(t, err)
 }
 
-func TestStatusNameRejectsUnknownDatabaseValue(t *testing.T) {
-	require.Equal(t, "enabled", statusName(model.ApplicationStatusEnabled))
-	require.Equal(t, "disabled", statusName(model.ApplicationStatusDisabled))
-	require.Equal(t, "revoked", statusName(model.ApplicationStatusRevoked))
-	require.Empty(t, statusName(99))
+func TestApplicationCredentialStatusNameRejectsUnknownDatabaseValue(t *testing.T) {
+	require.Equal(t, "enabled", applicationCredentialStatusName(model.ApplicationStatusEnabled))
+	require.Equal(t, "disabled", applicationCredentialStatusName(model.ApplicationStatusDisabled))
+	require.Equal(t, "revoked", applicationCredentialStatusName(model.ApplicationStatusRevoked))
+	require.Empty(t, applicationCredentialStatusName(99))
 }

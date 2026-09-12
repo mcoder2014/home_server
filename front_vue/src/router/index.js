@@ -7,9 +7,9 @@ import BookList from "@/views/BookList"
 import AddBook from "@/views/AddBook"
 import Applications from '@/views/Applications'
 import ScanCodePage from "../views/ScanCodePage"
-import WebProjectEditor from '@/views/WebProjectEditor'
-import WebProjectList from '@/views/WebProjectList'
-import WebProjectOpen from '@/views/WebProjectOpen'
+import WebShareEditor from '@/views/WebProjectEditor'
+import WebShareList from '@/views/WebProjectList'
+import WebShareOpen from '@/views/WebProjectOpen'
 
 const routes = [
     {
@@ -76,38 +76,42 @@ const routes = [
         }
     },
     {
-        path: '/web-projects',
-        name: 'WebProjectList',
-        component: WebProjectList,
+        path: '/web-share',
+        alias: '/web-projects',
+        name: 'WebShareList',
+        component: WebShareList,
         meta: {
-            title: '网页项目',
+            title: '网页托管',
             requireAuth: true
         }
     },
     {
-        path: '/web-projects/new',
-        name: 'WebProjectCreate',
-        component: WebProjectEditor,
+        path: '/web-share/new',
+        alias: '/web-projects/new',
+        name: 'WebShareCreate',
+        component: WebShareEditor,
         meta: {
-            title: '新建网页项目',
+            title: '新建网页托管',
             requireAuth: true
         }
     },
     {
-        path: '/web-projects/open',
-        name: 'WebProjectOpen',
-        component: WebProjectOpen,
+        path: '/web-share/open',
+        alias: '/web-projects/open',
+        name: 'WebShareOpen',
+        component: WebShareOpen,
         meta: {
-            title: '打开网页项目',
+            title: '打开托管网页',
             requireAuth: false
         }
     },
     {
-        path: '/web-projects/:id',
-        name: 'WebProjectDetail',
-        component: WebProjectEditor,
+        path: '/web-share/:id',
+        alias: '/web-projects/:id',
+        name: 'WebShareDetail',
+        component: WebShareEditor,
         meta: {
-            title: '项目设置',
+            title: '托管设置',
             requireAuth: true
         }
     }

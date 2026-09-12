@@ -210,17 +210,14 @@ func ClassifyStorageError(err error) error {
 }
 
 func ReleaseContentRoot(conf *config.WebProjectsConfig, release *model.WebProjectRelease) (string, error) {
-	if conf == nil || release == nil {
-		return "", ErrDependency
+	directory, missing, err := ReleaseDirectory(conf, release)
+	if err != nil || missing {
+		return "", fmt.Errorf("%w: release directory unavailable", ErrDependency)
 	}
-	expectedKey := filepath.ToSlash(filepath.Join("projects", strconv.FormatInt(release.ProjectID, 10), "releases", strconv.FormatInt(release.ID, 10), "content"))
-	if release.StorageKey != expectedKey {
-		return "", ErrDependency
-	}
-	root := filepath.Clean(conf.StorageRoot)
-	content := filepath.Clean(filepath.Join(root, filepath.FromSlash(release.StorageKey)))
-	if content == root || !strings.HasPrefix(content, root+string(os.PathSeparator)) {
-		return "", ErrDependency
+	content := filepath.Join(directory, "content")
+	info, err := os.Lstat(content)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", fmt.Errorf("%w: release content unavailable", ErrDependency)
 	}
 	return content, nil
 }

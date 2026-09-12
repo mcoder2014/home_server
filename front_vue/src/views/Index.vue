@@ -7,7 +7,7 @@
           <span class="page-eyebrow">你的家庭工作台</span>
           <h1>欢迎回来，{{ username }}</h1>
           <p>收藏好书，记录想法，让实用的小工具随时可用。<br>你的家庭服务，从这里开始。</p>
-          <router-link class="welcome-link" to="/web-projects">进入网页项目 <el-icon><ArrowRight /></el-icon></router-link>
+          <router-link class="welcome-link" to="/web-share">进入网页托管 <el-icon><ArrowRight /></el-icon></router-link>
         </div>
         <div class="home-illustration" aria-hidden="true">
           <div class="server-tile tile-back"><span></span><i></i><i></i></div>
@@ -22,11 +22,11 @@
         <span>一个入口，连接你的日常</span>
       </div>
       <div class="service-grid">
-        <router-link class="service-card service-featured" to="/web-projects">
-          <div class="service-top"><span class="service-icon"><el-icon :size="25"><Monitor /></el-icon></span><span class="service-label">WEB PROJECTS</span></div>
-          <h3>网页项目</h3>
-          <p>把文档和前端工具变成一个链接。<br>上传、发布，选择谁可以访问。</p>
-          <span class="service-link">管理项目 <el-icon><ArrowRight /></el-icon></span>
+        <router-link class="service-card service-featured" to="/web-share">
+          <div class="service-top"><span class="service-icon"><el-icon :size="25"><Monitor /></el-icon></span><span class="service-label">WEB HOSTING</span></div>
+          <h3>网页托管</h3>
+          <p>托管 HTML 文档和静态网页。<br>上传、发布，选择谁可以访问。</p>
+          <span class="service-link">管理托管内容 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
         <router-link class="service-card" to="/book/list">
           <div class="service-top"><span class="service-icon books-icon"><el-icon :size="25"><Reading /></el-icon></span><span class="service-label">LIBRARY</span></div>

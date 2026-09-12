@@ -4,11 +4,11 @@
       <div v-if="loading" class="open-status">
         <el-icon class="is-loading" :size="32"><Loading /></el-icon>
         <h2>正在建立网页访问登录态</h2>
-        <p>完成后会自动返回项目页面。</p>
+        <p>完成后会自动打开托管网页。</p>
       </div>
-      <el-result v-else icon="error" title="无法打开项目" :sub-title="errorMessage">
+      <el-result v-else icon="error" title="无法打开托管网页" :sub-title="errorMessage">
         <template #extra>
-          <el-button type="primary" @click="$router.replace('/web-projects')">返回项目列表</el-button>
+          <el-button type="primary" @click="$router.replace('/web-share')">返回托管列表</el-button>
         </template>
       </el-result>
     </el-card>
@@ -18,11 +18,11 @@
 <script>
 import {Loading} from '@element-plus/icons-vue'
 
-const {webProjectsApi} = require('@/api/web_projects.cjs')
+const {webShareApi} = require('@/api/web_projects.cjs')
 const {isSafeProjectTarget, normalizeInternalRedirect} = require('@/utils/web_projects_navigation.cjs')
 
 export default {
-  name: 'WebProjectOpen',
+  name: 'WebShareOpen',
   components: {Loading},
   data() {
     return {
@@ -38,7 +38,7 @@ export default {
       const target = normalizeInternalRedirect(this.$route.query.target, this.$route.hash)
       if (!isSafeProjectTarget(target)) {
         this.loading = false
-        this.errorMessage = '目标地址无效，只能打开本站 /p/ 下的网页项目。'
+        this.errorMessage = '目标地址无效，只能打开本站 /p/ 下的托管网页。'
         return
       }
 
@@ -48,7 +48,7 @@ export default {
       }
 
       try {
-        await webProjectsApi.createBrowserLogin()
+        await webShareApi.createBrowserLogin()
       } catch (error) {
         if (error.status === 401) {
           localStorage.removeItem('token')
@@ -61,15 +61,15 @@ export default {
       }
 
       try {
-        await webProjectsApi.probeProjectSession(target)
+        await webShareApi.probeProjectSession(target)
         window.location.replace(target)
       } catch (error) {
         this.loading = false
         if (error.status === 401) {
-          this.errorMessage = '浏览器未能保存项目访问 Cookie。请允许本站 Cookie，或确认当前页面使用 HTTPS 后重试。'
+          this.errorMessage = '浏览器未能保存网页访问 Cookie。请允许本站 Cookie，或确认当前页面使用 HTTPS 后重试。'
           return
         }
-        this.errorMessage = error.message || '登录已建立，但当前项目无法访问。'
+        this.errorMessage = error.message || '登录已建立，但当前托管网页无法访问。'
       }
     },
   },

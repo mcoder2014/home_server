@@ -148,7 +148,7 @@ class WebProjectsAPI:
             "member_user_ids": members or [],
             "client_request_id": f"acceptance-{nonce}",
         }
-        project = self.data(self.request("POST", "/api/web-projects", payload=payload), 201)
+        project = self.data(self.request("POST", "/api/web-share", payload=payload), 201)
         require(isinstance(project.get("id"), str), "project id is not a JSON string")
         require(project.get("revision") == 1, "new project revision is not 1")
         self.projects[project["id"]] = project
@@ -157,7 +157,7 @@ class WebProjectsAPI:
     def patch_project(self, project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         response = self.request(
             "PATCH",
-            f"/api/web-projects/{project['id']}",
+            f"/api/web-share/{project['id']}",
             payload=payload,
             headers={"If-Match": str(project["revision"])},
         )
@@ -186,7 +186,7 @@ class WebProjectsAPI:
         ]
         response = self.request(
             "POST",
-            f"/api/web-projects/{project['id']}/releases",
+            f"/api/web-share/{project['id']}/releases",
             headers={
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
                 "Idempotency-Key": "acceptance-" + secrets.token_hex(8),
@@ -198,7 +198,7 @@ class WebProjectsAPI:
     def publish(self, project: dict[str, Any], release_id: str) -> dict[str, Any]:
         response = self.request(
             "POST",
-            f"/api/web-projects/{project['id']}/publish",
+            f"/api/web-share/{project['id']}/publish",
             payload={"release_id": release_id},
             headers={"If-Match": f'"{project["revision"]}"'},
         )
@@ -225,13 +225,13 @@ class WebProjectsAPI:
     def browser_cookie(self, role: str) -> tuple[str, str]:
         response = self.request(
             "POST",
-            "/api/web-projects/browser-login",
+            "/api/web-share/browser-login",
             role=role,
             headers={"Origin": self.client.origin},
         )
         self.data(response, 200)
         set_cookie = response.header("set-cookie")
-        require(set_cookie.startswith("__Host-web_projects_session="), "browser session cookie name changed")
+        require(set_cookie.startswith("__Host-cq_session="), "browser session cookie name changed")
         cookie = set_cookie.split(";", 1)[0]
         return cookie, set_cookie
 
@@ -260,7 +260,7 @@ class WebProjectsAPI:
                     "If-Match": str(project["revision"]),
                 }
                 response = self.client.request(
-                    "DELETE", f"/api/web-projects/{project_id}", headers=headers
+                    "DELETE", f"/api/web-share/{project_id}", headers=headers
                 )
                 if response.status not in {200, 404}:
                     failures.append(f"project cleanup returned HTTP {response.status}")
@@ -318,7 +318,7 @@ class Runner:
     def baseline(self) -> None:
         def probe() -> str:
             ping = self.client.request("GET", "/ping")
-            route = self.client.request("GET", "/api/web-projects")
+            route = self.client.request("GET", "/api/web-share")
             require(ping.status == 200, f"health endpoint returned HTTP {ping.status}")
             require(route.status == 404, f"new route unexpectedly returned HTTP {route.status}")
             return "health=200, web-projects=404 (expected pre-implementation RED)"
@@ -337,12 +337,12 @@ class Runner:
     def management_auth(self) -> str:
         assert self.api is not None
         project = self.api.create_project("owner", label="management")
-        unauth = self.api.request("GET", f"/api/web-projects/{project['id']}", role=None)
+        unauth = self.api.request("GET", f"/api/web-share/{project['id']}", role=None)
         require(unauth.status == 401, f"unauthenticated detail returned HTTP {unauth.status}")
-        member = self.api.request("GET", f"/api/web-projects/{project['id']}", role="member")
+        member = self.api.request("GET", f"/api/web-share/{project['id']}", role="member")
         require(member.status in {403, 404}, f"non-owner detail returned HTTP {member.status}")
         detail = self.api.data(
-            self.api.request("GET", f"/api/web-projects/{project['id']}"), 200
+            self.api.request("GET", f"/api/web-share/{project['id']}"), 200
         )
         require(detail["id"] == project["id"], "detail returned a different project")
         return "unauthenticated=401, non-owner hidden, owner envelope valid"
@@ -365,7 +365,7 @@ class Runner:
         require(self.api.content(authenticated["url"], cookie=authenticated_cookie).status == 200, "authenticated user cannot read")
         redirect = self.api.content(authenticated["url"])
         require(redirect.status == 302, f"document navigation returned HTTP {redirect.status}")
-        require(redirect.header("location").startswith("/web-projects/open?target="), "document redirect target changed")
+        require(redirect.header("location").startswith("/web-share/open?target="), "document redirect target changed")
         asset = self.api.content(authenticated["url"] + "assets/app.js")
         require(asset.status == 401, f"unauthenticated asset returned HTTP {asset.status}")
 
@@ -387,7 +387,7 @@ class Runner:
         require(self.api.content(project["url"]).status == 200, "new slug is not readable")
         stale = self.api.request(
             "PATCH",
-            f"/api/web-projects/{project['id']}",
+            f"/api/web-share/{project['id']}",
             payload={"description": "stale update must fail"},
             headers={"If-Match": str(old_revision)},
         )
@@ -395,7 +395,7 @@ class Runner:
         deleted = self.api.data(
             self.api.request(
                 "DELETE",
-                f"/api/web-projects/{project['id']}",
+                f"/api/web-share/{project['id']}",
                 headers={"If-Match": str(project["revision"])},
             ),
             200,
@@ -405,7 +405,7 @@ class Runner:
         restored = self.api.data(
             self.api.request(
                 "POST",
-                f"/api/web-projects/{project['id']}/restore",
+                f"/api/web-share/{project['id']}/restore",
                 headers={"If-Match": str(deleted["revision"])},
             ),
             200,

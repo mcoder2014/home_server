@@ -46,7 +46,7 @@ func serveProjectContent(c *gin.Context) {
 				target := c.Request.URL.RequestURI()
 				if validateProjectTarget(target) == nil {
 					c.Header("Cache-Control", "no-store")
-					c.Redirect(http.StatusFound, "/web-projects/open?target="+url.QueryEscape(target))
+					c.Redirect(http.StatusFound, "/web-share/open?target="+url.QueryEscape(target))
 					return
 				}
 			}
@@ -148,7 +148,12 @@ func serveReleaseDownload(c *gin.Context, conf *config.WebProjectsConfig, releas
 		ginfmt.Fail(c, service.ErrDependency)
 		return
 	}
-	temp, err := os.CreateTemp(filepath.Join(conf.StorageRoot, "staging"), "download-*.zip")
+	stagingRoot, err := service.UserStagingRoot(conf, release.UploadedBy)
+	if err != nil {
+		ginfmt.Fail(c, service.ErrDependency)
+		return
+	}
+	temp, err := os.CreateTemp(stagingRoot, "download-*.zip")
 	if err != nil {
 		ginfmt.Fail(c, service.ErrDependency)
 		return
@@ -172,7 +177,7 @@ func serveReleaseDownload(c *gin.Context, conf *config.WebProjectsConfig, releas
 		return
 	}
 	c.Header("Content-Type", "application/zip")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="web-project-%d-release-%d.zip"`, release.ProjectID, release.ID))
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="web-share-%d-release-%d.zip"`, release.ProjectID, release.ID))
 	c.Header("Cache-Control", "no-store")
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), temp)
 }

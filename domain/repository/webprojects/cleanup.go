@@ -20,7 +20,10 @@ func (repository *Repository) FindRemovableDeletingRelease(projectID, releaseID 
 	if err != nil {
 		return nil, err
 	}
-	if project != nil && project.CurrentReleaseID != nil && *project.CurrentReleaseID == releaseID {
+	if project == nil || project.OwnerUserID <= 0 || release.UploadedBy != project.OwnerUserID {
+		return nil, errors.New("release storage owner does not match project")
+	}
+	if project.CurrentReleaseID != nil && *project.CurrentReleaseID == releaseID {
 		return nil, nil
 	}
 	return release, nil

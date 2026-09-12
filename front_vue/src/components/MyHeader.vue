@@ -8,8 +8,8 @@
 
       <nav class="header-nav" aria-label="主导航">
         <router-link to="/" :class="{active: $route.path === '/'}">首页</router-link>
-        <router-link to="/web-projects" :class="{active: $route.path.startsWith('/web-projects')}">
-          <el-icon><Monitor /></el-icon>网页项目
+        <router-link to="/web-share" :class="{active: $route.path.startsWith('/web-share') || $route.path.startsWith('/web-projects')}">
+          <el-icon><Monitor /></el-icon>网页托管
         </router-link>
         <router-link to="/book/list" :class="{active: $route.path.startsWith('/book/')}">
           <el-icon><Reading /></el-icon>图书管理

@@ -4,31 +4,31 @@
     <main class="page-container">
       <div class="action-bar project-list-actions">
         <div>
-          <span class="page-eyebrow">WEB PROJECTS</span>
-          <h1 class="page-title">网页项目</h1>
-          <p class="page-desc">给文档和小工具一个固定地址，轻松管理每一次分享。</p>
+          <span class="page-eyebrow">WEB HOSTING</span>
+          <h1 class="page-title">网页托管</h1>
+          <p class="page-desc">为 HTML 文档和静态网页提供固定地址，并控制谁可以访问。</p>
         </div>
-        <el-button type="primary" size="large" @click="$router.push('/web-projects/new')">
-          <el-icon><Plus /></el-icon>新建项目
+        <el-button type="primary" size="large" @click="$router.push('/web-share/new')">
+          <el-icon><Plus /></el-icon>新建托管
         </el-button>
       </div>
 
-      <section class="card projects-card" aria-label="项目列表">
+      <section class="card projects-card" aria-label="托管内容列表">
         <div class="list-filter">
           <el-radio-group v-model="statusFilter" @change="loadProjects(true)">
-            <el-radio-button label="active">当前项目</el-radio-button>
+            <el-radio-button label="active">当前托管</el-radio-button>
             <el-radio-button label="deleted">回收站</el-radio-button>
           </el-radio-group>
           <el-button :loading="loading" @click="loadProjects(true)"><el-icon><Refresh /></el-icon>刷新</el-button>
         </div>
 
         <el-table v-loading="loading" :data="projects" class="desktop-projects">
-          <el-table-column prop="name" label="项目名称 / 访问路径" min-width="240">
+          <el-table-column prop="name" label="名称 / 访问路径" min-width="240">
             <template #default="scope">
               <div class="project-identity">
                 <span class="project-icon"><el-icon :size="19"><Monitor /></el-icon></span>
                 <div class="project-text">
-                  <router-link :to="`/web-projects/${scope.row.id}`" class="project-name">{{ scope.row.name }}</router-link>
+                  <router-link :to="`/web-share/${scope.row.id}`" class="project-name">{{ scope.row.name }}</router-link>
                   <div class="project-path">{{ scope.row.url }}</div>
                 </div>
               </div>
@@ -50,8 +50,8 @@
             </template>
           </el-table-column>
           <template #empty>
-            <el-empty :description="statusFilter === 'deleted' ? '回收站是空的' : '从你的第一个网页项目开始'" :image-size="90">
-              <el-button v-if="statusFilter === 'active'" type="primary" plain @click="$router.push('/web-projects/new')">新建项目</el-button>
+            <el-empty :description="statusFilter === 'deleted' ? '回收站是空的' : '从你的第一个托管网页开始'" :image-size="90">
+              <el-button v-if="statusFilter === 'active'" type="primary" plain @click="$router.push('/web-share/new')">新建托管</el-button>
             </el-empty>
           </template>
         </el-table>
@@ -61,7 +61,7 @@
             <div class="project-identity">
               <span class="project-icon"><el-icon :size="19"><Monitor /></el-icon></span>
               <div class="project-text">
-                <router-link :to="`/web-projects/${project.id}`" class="project-name">{{ project.name }}</router-link>
+                <router-link :to="`/web-share/${project.id}`" class="project-name">{{ project.name }}</router-link>
                 <div class="project-path">{{ project.url }}</div>
               </div>
             </div>
@@ -71,11 +71,11 @@
               <el-button v-if="project.status === 'enabled'" size="small" type="primary" plain @click="openProject(project)">打开</el-button>
             </div>
           </article>
-          <el-empty v-if="!loading && projects.length === 0" :description="statusFilter === 'deleted' ? '回收站是空的' : '还没有网页项目，点击上方新建'" :image-size="80" />
+          <el-empty v-if="!loading && projects.length === 0" :description="statusFilter === 'deleted' ? '回收站是空的' : '还没有托管网页，点击上方新建'" :image-size="80" />
         </div>
         <div v-if="hasMore" class="load-more"><el-button :loading="loadingMore" @click="loadMore">加载更多</el-button></div>
       </section>
-      <p class="project-list-note">支持 HTML 文档与静态网页 ZIP · 每个项目都可以单独设置访问范围</p>
+      <p class="project-list-note">支持 HTML 文档与静态网页 ZIP · 每项托管内容都可以单独设置访问范围</p>
     </main>
   </div>
 </template>
@@ -85,10 +85,10 @@ import {ElMessage} from 'element-plus'
 import {Monitor, Plus, Refresh} from '@element-plus/icons-vue'
 import MyHeader from '@/components/MyHeader'
 
-const {webProjectsApi} = require('@/api/web_projects.cjs')
+const {webShareApi} = require('@/api/web_projects.cjs')
 
 export default {
-  name: 'WebProjectList',
+  name: 'WebShareList',
   components: {MyHeader, Monitor, Plus, Refresh},
   data() {
     return {
@@ -138,7 +138,7 @@ export default {
         if (this.statusFilter === 'deleted') {
           params.status = 'deleted'
         }
-        const data = await webProjectsApi.listProjects(params)
+        const data = await webShareApi.listProjects(params)
         this.projects = reset ? data.items : this.projects.concat(data.items)
         this.nextCursor = data.next_cursor || ''
         this.hasMore = Boolean(data.has_more)
@@ -154,11 +154,11 @@ export default {
       this.loadProjects(false)
     },
     viewProject(project) {
-      this.$router.push(`/web-projects/${project.id}`)
+      this.$router.push(`/web-share/${project.id}`)
     },
     async openProject(project) {
       try {
-        await webProjectsApi.createBrowserLogin()
+        await webShareApi.createBrowserLogin()
         window.location.assign(project.url)
       } catch (error) {
         this.handleError(error)
@@ -170,7 +170,7 @@ export default {
         this.requireLogin()
         return
       }
-      ElMessage.error(error.message || '网页项目加载失败')
+      ElMessage.error(error.message || '网页托管内容加载失败')
     },
   },
 }
