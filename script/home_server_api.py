@@ -443,7 +443,7 @@ def main(argv=None) -> int:
             else:
                 output_body = response.body
             write_output(args.output, output_body)
-            print(json.dumps({"output": str(args.output), "bytes": len(output_body)}, ensure_ascii=False))
+            print(json.dumps(redact_output({"output": str(args.output), "bytes": len(output_body)}, sensitive), ensure_ascii=False))
         else:
             result = redact_output(business_result(response, sensitive), sensitive)
             if isinstance(result, str):
@@ -452,7 +452,7 @@ def main(argv=None) -> int:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except ClientError as error:
-        print(f"错误：{error}", file=sys.stderr)
+        print(f"错误：{sanitize_message(error)}", file=sys.stderr)
         return 1
 
 

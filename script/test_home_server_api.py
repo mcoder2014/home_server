@@ -224,5 +224,13 @@ class ArgumentPrivacyTests(unittest.TestCase):
         self.assertNotIn(SECRET_KEY, output.getvalue())
 
 
+    def test_credential_shaped_file_error_is_not_echoed(self):
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output):
+            code = client.main(["--base-url", "https://home.example", "--path", "/api/web-projects", "--credentials-file", SECRET_KEY])
+        self.assertEqual(code, 1)
+        self.assertNotIn(SECRET_KEY, output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
