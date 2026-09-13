@@ -124,3 +124,15 @@ fabric.properties
 # Local Python caches from API client and verification scripts
 __pycache__/
 *.pyc
+
+# Private deployment values and environment files stay outside public examples.
+/deploy/local/
+.env
+.env.*
+!.env.example
+*.private.yaml
+*.private.yml
+*.private.conf
+
+# Preserve local client configuration privacy after the client source is moved.
+/client/config/

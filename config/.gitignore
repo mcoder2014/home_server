@@ -1,1 +1,3 @@
-config.yaml
+*.yaml
+*.yml
+!config_example.yaml

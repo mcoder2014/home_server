@@ -1,0 +1,29 @@
+# Example only: documentation IPs and example.com must be replaced in an untracked local copy.
+[Unit]
+Description=CQ Home Server API
+After=network.target mariadb.service
+Requires=mariadb.service
+PartOf=home_server.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=home-server
+Group=home-server
+WorkingDirectory=/opt/home_server/current
+ExecStart=/opt/home_server/current/bin/home_server -port 18080 -conf /etc/home_server/server.yaml
+Environment=HOME_SERVER_LOG_FILE=/var/log/home_server/run.log
+# The existing signal handler exits 1. Always restart unexpected exits, while
+# explicit systemctl stop remains stopped and treats that signal exit as clean.
+SuccessExitStatus=1
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=home_server.target

@@ -39,6 +39,12 @@ npm run build
 
 标题随前端路由切换，HTML 模板提供加载前的默认标题和站点图标。托管在 `/p/{slug}/` 的用户网页保留各自的 HTML 标题，不改写上传内容。
 
+### 前后端服务管理
+
+通用部署示例和回滚说明见 [deploy/pi/README.md](deploy/pi/README.md)。前端通过独立 Nginx 服务运行在 `192.0.2.10:18081`，后端为 `18080`；TLS 网关使用 `https://home.example.com:8080` 提供同源页面与 API。
+
+`home_server.target` 统一控制前后端启动、停止和重启，也可以分别操作 `home_server.service` 与 `home_server_frontend.service`。示例使用文档地址与保留域名，实际环境配置不得提交。模板包含开机自启动、网络就绪等待、版本目录与私有配置；安装前需要完成数据库结构核对和备份。
+
 ### home_server
 
 执行 `./build.sh` 构建服务端二进制文件。构建前准备 `config/config.yaml`；不再需要客户端配置。
@@ -309,3 +315,7 @@ A: 本项目是家庭服务，内网只暴露了 http，外网通过一个虚拟
 ## 版权信息 MIT LICENSE
 
 本项目为个人兴趣，目的在于满足个人需求，不提供技术支持，使用本系统造成数据丢失、机器损坏等损失概不负责。
+
+### Cloudflare 集成测试配置
+
+服务端 Cloudflare RPC 集成测试默认跳过外部调用。使用专用测试区域时，通过未提交配置提供凭据，并显式设置 `HOME_SERVER_TEST_CLOUDFLARE_DOMAIN`（DNS 区域的域名，不是 zone ID）。未设置时在任何 RPC 前跳过；测试日志只记录返回数量，不输出 DNS 记录明细。客户端测试与部署说明已迁移至 `life_tools`，不在本仓库维护。

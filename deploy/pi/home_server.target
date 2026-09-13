@@ -1,0 +1,8 @@
+# Example only: documentation IPs and example.com must be replaced in an untracked local copy.
+[Unit]
+Description=CQ Home Server frontend and API
+Wants=home_server.service home_server_frontend.service
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
