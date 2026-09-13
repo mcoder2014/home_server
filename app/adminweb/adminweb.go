@@ -185,6 +185,7 @@ func Get(ctx context.Context, actorID, version, projectID int64) (*Detail, error
 // exact authenticated password/version under sorted user locks, then updates
 // moderation and its audit record atomically. Restoring moderator-deleted
 // content remains blocked until a separate unblock action approves it.
+// Unblocking keeps content disabled until its owner explicitly publishes again.
 func Change(ctx context.Context, actorID, version, projectID, revision int64, action string, input MutationRequest) (*ProjectView, error) {
 	input.Reason = strings.TrimSpace(input.Reason)
 	if input.Reason == "" || !utf8.ValidString(input.Reason) || utf8.RuneCountInString(input.Reason) > 512 || projectID <= 0 || revision <= 0 {
@@ -256,6 +257,7 @@ func Change(ctx context.Context, actorID, version, projectID, revision int64, ac
 				return apperrors.ErrConflict
 			}
 			fields["moderation_status"] = "normal"
+			fields["status"] = model.WebProjectStatusDisabled
 		case "delete":
 			if project.Status == model.WebProjectStatusDeleted {
 				return apperrors.ErrConflict

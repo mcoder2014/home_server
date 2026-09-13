@@ -17,10 +17,11 @@ import (
 // proxy chain. Missing sources share a bounded fallback budget.
 const PasswordSourceIPKey = "home_server.password_source_ip"
 
-// PasswordBudgetScopeKey is set by the DAV middleware, never from client input.
-// Only the fixed WebDAV scope gets a separate budget; arbitrary scopes do not.
+// PasswordBudgetScopeKey is set only by trusted authentication middleware, never
+// from client input. Only the fixed DAV and verified-session scopes are distinct.
 const PasswordBudgetScopeKey = "home_server.password_budget_scope"
 const PasswordBudgetWebDAV = "webdav"
+const PasswordBudgetAuthenticated = "authenticated"
 
 const passwordFailureWindow = time.Minute
 const maxPasswordFailureKeys = 4096
@@ -33,12 +34,14 @@ type passwordFailure struct {
 var passwordFailureLock sync.Mutex
 var passwordFailures = map[[32]byte]passwordFailure{}
 var webDAVPasswordFailures = map[[32]byte]passwordFailure{}
+var authenticatedPasswordFailures = map[[32]byte]passwordFailure{}
 
-// VerifyPassword shares failed-password budgets across website login and password
-// confirmation. DAV Basic has independent account, IP and capacity budgets so
-// website lockouts cannot block native clients. Aliases share an account budget
-// within each scope; successes do not consume or reset it. Failed checks update
-// counters under the mutex; requests already admitted can finish concurrently.
+// VerifyPassword keeps anonymous login, DAV Basic and verified-session password
+// confirmation in independent account, IP and capacity budgets. Anonymous
+// failures cannot block security actions in an existing authenticated session.
+// Aliases share an account budget within each scope; successes do not consume or
+// reset it. Failed checks update counters under the mutex; already admitted
+// requests can finish concurrently.
 func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password string) error {
 	accountKey := "login:" + strings.ToLower(strings.TrimSpace(loginKey))
 	if userID > 0 {
@@ -55,8 +58,11 @@ func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password 
 	now := time.Now()
 	passwordFailureLock.Lock()
 	failures := passwordFailures
-	if ctx.Value(PasswordBudgetScopeKey) == PasswordBudgetWebDAV {
+	switch ctx.Value(PasswordBudgetScopeKey) {
+	case PasswordBudgetWebDAV:
 		failures = webDAVPasswordFailures
+	case PasswordBudgetAuthenticated:
+		failures = authenticatedPasswordFailures
 	}
 	if len(failures) >= maxPasswordFailureKeys {
 		for key, entry := range failures {

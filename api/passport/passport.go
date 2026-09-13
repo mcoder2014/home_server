@@ -2,6 +2,8 @@ package passport
 
 import (
 	"encoding/base64"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api/middleware"
@@ -40,13 +42,19 @@ type LoginResponse struct {
 }
 
 // Login 处理 POST /passport/login 的旧客户端登录：解码 RSA 密文、校验账号密码并返回兼容用户令牌。
-// 数据库模式要求可信 HTTPS；保持旧响应封装，不把该入口转换成依赖浏览器 Cookie 的流程。
+// 在 JSON/RSA 解码前限制请求体和来源频率；数据库模式要求可信 HTTPS，保持旧响应封装及令牌协议。
 func Login(c *gin.Context) {
 	if accounts.DatabaseMode() && !middleware.IsHTTPS(c) {
 		ginfmt.Fail(c, myErrors.ErrForbidden)
 		return
 	}
-	c.Set(accounts.PasswordSourceIPKey, middleware.TrustedClientIP(c.Request))
+	source := middleware.TrustedClientIP(c.Request)
+	c.Set(accounts.PasswordSourceIPKey, source)
+	if !middleware.AllowAccountAttempt("legacy-login:"+source, 30, time.Minute) {
+		ginfmt.FormatWithError(c, myErrors.ErrRateLimited)
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	ctx := ginfmt.RPCContext(c)
 	param := LoginParam{}
 	err := c.BindJSON(&param)

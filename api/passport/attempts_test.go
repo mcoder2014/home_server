@@ -43,8 +43,8 @@ func TestDatabaseLegacyLoginRequiresHTTPS(t *testing.T) {
 	}
 }
 
-// TestLegacyPasswordFailuresAreSharedWithBasic 检查旧 RSA 登录对用户名和别名累计失败及返回限流响应；末尾断言仍表达 Basic 共享预算的历史预期。
-func TestLegacyPasswordFailuresAreSharedWithBasic(t *testing.T) {
+// TestLegacyPasswordFailuresKeepBasicIndependent 检查旧 RSA 登录的用户名与别名共享失败预算，同时保留原生 Basic 的独立预算。
+func TestLegacyPasswordFailuresKeepBasicIndependent(t *testing.T) {
 	old := config.Global()
 	t.Cleanup(func() { config.SetGlobalConfig(old); _ = passportservice.GetMockData().LoadConf("[]") })
 	config.SetGlobalConfig(config.Config{})
@@ -104,7 +104,7 @@ func TestLegacyPasswordFailuresAreSharedWithBasic(t *testing.T) {
 	request.SetBasicAuth("legacy@example.com", password)
 	recorder := httptest.NewRecorder()
 	engine.ServeHTTP(recorder, request)
-	if recorder.Code != 429 {
-		t.Fatalf("Basic on another IP bypassed legacy account failure budget: HTTP %d", recorder.Code)
+	if recorder.Code != 204 {
+		t.Fatalf("legacy anonymous login failures blocked independent Basic authentication: HTTP %d", recorder.Code)
 	}
 }

@@ -21,6 +21,26 @@
 
 新网页存储根使用 `/var/lib/home_server/web-share`，归服务用户所有、权限 0700，并保持在 WebDAV 共享树之外。
 
+## 账号接口的同源代理
+
+账号版本上线时，同时更新 `/etc/home_server/locations/api_auth_locations.conf`，让站点引导、个人账号和管理中心请求进入后端。`frontend-nginx.conf` 保留未知 `/api/` 的 404 兜底；新接口由更具体的 `^~` 前缀匹配，管理员预览中的 HTML、JS、CSS 也经过后端鉴权。
+
+| 请求范围 | Pi 前端代理请求体上限 | 用途 |
+| --- | --- | --- |
+| `/api/site/` | 16 KiB | 站点公开引导信息。 |
+| `/api/account/` | 16 KiB | 本人资料和邀请码管理。 |
+| `/api/admin/` | 64 KiB | 用户、网页审核、审计和通用配置；配置发布的整个 JSON 请求体上限与后端一致。 |
+| `/api/auth/`、`/api/applications` 及其子路径 | 保留 16 KiB | 登录、注册、会话和应用凭证。 |
+| 网页上传、藏书和 WebDAV | 保留各自原有限制 | 继续使用独立 location，网页版本上传和 WebDAV 流式请求不受账号接口的小请求体上限影响。 |
+
+两份网关模板为 `/api/(site|account|admin)/` 增加 64 KiB 的受控代理，分别沿用 `8080 → 18081`、`18080 → 18080` 的目的端口。该规则不匹配 `/api/accounting/`、`/api/administrator/` 等相似名称。若现场配置还有静态扩展名的正则 location，应保持账号接口匹配优先，避免管理员预览资源进入静态文件分支。
+
+代理保留 `$http_host` 中的域名和端口。TLS 网关覆盖 `X-Forwarded-Proto` 和 `X-Forwarded-For`；Pi 前端只采信受信任网关，并在安装的 location 副本中使用 `$cq_forwarded_proto`、`$cq_client_ip`。新增账号 location 关闭访问日志、代理缓存和错误页拦截，并发送 `Cache-Control: no-store`，保证鉴权错误及 JSON 响应原样送回客户端。Authorization 沿用现有转发方式，WebDAV 的独立 Basic 协议保留。
+
+保留现有的两个域名及 `auth.site_origin` / `auth.site_origins`。Origin 必须包含实际 HTTPS 端口；同一域名的 8080 和 18080 是不同 Origin。模板继续保留两个 `server_name`，Cookie 仍按各自主机保存。
+
+仓库静态回归命令为 `node --test front_vue/test/web-projects-nginx.test.cjs`，覆盖新增路径、请求体上限、转发头、禁缓存、双入口和 WebDAV 规则。安装现场仍须对实际配置执行独立前端 Nginx 的 `-t -c /etc/home_server/frontend-nginx.conf` 及网关的 `nginx -t`，再验证两个入口下的 `/api/site/bootstrap`、已登录个人中心、管理员配置请求，以及原有 WebDAV Basic 访问。
+
 ## 安装顺序
 
 1. 核对并备份既有数据库、配置、服务单元和二进制；备份含凭据，只保存在目标服务器的私有目录。

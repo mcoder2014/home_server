@@ -156,6 +156,8 @@ func RequireAccount(admin, allowPasswordChange bool) gin.HandlerFunc {
 		principal := &utils.Principal{Kind: "user", UserID: user.ID, AuthVersion: user.AuthVersion, Role: user.Role, LibraryEnabled: user.LibraryEnabled, WebDAVPermission: user.WebDAVPermission, MustChangePassword: user.MustChangePassword, TokenExpiresAt: tokenExpiresAt}
 		setPrincipal(c, principal, token)
 		c.Set(AccountContextKey, user)
+		// 只有会话及角色验证成功后，密码确认才使用独立预算；客户端请求头不能选择该范围。
+		c.Set(accounts.PasswordBudgetScopeKey, accounts.PasswordBudgetAuthenticated)
 		c.Next()
 	}
 }

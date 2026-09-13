@@ -32,16 +32,18 @@ func InitRouter() error {
 		return fmt.Errorf("module webdav, share path is empty")
 	}
 
+	// 两个路径指向同一文件树，必须共享锁表，避免经另一别名绕过正在编辑文件的排他锁。
+	locks := webdav.NewMemLS()
 	rawHandler = &webdav.Handler{
 		Prefix:     "/webdav/",
 		FileSystem: webdav.Dir(sharePath),
-		LockSystem: webdav.NewMemLS(),
+		LockSystem: locks,
 		Logger:     Logger,
 	}
 	rawHandlerDev = &webdav.Handler{
 		Prefix:     "/webdav_dev/",
 		FileSystem: webdav.Dir(sharePath),
-		LockSystem: webdav.NewMemLS(),
+		LockSystem: locks,
 		Logger:     Logger,
 	}
 

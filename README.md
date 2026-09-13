@@ -233,7 +233,7 @@ go build -o output/bin/web-projects-storage-migrate ./cmd/web-projects-storage-m
 | 网页审核 | 管理员可审核所有可见性和保留版本，预览入口记录审计；下架/删除带审核锁，用户不能自行重新发布，恢复不会自动上线。 |
 | 动态配置 | 代码定义schema，按分组发布并保留历史；显示已保存与已加载版本，支持校验、冲突保护和回滚；数据库连接、存储根与密钥仍是启动配置。 |
 
-密码只存bcrypt哈希，新会话只存摘要；网站密码验证入口共享失败限速，WebDAV Basic 使用独立失败限速。旧 `passport` 和Basic客户端保持协议兼容，数据库账号模式要求HTTPS。当前少量好友场景接受同源HTML执行风险，不提供脚本沙箱或独立内容域。
+密码只存bcrypt哈希，新会话只存摘要；匿名登录、已认证会话的密码确认和 WebDAV Basic 使用相互独立的失败限速；旧 RSA 登录另有解码前来源限流与 16 KiB 请求体上限。旧 `passport` 和Basic客户端保持协议兼容，数据库账号模式要求HTTPS。当前少量好友场景接受同源HTML执行风险，不提供脚本沙箱或独立内容域。
 
 WebDAV Basic 直接使用用户名/密码，持续兼容 `/webdav/` 和 `/webdav_dev/`；不依赖网页登录、Cookie、CSRF、注册开关、应用凭证开关或网站会话有效期。获准用户可直接使用未过期的初始密码，无需先在网页改密；账号封禁、密码失效、WebDAV 开关及读写授权仍生效。
 
@@ -335,6 +335,8 @@ HTTP 适配位于 `api/`，网页和应用管理用例位于 `app/`，领域规�
 通用错误码统一位于 `errors/`，新 API 使用 `utils/ginfmt.Success/Fail`。旧接口保留原 HTTP 约定并正确传递包装后的错误码；新模块不再私设 501～510 的重复类别。Cookie 和身份上下文分别由 `utils/session.go`、`utils.Principal` 统一管理，应用 Token 不进入用户 Session。
 
 协议依据：[OAuth 2.0 client_credentials](https://www.rfc-editor.org/rfc/rfc6749#section-4.4)、[Bearer Token](https://www.rfc-editor.org/rfc/rfc6750#section-2.1)、[OWASP 密钥生命周期](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)。
+
+旧 `/ddns` 地址记录查询与维护仅允许数据库模式的管理员访问，写操作需通过站点 Origin/CSRF 校验；`/ddns/real_ip` 仍公开用于来源地址发现。记录保存在进程内，不直接修改 Cloudflare DNS。WebDAV 两条兼容路径共用同一文件锁，不能经别名绕过排他锁。
 
 ## 代码注释约定
 

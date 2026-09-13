@@ -1,10 +1,13 @@
 package api
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/api/middleware"
 	"github.com/mcoder2014/home_server/data"
 	"github.com/mcoder2014/home_server/utils"
 	"github.com/sirupsen/logrus"
@@ -18,17 +21,20 @@ var (
 	Ipv6Map sync.Map
 )
 
+// InitDDNSRouter 将旧内存地址表的维护限制为管理员操作，来源地址发现仍可匿名访问。
 func InitDDNSRouter() error {
-	data.AddRoute(http.MethodGet, "/ddns", GetDomain)
-	data.AddRoute(http.MethodGet, "/ddns/all", GetAllRecords)
+	admin := middleware.RequireAccount(true, false)
+	write := middleware.BrowserWrite()
+	data.AddRoute(http.MethodGet, "/ddns", admin, GetDomain)
+	data.AddRoute(http.MethodGet, "/ddns/all", admin, GetAllRecords)
 	data.AddRoute(http.MethodGet, "/ddns/real_ip", GetClientIpAddress)
-	data.AddRoute(http.MethodPost, "/ddns/ipv4", UpdateIpv4)
-	data.AddRoute(http.MethodPost, "/ddns/ipv6", UpdateIpv6)
+	data.AddRoute(http.MethodPost, "/ddns/ipv4", admin, write, UpdateIpv4)
+	data.AddRoute(http.MethodPost, "/ddns/ipv6", admin, write, UpdateIpv6)
 	return nil
 }
 
 // UpdateIpv4 处理 POST /ddns/ipv4：将上报的 Domain/Ipv4 写入进程内记录表，供后续查询读取，不调用公网 DNS 提供商。
-// 当前历史实现未接入账号鉴权或数据容量限制，不能把它视为受管理员权限保护的接口。
+// 前置路由要求管理员身份及写入校验；正文有界且地址必须为有效 IPv4。
 func UpdateIpv4(c *gin.Context) {
 
 	// 解析参数
@@ -39,11 +45,17 @@ func UpdateIpv4(c *gin.Context) {
 	}
 
 	req := &Request{}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 16<<10)
 	err := c.BindJSON(&req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"Message": err.Error(),
 		})
+		return
+	}
+	if strings.TrimSpace(req.Domain) == "" || len(req.Domain) > 253 || net.ParseIP(req.Ipv4).To4() == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"Message": "domain or IPv4 is invalid"})
+		return
 	}
 
 	// 处理
@@ -54,6 +66,7 @@ func UpdateIpv4(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"Message": "success",
 			})
+			return
 		} else {
 			logrus.Infof("Not same as old, Update old record. Domain:%v old record:%v new record:%v", req.Domain, old.(string), req.Ipv4)
 		}
