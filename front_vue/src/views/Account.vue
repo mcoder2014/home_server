@@ -2,7 +2,7 @@
   <MyHeader />
   <main class="page-container">
     <div class="page-eyebrow">账户设置</div><h1 class="page-title">个人中心</h1>
-    <el-alert v-if="user?.must_change_password" type="warning" title="请先修改管理员提供的初始密码" description="修改完成后需重新登录，随后才能使用站点功能。" :closable="false" show-icon class="form-message" />
+    <el-alert v-if="user?.must_change_password" type="warning" title="请先修改管理员提供的初始密码" description="修改完成后需重新登录，随后才能使用网站页面功能；已授权的 WebDAV 客户端可直接使用未过期密码。" :closable="false" show-icon class="form-message" />
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="form-message" />
     <el-tabs v-model="tab" @tab-change="changeTab">
       <el-tab-pane label="个人资料" name="profile" :disabled="user?.must_change_password">

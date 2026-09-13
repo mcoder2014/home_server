@@ -17,6 +17,11 @@ import (
 // proxy chain. Missing sources share a bounded fallback budget.
 const PasswordSourceIPKey = "home_server.password_source_ip"
 
+// PasswordBudgetScopeKey is set by the DAV middleware, never from client input.
+// Only the fixed WebDAV scope gets a separate budget; arbitrary scopes do not.
+const PasswordBudgetScopeKey = "home_server.password_budget_scope"
+const PasswordBudgetWebDAV = "webdav"
+
 const passwordFailureWindow = time.Minute
 const maxPasswordFailureKeys = 4096
 
@@ -27,11 +32,13 @@ type passwordFailure struct {
 
 var passwordFailureLock sync.Mutex
 var passwordFailures = map[[32]byte]passwordFailure{}
+var webDAVPasswordFailures = map[[32]byte]passwordFailure{}
 
-// VerifyPassword shares failed-password budgets across login, Basic and password
-// confirmation. Existing aliases use the same account ID. Successful requests do
-// not consume or reset a failure budget; in-flight checks can finish, but their
-// failed results are counted atomically before any later request is admitted.
+// VerifyPassword shares failed-password budgets across website login and password
+// confirmation. DAV Basic has independent account, IP and capacity budgets so
+// website lockouts cannot block native clients. Aliases share an account budget
+// within each scope; successes do not consume or reset it. In-flight failures
+// are counted atomically before any later request is admitted.
 func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password string) error {
 	accountKey := "login:" + strings.ToLower(strings.TrimSpace(loginKey))
 	if userID > 0 {
@@ -47,16 +54,20 @@ func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password 
 	limits := [2]int{10, 30}
 	now := time.Now()
 	passwordFailureLock.Lock()
-	if len(passwordFailures) >= maxPasswordFailureKeys {
-		for key, entry := range passwordFailures {
+	failures := passwordFailures
+	if ctx.Value(PasswordBudgetScopeKey) == PasswordBudgetWebDAV {
+		failures = webDAVPasswordFailures
+	}
+	if len(failures) >= maxPasswordFailureKeys {
+		for key, entry := range failures {
 			if !entry.Expires.After(now) {
-				delete(passwordFailures, key)
+				delete(failures, key)
 			}
 		}
 	}
 	for i, key := range keys {
-		entry, exists := passwordFailures[key]
-		if (entry.Expires.After(now) && entry.Count >= limits[i]) || (!exists && len(passwordFailures) >= maxPasswordFailureKeys) {
+		entry, exists := failures[key]
+		if (entry.Expires.After(now) && entry.Count >= limits[i]) || (!exists && len(failures) >= maxPasswordFailureKeys) {
 			passwordFailureLock.Unlock()
 			return apperrors.ErrRateLimited
 		}
@@ -68,8 +79,8 @@ func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password 
 	passwordFailureLock.Lock()
 	now = time.Now()
 	for i, key := range keys {
-		entry, exists := passwordFailures[key]
-		if !exists && len(passwordFailures) >= maxPasswordFailureKeys {
+		entry, exists := failures[key]
+		if !exists && len(failures) >= maxPasswordFailureKeys {
 			continue
 		}
 		if !entry.Expires.After(now) {
@@ -78,7 +89,7 @@ func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password 
 		if entry.Count < limits[i] {
 			entry.Count++
 		}
-		passwordFailures[key] = entry
+		failures[key] = entry
 	}
 	passwordFailureLock.Unlock()
 	return ErrCredentials

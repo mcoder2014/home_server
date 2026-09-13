@@ -91,6 +91,7 @@ func ValidateBasicAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		c.Set(accounts.PasswordBudgetScopeKey, accounts.PasswordBudgetWebDAV)
 		c.Set(accounts.PasswordSourceIPKey, TrustedClientIP(c.Request))
 		ctx := ginfmt.RPCContext(c)
 		username, password, ok := c.Request.BasicAuth()
@@ -123,7 +124,9 @@ func ValidateBasicAuth() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			if !enabled || res.MustChangePassword || !accounts.WebDAVAllowed(res.WebDAVPermission, c.Request.Method) {
+			// Native DAV clients cannot complete website password-change screens.
+			// ValidateUser still checks account state and temporary-password expiry.
+			if !enabled || !accounts.WebDAVAllowed(res.WebDAVPermission, c.Request.Method) {
 				ginfmt.Fail(c, apperrors.ErrForbidden)
 				c.Abort()
 				return
