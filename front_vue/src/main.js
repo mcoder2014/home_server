@@ -3,6 +3,7 @@ import router from './router'
 import store from './store'
 
 import ElementPlus from 'element-plus'
+import zhCN from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 import './assets/global.css'
 
@@ -25,7 +26,7 @@ store.dispatch('loadBootstrap').catch(() => {})
 const app = createApp(App)
 // Make sure to _use_ the router instance to make the
 // whole app router-aware.
-app.use(router).use(store).use(ElementPlus)
+app.use(router).use(store).use(ElementPlus, {locale: zhCN})
 
 app.mount('#app')
 

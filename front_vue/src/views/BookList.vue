@@ -13,7 +13,7 @@
         </div>
 
         <!-- 图书表格 -->
-        <el-table :data="tableData" style="width: 100%" stripe>
+        <el-table :data="tableData" style="width: 100%" stripe empty-text="暂无图书">
           <el-table-column fixed prop="title" label="书名" min-width="120" />
           <el-table-column prop="img" label="封面" width="90">
             <template #default="scope">
@@ -106,11 +106,8 @@ export default {
       this.getBookStorages(offset, this.pageSize)
     },
     updateTable(books) {
-      console.log(books)
-      if (books.length === 0) {
-        alert("无更多图书")
-      }
-      this.tableData = books.map((book) => ({
+      const rows = Array.isArray(books) ? books : []
+      this.tableData = rows.map((book) => ({
         title: book.title,
         author: book.author,
         number: book.quantity,

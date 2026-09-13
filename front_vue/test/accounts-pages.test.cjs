@@ -7,7 +7,7 @@ const vm = require('node:vm')
 function component(name, api = {}) {
     const source = fs.readFileSync(path.join(__dirname, `../src/views/${name}.vue`), 'utf8')
     const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
-    const box = {module: {exports: {}}, MyHeader: {}, AdminConfirm: {}, Key: {}, Plus: {}, Refresh: {}, setInterval, clearInterval, URLSearchParams,
+    const box = {module: {exports: {}}, MyHeader: {}, AdminConfirm: {}, Key: {}, Plus: {}, Refresh: {}, bookFallback: 'fixture.svg', alert() {}, console, setInterval, clearInterval, URLSearchParams,
         require: name => name === '@/api/accounts.cjs' ? {accountsApi: api} : require(path.join(__dirname, '../src/', name.slice(2))),
     }
     vm.runInNewContext(script, box, {filename: `${name}.vue`})
@@ -87,4 +87,14 @@ test('application creation uses the current server TTL policy rather than a fixe
     view.openCreate()
     assert.equal(view.form.expiresInDays, 100)
     assert.equal(view.maxCredentialTTLDays, 1000)
+})
+
+test('an empty real library response clears the table without dereferencing a null list', () => {
+    const {view} = component('BookList')
+    view.tableData = [{title: 'stale row'}]
+    assert.doesNotThrow(() => view.updateTable(null))
+    assert.equal(view.tableData.length, 0)
+    view.updateTable([{title: 'A book', isbn: '123', quantity: 2}])
+    assert.equal(view.tableData[0].title, 'A book')
+    assert.equal(view.tableData[0].number, 2)
 })
