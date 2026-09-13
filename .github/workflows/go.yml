@@ -32,3 +32,6 @@ jobs:
 
     - name: Test AI API client
       run: python3 script/test_home_server_api.py -v
+
+    - name: Test web hosting skill over isolated HTTPS
+      run: python3 script/test_web_hosting_skill.py -v

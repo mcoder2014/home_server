@@ -1,0 +1,581 @@
+from __future__ import annotations
+
+import base64
+import json
+import os
+import runpy
+import shutil
+import ssl
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import unittest
+from unittest import mock
+import urllib.parse
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+MANAGE = REPOSITORY_ROOT / "skills" / "home-server-web-share" / "scripts" / "manage.py"
+ACCESS_KEY = "ak_cq_" + "A" * 22
+SECRET_KEY = "sk_cq_" + "S" * 43
+ACCESS_TOKEN = "at_cq_" + "T" * 43
+
+
+@dataclass
+class ResponseSpec:
+    status: int
+    body: object
+    headers: dict[str, str] | None = None
+    delay: float = 0
+
+
+class LocalHTTPSServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # A client-side read timeout deliberately closes TLS before the delayed
+        # fixture responds. That disconnect is the expected behavior under test.
+        error = sys.exc_info()[1]
+        if isinstance(error, (BrokenPipeError, ConnectionResetError, ssl.SSLError)):
+            return
+        self.handler_errors.append(error)
+
+    def __init__(self, certificate: Path, key: Path, responder):
+        super().__init__(("localhost", 0), RecordingHandler)
+        self.calls = []
+        self.handler_errors = []
+        self.responder = responder
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certificate, key)
+        self.socket = context.wrap_socket(self.socket, server_side=True)
+        self.thread = threading.Thread(target=self.serve_forever, daemon=True)
+
+    @property
+    def origin(self):
+        return f"https://localhost:{self.server_address[1]}"
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.shutdown()
+        self.server_close()
+        self.thread.join(timeout=2)
+        if exc_type is None and self.handler_errors:
+            raise AssertionError(f"HTTPS fixture handler failed: {self.handler_errors!r}")
+
+
+class RecordingHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self):
+        self._handle()
+
+    def do_POST(self):
+        self._handle()
+
+    def do_PATCH(self):
+        self._handle()
+
+    def _handle(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b""
+        request = {
+            "method": self.command,
+            "path": self.path,
+            "headers": {name.lower(): value for name, value in self.headers.items()},
+            "body": body,
+        }
+        self.server.calls.append(request)
+        spec = self.server.responder(request)
+        if spec.delay:
+            time.sleep(spec.delay)
+        payload = spec.body if isinstance(spec.body, bytes) else json.dumps(spec.body).encode("utf-8")
+        self.send_response(spec.status)
+        headers = dict(spec.headers or {})
+        headers.setdefault("Content-Type", "application/json")
+        headers.setdefault("Content-Length", str(len(payload)))
+        for name, value in headers.items():
+            self.send_header(name, value)
+        self.end_headers()
+        try:
+            self.wfile.write(payload)
+        except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
+            pass
+
+    def log_message(self, format, *args):
+        pass
+
+
+def success(data, status=200):
+    return ResponseSpec(status, {"code": 0, "message": "success", "data": data})
+
+
+def token_response():
+    return ResponseSpec(200, {
+        "access_token": ACCESS_TOKEN,
+        "token_type": "Bearer",
+        "expires_in": 900,
+        "scope": "web-projects:read web-projects:write",
+    })
+
+
+class WebHostingSkillEndToEndTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.certificate_directory = tempfile.TemporaryDirectory()
+        cls.certificate_root = Path(cls.certificate_directory.name)
+        cls.ca_file = cls.certificate_root / "ca.pem"
+        cls.server_certificate = cls.certificate_root / "server.pem"
+        cls.server_key = cls.certificate_root / "server.key"
+        cls._generate_certificates()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.certificate_directory.cleanup()
+
+    @classmethod
+    def _generate_certificates(cls):
+        ca_key = cls.certificate_root / "ca.key"
+        request = cls.certificate_root / "server.csr"
+        extension = cls.certificate_root / "server.ext"
+        extension.write_text(
+            "subjectAltName=DNS:localhost,IP:127.0.0.1\n"
+            "extendedKeyUsage=serverAuth\n",
+            encoding="utf-8",
+        )
+        commands = [
+            [
+                "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", str(ca_key), "-out", str(cls.ca_file), "-days", "1",
+                "-subj", "/CN=home-server-test-ca",
+                "-addext", "basicConstraints=critical,CA:TRUE",
+                "-addext", "keyUsage=critical,keyCertSign,cRLSign",
+            ],
+            [
+                "openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
+                "-keyout", str(cls.server_key), "-out", str(request),
+                "-subj", "/CN=localhost",
+            ],
+            [
+                "openssl", "x509", "-req", "-in", str(request),
+                "-CA", str(cls.ca_file), "-CAkey", str(ca_key), "-CAcreateserial",
+                "-out", str(cls.server_certificate), "-days", "1",
+                "-extfile", str(extension),
+            ],
+        ]
+        for command in commands:
+            subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def setUp(self):
+        self.fixture_directory = tempfile.TemporaryDirectory()
+        self.fixture_root = Path(self.fixture_directory.name)
+        self.other_cwd = self.fixture_root / "unrelated-cwd"
+        self.other_cwd.mkdir()
+
+    def tearDown(self):
+        self.fixture_directory.cleanup()
+
+    def write_config(
+        self,
+        internal_url,
+        external_url=None,
+        *,
+        endpoint="auto",
+        timeout=1,
+        connect_timeout=0.2,
+        with_credentials=True,
+    ):
+        shutil.copy2(self.ca_file, self.fixture_root / "ca.pem")
+        payload = {
+            "internal_url": internal_url,
+            "external_url": external_url or internal_url,
+            "ca_file": "ca.pem",
+            "endpoint": endpoint,
+            "connect_timeout": connect_timeout,
+            "timeout": timeout,
+        }
+        if with_credentials:
+            credentials = self.fixture_root / "credentials.json"
+            credentials.write_text(json.dumps({
+                "access_key": ACCESS_KEY,
+                "secret_key": SECRET_KEY,
+            }), encoding="utf-8")
+            credentials.chmod(0o600)
+            payload["credentials_file"] = "credentials.json"
+        config = self.fixture_root / "config.json"
+        config.write_text(json.dumps(payload), encoding="utf-8")
+        config.chmod(0o600)
+        return config
+
+    def run_cli(self, config, *arguments, timeout=6, extra_environment=None):
+        return self.run_script(
+            MANAGE,
+            config,
+            *arguments,
+            timeout=timeout,
+            extra_environment=extra_environment,
+        )
+
+    def run_script(self, script, config, *arguments, timeout=6, extra_environment=None):
+        environment = os.environ.copy()
+        environment.pop("CQ_HOME_SERVER_ACCESS_KEY", None)
+        environment.pop("CQ_HOME_SERVER_SECRET_KEY", None)
+        environment.pop("CQ_HOME_SERVER_BASE_URL", None)
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        environment.update(extra_environment or {})
+        return subprocess.run(
+            [sys.executable, str(script), "--config", str(config), *arguments],
+            cwd=self.other_cwd,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+        )
+
+    def assert_success(self, completed, endpoint, origin, expected_result):
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stderr, "")
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload, {
+            "endpoint": endpoint,
+            "origin": origin,
+            "result": expected_result,
+        })
+
+    def assert_json_error(self, completed):
+        self.assertNotEqual(completed.returncode, 0, completed.stdout)
+        self.assertEqual(completed.stdout, "")
+        payload = json.loads(completed.stderr)
+        self.assertIsInstance(payload, dict)
+        self.assertTrue(payload)
+        return payload
+
+    def test_commands_use_real_https_from_an_unrelated_working_directory(self):
+        def responder(request):
+            parsed = urllib.parse.urlsplit(request["path"])
+            if request["method"] == "POST" and parsed.path == "/api/auth/token":
+                self.assertEqual(request["body"], b"grant_type=client_credentials")
+                scheme, encoded = request["headers"]["authorization"].split(" ", 1)
+                self.assertEqual(scheme, "Basic")
+                self.assertEqual(base64.b64decode(encoded), f"{ACCESS_KEY}:{SECRET_KEY}".encode())
+                return token_response()
+            self.assertEqual(request["headers"].get("authorization"), f"Bearer {ACCESS_TOKEN}")
+            return success({"operation": f"{request['method']} {parsed.path}"}, 201 if parsed.path.endswith("/releases") and request["method"] == "POST" else 200)
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, responder) as server:
+            config = self.write_config(server.origin, endpoint="internal")
+            upload = self.fixture_root / "site.zip"
+            upload.write_bytes(b"PK\x03\x04offline-site-marker")
+            cases = [
+                (("--endpoint", "internal", "list", "--cursor", "11", "--limit", "7", "--status", "enabled"), "GET /api/web-share"),
+                (("--endpoint", "internal", "show", "12"), "GET /api/web-share/12"),
+                (("--endpoint", "internal", "users"), "GET /api/web-share/eligible-users"),
+                (("--endpoint", "internal", "releases", "12", "--cursor", "5", "--limit", "6"), "GET /api/web-share/12/releases"),
+                (("--endpoint", "internal", "create", "--name", "Fixture", "--slug", "fixture-site", "--description", "fixture description", "--request-id", "create-1"), "POST /api/web-share"),
+                (("--endpoint", "internal", "upload", "12", "--file", str(upload), "--entry-file", "public/index.html", "--request-id", "upload-1"), "POST /api/web-share/12/releases"),
+                (("--endpoint", "internal", "publish", "12", "--release", "31", "--revision", "2"), "POST /api/web-share/12/publish"),
+                (("--endpoint", "internal", "visibility", "12", "--mode", "members", "--member", "201", "--member", "202", "--revision", "3"), "PATCH /api/web-share/12"),
+                (("--endpoint", "internal", "disable", "12", "--revision", "4"), "POST /api/web-share/12/disable"),
+                (("--endpoint", "internal", "visibility", "12", "--mode", "owner", "--revision", "5"), "PATCH /api/web-share/12"),
+                (("--endpoint", "internal", "visibility", "12", "--mode", "authenticated", "--revision", "6"), "PATCH /api/web-share/12"),
+                (("--endpoint", "internal", "visibility", "12", "--mode", "public", "--revision", "7"), "PATCH /api/web-share/12"),
+                (("--endpoint", "internal", "visibility", "12", "--mode", "members", "--clear-members", "--revision", "8"), "PATCH /api/web-share/12"),
+            ]
+            for arguments, operation in cases:
+                with self.subTest(command=arguments[-1] if arguments else ""):
+                    completed = self.run_cli(config, *arguments)
+                    self.assert_success(completed, "internal", server.origin, {"operation": operation})
+
+        business = [call for call in server.calls if call["path"] != "/api/auth/token"]
+        self.assertEqual(len([call for call in server.calls if call["path"] == "/api/auth/token"]), len(cases))
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlsplit(business[0]["path"]).query), {
+            "cursor": ["11"], "limit": ["7"], "status": ["enabled"],
+        })
+        self.assertEqual(urllib.parse.parse_qs(urllib.parse.urlsplit(business[3]["path"]).query), {
+            "cursor": ["5"], "limit": ["6"],
+        })
+        self.assertEqual(json.loads(business[4]["body"]), {
+            "name": "Fixture",
+            "description": "fixture description",
+            "slug": "fixture-site",
+            "access_mode": "owner",
+            "member_user_ids": [],
+            "client_request_id": "create-1",
+        })
+        self.assertEqual(business[5]["headers"].get("idempotency-key"), "upload-1")
+        self.assertIn(b'name="entry_file"\r\n\r\npublic/index.html', business[5]["body"])
+        self.assertIn(b'name="file"; filename="site.zip"', business[5]["body"])
+        self.assertIn(b"PK\x03\x04offline-site-marker", business[5]["body"])
+        self.assertEqual(business[6]["headers"].get("if-match"), "2")
+        self.assertEqual(json.loads(business[6]["body"]), {"release_id": "31"})
+        self.assertEqual(business[7]["headers"].get("if-match"), "3")
+        self.assertEqual(json.loads(business[7]["body"]), {
+            "access_mode": "members",
+            "member_user_ids": ["201", "202"],
+        })
+        self.assertEqual(business[8]["headers"].get("if-match"), "4")
+        self.assertEqual(business[8]["body"], b"")
+        for index, mode, revision in (
+            (9, "owner", "5"),
+            (10, "authenticated", "6"),
+            (11, "public", "7"),
+            (12, "members", "8"),
+        ):
+            with self.subTest(visibility=mode):
+                self.assertEqual(business[index]["method"], "PATCH")
+                self.assertEqual(business[index]["path"], "/api/web-share/12")
+                self.assertEqual(business[index]["headers"].get("if-match"), revision)
+                self.assertEqual(json.loads(business[index]["body"]), {
+                    "access_mode": mode,
+                    "member_user_ids": [],
+                })
+
+    def test_doctor_auto_falls_back_to_external_without_credentials(self):
+        def responder(request):
+            self.assertEqual(request["method"], "GET")
+            self.assertEqual(request["path"], "/ping")
+            self.assertNotIn("authorization", request["headers"])
+            return ResponseSpec(200, {"message": "pong"})
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, responder) as external:
+            unused_port = self._unused_port()
+            config = self.write_config(
+                f"https://localhost:{unused_port}",
+                external.origin,
+                with_credentials=False,
+            )
+            completed = self.run_cli(config, "doctor")
+            self.assert_success(completed, "external", external.origin, {"message": "pong"})
+            self.assertEqual(len(external.calls), 1)
+
+    def test_permission_denial_stops_before_trying_another_origin(self):
+        module = runpy.run_path(str(MANAGE), run_name="skill_test")
+        denied = module["api"].ClientError("HTTPS 请求失败")
+        denied.__cause__ = PermissionError("sandbox denied network access")
+        config = {"endpoint": "auto", "internal_url": "https://home.internal.example.com",
+                  "external_url": "https://home.example.com", "connect_timeout": 1}
+        with mock.patch.object(module["api"], "HTTPTransport") as transport:
+            transport.return_value.request.side_effect = denied
+            with self.assertRaises(module["EndpointUnavailable"]) as raised:
+                module["select_endpoint"](config)
+            self.assertEqual(transport.call_count, 1)
+            self.assertEqual(raised.exception.probes, [{"endpoint": "internal", "reason": "permission_denied"}])
+
+    def test_redirect_is_rejected_and_never_followed(self):
+        with LocalHTTPSServer(
+            self.server_certificate,
+            self.server_key,
+            lambda request: ResponseSpec(302, b"", {"Location": "https://localhost:1/collect"}),
+        ) as server:
+            config = self.write_config(server.origin, endpoint="internal", with_credentials=False)
+            completed = self.run_cli(config, "--endpoint", "internal", "doctor")
+            self.assert_json_error(completed)
+            self.assertEqual([(call["method"], call["path"]) for call in server.calls], [("GET", "/ping")])
+
+    def test_401_after_auto_selection_does_not_switch_origin_or_retry(self):
+        def internal_responder(request):
+            if request["path"] == "/ping":
+                return ResponseSpec(200, {"message": "pong"})
+            if request["path"] == "/api/auth/token":
+                return token_response()
+            return ResponseSpec(401, {
+                "code": 40101,
+                "message": f"denied {ACCESS_KEY} {SECRET_KEY} Bearer {ACCESS_TOKEN}",
+            })
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, internal_responder) as internal, LocalHTTPSServer(
+            self.server_certificate,
+            self.server_key,
+            lambda request: success({"unexpected": True}),
+        ) as external:
+            config = self.write_config(internal.origin, external.origin)
+            completed = self.run_cli(config, "list")
+            self.assert_json_error(completed)
+            rendered = completed.stderr
+            self.assertNotIn(ACCESS_KEY, rendered)
+            self.assertNotIn(SECRET_KEY, rendered)
+            self.assertNotIn(ACCESS_TOKEN, rendered)
+            self.assertEqual(
+                [(call["method"], call["path"]) for call in internal.calls],
+                [("GET", "/ping"), ("POST", "/api/auth/token"), ("GET", "/api/web-share?limit=20")],
+            )
+            self.assertEqual(external.calls, [])
+
+    def test_untrusted_tls_certificate_is_rejected(self):
+        with LocalHTTPSServer(
+            self.server_certificate,
+            self.server_key,
+            lambda request: ResponseSpec(200, {"message": "pong"}),
+        ) as server:
+            config = self.fixture_root / "config.json"
+            config.write_text(json.dumps({
+                "internal_url": server.origin,
+                "external_url": server.origin,
+                "endpoint": "internal",
+                "connect_timeout": 0.2,
+                "timeout": 1,
+            }), encoding="utf-8")
+            config.chmod(0o600)
+            completed = self.run_cli(config, "--endpoint", "internal", "doctor")
+            self.assert_json_error(completed)
+            self.assertEqual(server.calls, [])
+
+    def test_symlinked_skill_can_run_from_an_unrelated_working_directory(self):
+        def responder(request):
+            self.assertEqual((request["method"], request["path"]), ("GET", "/ping"))
+            return ResponseSpec(200, {"message": "pong"})
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, responder) as server:
+            config = self.write_config(server.origin, endpoint="internal", with_credentials=False)
+            linked_skill = self.fixture_root / "linked-skill"
+            linked_skill.symlink_to(MANAGE.parents[1], target_is_directory=True)
+            linked_manage = linked_skill / "scripts" / "manage.py"
+            completed = self.run_script(
+                linked_manage,
+                config,
+                "--endpoint", "internal", "doctor",
+            )
+            self.assert_success(completed, "internal", server.origin, {"message": "pong"})
+
+    def test_write_conflict_and_timeout_are_each_sent_once(self):
+        conflict_business_calls = []
+
+        def conflict_responder(request):
+            if request["path"] == "/api/auth/token":
+                return token_response()
+            conflict_business_calls.append(request)
+            return ResponseSpec(409, {"code": 40901, "message": "stale revision"})
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, conflict_responder) as server:
+            config = self.write_config(server.origin, endpoint="internal")
+            completed = self.run_cli(
+                config,
+                "--endpoint", "internal",
+                "publish", "12", "--release", "31", "--revision", "2",
+            )
+            self.assert_json_error(completed)
+            self.assertEqual(len(conflict_business_calls), 1)
+
+        timeout_business_calls = []
+
+        def timeout_responder(request):
+            if request["path"] == "/api/auth/token":
+                return token_response()
+            timeout_business_calls.append(request)
+            return ResponseSpec(200, {"code": 0, "message": "success", "data": {}}, delay=0.5)
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, timeout_responder) as server:
+            config = self.write_config(server.origin, endpoint="internal", timeout=0.1)
+            completed = self.run_cli(
+                config,
+                "--endpoint", "internal",
+                "disable", "12", "--revision", "2",
+            )
+            self.assert_json_error(completed)
+            self.assertEqual(len(timeout_business_calls), 1)
+
+    @unittest.skipUnless(os.name == "posix", "Unix permission checks")
+    def test_config_and_credentials_files_must_be_private(self):
+        config = self.write_config("https://localhost:1", endpoint="internal")
+        config.chmod(0o644)
+        completed = self.run_cli(config, "--endpoint", "internal", "list")
+        self.assert_json_error(completed)
+
+        config.chmod(0o600)
+        credentials = self.fixture_root / "credentials.json"
+        credentials.chmod(0o644)
+        completed = self.run_cli(config, "--endpoint", "internal", "list")
+        self.assert_json_error(completed)
+        self.assertNotIn(ACCESS_KEY, completed.stderr)
+        self.assertNotIn(SECRET_KEY, completed.stderr)
+
+    def test_dry_run_is_offline_and_does_not_render_file_contents_or_secrets(self):
+        unused_port = self._unused_port()
+        config = self.write_config(
+            f"https://localhost:{unused_port}",
+            endpoint="internal",
+            with_credentials=False,
+        )
+        upload = self.fixture_root / "site.html"
+        marker = "private-upload-body-marker"
+        upload.write_text(f"<html>{marker}</html>", encoding="utf-8")
+        completed = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "--dry-run",
+            "upload", "12", "--file", str(upload), "--request-id", "upload-dry-run",
+            extra_environment={
+                "CQ_HOME_SERVER_ACCESS_KEY": ACCESS_KEY,
+                "CQ_HOME_SERVER_SECRET_KEY": SECRET_KEY,
+            },
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["endpoint"], "internal")
+        self.assertEqual(payload["origin"], f"https://localhost:{unused_port}")
+        self.assertIsInstance(payload["result"], dict)
+        self.assertTrue(payload["result"].get("dry_run"))
+        rendered = completed.stdout + completed.stderr
+        self.assertNotIn(marker, rendered)
+        self.assertNotIn(ACCESS_KEY, rendered)
+        self.assertNotIn(SECRET_KEY, rendered)
+
+    def test_member_arguments_require_an_explicit_unambiguous_choice(self):
+        config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)
+        invalid_arguments = [
+            ("--dry-run", "visibility", "12", "--mode", "members", "--revision", "2"),
+            ("--dry-run", "visibility", "12", "--mode", "owner", "--member", "201", "--revision", "2"),
+            ("--dry-run", "visibility", "12", "--mode", "public", "--clear-members", "--revision", "2"),
+        ]
+        for arguments in invalid_arguments:
+            with self.subTest(arguments=arguments):
+                completed = self.run_cli(config, "--endpoint", "internal", *arguments)
+                self.assert_json_error(completed)
+
+        completed = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "--dry-run",
+            "visibility", "12", "--mode", "members", "--clear-members", "--revision", "2",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["result"].get("member_user_ids"), [])
+
+    def test_argument_errors_do_not_echo_unsupported_secret_values(self):
+        config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)
+        completed = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "list", "--secret-key", SECRET_KEY,
+        )
+        self.assert_json_error(completed)
+        self.assertNotIn(SECRET_KEY, completed.stderr)
+
+        ordinary_value = "ordinary-value-that-must-not-be-echoed"
+        completed = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "list", "--secret-key", ordinary_value,
+        )
+        self.assert_json_error(completed)
+        self.assertNotIn(ordinary_value, completed.stderr)
+
+    @staticmethod
+    def _unused_port():
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("localhost", 0))
+            return listener.getsockname()[1]
+
+
+if __name__ == "__main__":
+    unittest.main()
