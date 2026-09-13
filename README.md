@@ -4,13 +4,13 @@
 
 ## 计划结构
 
-- 设备客户端：用于在家庭硬件设备上运行，提供部分运维能力（上报系统负载、watch dog）
+- DDNS 设备客户端：已迁移到 `life_tools/cli/cq_ddns_client`，独立安装和运行。
 - 服务端：系统主体部分
 - 前端：提供管理员用户界面
 
 ## 计划能力
 
-- DDNS: 用于动态 dns 注册，由于小米路由器尚未具备 ipv6 的 ddns 能力，home server 可以为家庭硬件设备提供 ddns 能力；
+- DDNS：服务端保留原有 HTTP 接口；设备定时更新 Cloudflare DNS 的能力由 `life_tools` 中的 `cq_ddns_client` 提供。
 - Watch Dog: 或者叫 heart beat，用于记录设备心跳数据，包含一些辅助数据，可以快速发现设备是否掉线；
 - 家庭图书管理能力: 以 isbn 为基础，快速管理家庭中的纸质书及电子书；
 - WebDAV: 使用同一套账号体系，通过 WebDAV 协议实现外部文档访问，地址为 [https://www.server.com:port/webdav](https://www.server.com:port/webdav)；
@@ -41,21 +41,26 @@ npm run build
 
 ### home_server
 
-执行 `./build.sh` 构建 server 和 client 的二进制文件。
+执行 `./build.sh` 构建服务端二进制文件。构建前准备 `config/config.yaml`；不再需要客户端配置。
 
-### home_client
-1. 运行 `./build.sh`，编译程序;
-2. 仿照 `client/config_example.yaml` 编写一份自己的配置文件；
-3. 将二进制文件复制到指定文件夹 `sudo cp/bin/home_client /usr/local/bin/home_client`;
-4. 将配置文件放在指定文件 `/etc/home_server/client_config.yaml`；
-5. 将 systemd 配置文件复制到指定路径 `sudo cp script/systemd/home_client.service /etc/systemd/system`
-6. 启动 `sudo systemctl start home_client.service`
+### DDNS 客户端迁移
 
-#### 查看日志
+`home_client` 已迁移到 [life_tools 的 cq_ddns_client](https://github.com/mcoder2014/life_tools/blob/master/docs/cli/cq_ddns_client.md)。客户端源码、构建产物和 systemd 模板统一在 `life_tools` 维护，服务端 DDNS HTTP 接口保持兼容。
 
-```shell
-sudo journalctl --unit home_client.service
+| 项目 | 旧入口 | 新入口 |
+|---|---|---|
+| 命令 | `home_client` | `cq_ddns_client` |
+| 默认配置 | 部署时通过 `-conf` 指定 YAML | `/etc/life_tools/cq_ddns_client.json` |
+| 配置参数 | `-conf` | `-config`，保留 `-conf` 别名及 `.yaml/.yml` 读取 |
+| systemd | `home_client.service` | `cq_ddns_client.service` |
+
+旧二进制和正在运行的服务不会因源码迁移自动替换。先安装新客户端，用旧配置执行只读预检，再按迁移文档转换 JSON、验证新服务并切换；不能同时长期运行两个客户端。
+
+```bash
+cq_ddns_client -conf /etc/home_server/client_config.yaml -dry-run
 ```
+
+回滚时停用新服务，再启动原 `home_client.service`。切换验证完成前保留旧二进制、配置和 unit。
 
 ## 网页托管
 
