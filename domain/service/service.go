@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/service/applications"
 	"github.com/mcoder2014/home_server/domain/service/passport"
@@ -9,13 +10,18 @@ import (
 )
 
 func Init(conf *config.Config) error {
+	if (conf.IdentitySource == "database") != (conf.ConfigSource == "database") {
+		return fmt.Errorf("database identity and configuration must be enabled together")
+	}
 	if err := passport.Init(conf); err != nil {
 		return err
 	}
 	if err := webprojects.Init(&conf.WebProjects); err != nil {
 		return err
 	}
-	if conf.WebProjects.Enabled {
+	// Database configuration can enable web projects after startup. Storage
+	// boundaries must already be valid even when the bootstrap switch is off.
+	if conf.WebProjects.Enabled || conf.ConfigSource == "database" {
 		if err := webprojects.ValidateStorageIsolation(conf.WebProjects.StorageRoot, conf.WebDAV.SharePath); err != nil {
 			return err
 		}
@@ -27,6 +33,5 @@ func Init(conf *config.Config) error {
 	if err := webdav.InitLogRoutine(); err != nil {
 		return err
 	}
-	webprojects.StartMaintenance(conf.WebProjects)
 	return nil
 }

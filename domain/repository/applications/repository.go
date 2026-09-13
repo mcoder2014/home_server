@@ -9,6 +9,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	appErrors "github.com/mcoder2014/home_server/errors"
 	"gorm.io/gorm"
 )
@@ -20,6 +21,9 @@ type Repository struct{}
 func (r *Repository) Create(ctx context.Context, application *model.Application, maxActive int) error {
 	for attempt := 0; attempt < maxActive; attempt++ {
 		err := db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := accounts.LockApplicationOwnerTx(tx, application.OwnerUserID, application.Scopes, true, application.ActorAuthVersion); err != nil {
+				return err
+			}
 			slots, err := dal.LockApplicationSlots(tx, application.OwnerUserID, maxActive)
 			if err != nil {
 				return err
@@ -64,7 +68,19 @@ func (r *Repository) GetByID(ctx context.Context, applicationID int64) (*model.A
 
 func (r *Repository) UpdateOwned(ctx context.Context, application *model.Application, expectedRevision int64) (bool, error) {
 	database := db.MasterDB().WithContext(ctx)
-	updated, err := dal.UpdateOwnedApplication(database, application, expectedRevision)
+	var updated bool
+	err := database.Transaction(func(tx *gorm.DB) error {
+		scopes := application.Scopes
+		if application.Status == model.ApplicationStatusRevoked {
+			scopes = nil
+		}
+		if err := accounts.LockApplicationOwnerTx(tx, application.OwnerUserID, scopes, application.Status == model.ApplicationStatusEnabled, application.ActorAuthVersion); err != nil {
+			return err
+		}
+		var err error
+		updated, err = dal.UpdateOwnedApplication(tx, application, expectedRevision)
+		return err
+	})
 	return updated, err
 }
 
@@ -73,6 +89,9 @@ func (r *Repository) UpdateOwned(ctx context.Context, application *model.Applica
 // against stale credentials.
 func (r *Repository) StoreIssuedToken(ctx context.Context, application *model.Application, token *model.ApplicationAccessToken, now time.Time) error {
 	return db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := accounts.LockApplicationOwnerTx(tx, application.OwnerUserID, application.Scopes, true); err != nil {
+			return err
+		}
 		current, err := dal.LockApplicationByID(tx, application.ID)
 		if err != nil {
 			return err

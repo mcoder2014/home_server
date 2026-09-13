@@ -1,46 +1,59 @@
-# library
+# Home Server 前端
 
-## Project setup
-```
-npm install
-```
+Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，身份和 CSRF 信息由 `/api/auth/me` 返回；页面刷新后重新读取服务端身份。账号管理与受邀注册需要后端已切换到数据库账号模式。
 
-### Compiles and hot-reloads for development
-```
+## 页面与操作
+
+| 入口 | 用户可执行的操作 | 接口范围 |
+| --- | --- | --- |
+| `/login`、`/register` | 密码登录、校验邀请码、受邀注册 | `/api/auth/login`、`registration-policy`、`invitations/validate`、`register` |
+| `/account` | 更新显示名称、联系邮箱和电话；查看账号与功能权限 | `GET /api/auth/me`、`PATCH /api/account/profile` |
+| `/account/security` | 验证当前密码后改密，退出全部会话；初始密码账号必须先改密 | `/api/auth/change-password`、`logout-all` |
+| `/invitations` | 查看本月剩余额度、生成单次邀请码、复制一次性邀请码或链接、撤销未用邀请 | `/api/account/invitations`、`/:id/revoke` |
+| `/admin/users` | 搜索和分页查询用户；创建、封禁、恢复、删除、重置密码、退出全部会话；管理员、藏书和 WebDAV 授权 | `/api/admin/users`、`/:id` 及管理动作；`/:id/invitations/:invitation_id/revoke` |
+| `/admin/web-share` | 按所有者、名称、发布状态、可见范围和审核状态筛选全站网页；版本预览、下架、删除、恢复、解除审核锁 | `/api/admin/web-share`、`/:id`、`/:id/:action`、管理员版本预览路径 |
+| `/admin/config` | 根据 schema 生成分组表单；校验、查看差异、发布、查看历史、回滚、检查运行生效状态 | `/api/admin/config/schema`、`config`、`status`、`/:namespace`、`validate`、`history`、`rollback` |
+| `/admin/audit-logs` | 按目标类型与数字 ID 查询操作记录及脱敏变化 | `/api/admin/audit-logs` |
+
+原 `/applications`、`/web-share`、`/web-projects` 兼容入口、图书与扫码页面保留。网页托管与应用管理请求也使用 Cookie 和 CSRF；应用 scope 选择器只列出当前用户可以授予的藏书和 WebDAV 权限。应用有效期表单读取 `/me.application_policy` 的默认值及上限，随当前站点策略变化。应用统计区分有效与未吊销数量，网页统计区分发布与未删除数量。
+
+## 账号与权限边界
+
+- 登录信息只保存在页面内存，启动时移除旧 `localStorage` Token 和用户名。浏览器不写入密码、CSRF、登录 Token、邀请码或 Secret Key 到持久存储。
+- 受保护的页面导航重新请求 `/me`；管理员角色、临时密码状态和能力开关由服务端响应决定。后端仍是全部权限检查的最终边界。旧会话的迟到响应不能覆盖新登录身份。
+- 同源请求发送 Cookie，写操作携带 `X-CSRF-Token`。资料、账号、网页与配置修改同时发送 `If-Match`；版本冲突保留个人资料或配置草稿，重新查看最新值后再决定如何提交。
+- 自助改密成功后退出登录，管理员重置或创建的初始密码只在成功面板展示一次。账号删除需要输入目标用户名；高风险管理操作需要原因和操作者当前密码。
+- 邀请链接采用 `/register#invite=...`；读取后清除地址片段，校验和注册通过请求体传递完整邀请码。生成请求使用稳定 `request_id` 处理结果不明确时的重试。
+
+个人联系方式不自动变成登录别名或找回密码渠道。管理员身份不自动开通家庭藏书或 WebDAV。HTML 预览继续同源执行，界面明确提示这一已接受的信任边界；预览不声称提供脚本沙箱。
+
+## 动态配置表单
+
+配置字段由服务端 schema 定义。布尔值使用开关、整数使用带范围的输入框、文本使用普通文本表单；固定邀请规则只读且不进入发布请求。发布前显示字段差异和生效影响，回滚创建新版本。数据库中已保存的版本与运行中已加载的版本分别展示，页面每 15 秒刷新运行状态。
+
+关闭注册会使旧的未使用邀请码永久失效，重新开启或版本回滚不复活旧码。配置页的发布和回滚使用 `request_id`、`If-Match`、原因及管理员当前密码。密码不进入配置值或历史。
+
+## 本地开发与验证
+
+```sh
+npm ci
+npm run test:frontend
 npm run serve
-```
-
-### Compiles and minifies for production
-```
 npm run build
 ```
 
-### Lints and fixes files
+`npm run lint` 使用 Vue CLI 的既有 lint 命令。只读检查可以使用 `./node_modules/.bin/eslint --no-fix <files>`，避免自动修改与本次需求无关的旧页面。
+
+API 默认固定同源 `/`，需要由开发代理或 Nginx 将 `/api/`、`/library/`、旧 `/passport/` 和网页内容入口转发给后端。Cookie 登录依赖 HTTPS 与服务端明确允许的 Origin；不要通过本地持久化 Token 回退到旧浏览器登录流程。服务器地址与私有信息不要写进公开源码。
+
+### Pi 独立构建验证
+
+只在独立临时目录执行，源码目录不应是生产部署目录。先同步前端源码与 `config/nginx/web_projects_locations.conf` 测试夹具，再执行：
+
+```sh
+ssh pi 'source ~/.zshrc && cd /tmp/home-server-accounts-config-frontend-src/front_vue && npm run test:frontend && npm run build && test -s dist/index.html'
 ```
-npm run lint
-```
 
-### Runs frontend behavior tests
-```bash
-npm run test:frontend
-```
+现有 lockfile 包含内网镜像地址。外部网络不可达时，可在**临时构建副本**中将 `resolved` 下载地址改为公开 npm 镜像，并核对版本和 `integrity` 全部保持不变；源码 lockfile 不作镜像批量替换。不关闭 TLS 校验，不替换已锁定的包版本。
 
-## Application credentials
-
-Signed-in users manage their own application credentials at `/applications`. The page calls the same-origin `/api/applications` management API with the existing user `passport`; application Bearer identities are not accepted as a browser UI login.
-
-| UI behavior | Security boundary |
-| --- | --- |
-| Create or rotate a credential | The returned Secret Key is held only in the open dialog state. |
-| Copy or download credentials | A user must click the corresponding button; JSON contains only `access_key` and `secret_key`. |
-| Close the credential dialog | The component clears the one-time credential state; the value is not written to local storage, URL, or logs. |
-| Edit, enable, disable, rotate, or revoke | The current application revision is sent through `If-Match`. |
-
-Write scopes automatically include the matching read scope. New applications default to `web-projects:read` and a 90-day lifetime.
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
-
-## 环境配置与公开仓库
-
-API 默认使用当前站点同源地址 `/`。开发服务器未配置 API 代理时，需要通过 `VUE_APP_API_BASE_URL` 指定自己的后端；实际地址写入被 Git 忽略的 `.env.local`，不要硬编码进源文件。公开示例仅使用保留域名与文档地址。
+前端测试覆盖账号权限与站点开关、密码及资料边界、Cookie/CSRF/版本请求、资料和配置冲突保留、一次性凭证清理、邀请码校验竞态、登录/退出的迟到响应以及旧网页管理导航。浏览器交互测试可以使用合成账号和独立后端，不应用真实账号进行封禁或密码重置验证。

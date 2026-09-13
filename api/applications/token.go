@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	service "github.com/mcoder2014/home_server/domain/service/applications"
 	appErrors "github.com/mcoder2014/home_server/errors"
 )
@@ -48,6 +49,15 @@ func IssueApplicationAccessToken(c *gin.Context) {
 	applicationService := service.Default()
 	if applicationService == nil {
 		writeOAuthError(c, &oauthError{Name: "temporarily_unavailable", Description: "authentication service unavailable", Code: int(appErrors.ErrDependency.Code), Status: http.StatusServiceUnavailable})
+		return
+	}
+	enabled, enabledErr := accounts.ModuleEnabled(c.Request.Context(), "auth")
+	if enabledErr != nil {
+		writeOAuthError(c, &oauthError{Name: "temporarily_unavailable", Description: "authentication service unavailable", Code: int(appErrors.ErrDependency.Code), Status: http.StatusServiceUnavailable})
+		return
+	}
+	if !enabled {
+		writeOAuthError(c, &oauthError{Name: "unauthorized_client", Description: "application authentication is disabled", Code: int(appErrors.ErrForbidden.Code), Status: http.StatusForbidden})
 		return
 	}
 	issued, err := applicationService.IssueToken(c.Request.Context(), request.ClientID, request.ClientSecret)

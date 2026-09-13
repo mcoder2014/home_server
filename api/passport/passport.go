@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/api/middleware"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	"github.com/mcoder2014/home_server/domain/service/rsa"
 	myErrors "github.com/mcoder2014/home_server/errors"
@@ -37,6 +39,11 @@ type LoginResponse struct {
 }
 
 func Login(c *gin.Context) {
+	if accounts.DatabaseMode() && !middleware.IsHTTPS(c) {
+		ginfmt.Fail(c, myErrors.ErrForbidden)
+		return
+	}
+	c.Set(accounts.PasswordSourceIPKey, middleware.TrustedClientIP(c.Request))
 	ctx := ginfmt.RPCContext(c)
 	param := LoginParam{}
 	err := c.BindJSON(&param)

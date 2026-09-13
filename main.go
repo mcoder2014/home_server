@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -10,7 +11,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/mcoder2014/home_server/api/accounts"
+	"github.com/mcoder2014/home_server/app/siteconfig"
 	"github.com/mcoder2014/home_server/domain/service"
+	"github.com/mcoder2014/home_server/domain/service/webprojects"
 	"github.com/mcoder2014/home_server/utils/log"
 	"github.com/mcoder2014/home_server/utils/routine"
 
@@ -42,7 +46,6 @@ func main() {
 		panic(fmt.Errorf("connect to mysql failed: %w", err))
 	}
 
-	r := route.InitRoute()
 	port := cliConfig.Port
 	if port == -1 {
 		port = config.Global().Server.Port
@@ -54,6 +57,14 @@ func main() {
 	if err := service.Init(config.ConfigPtr(config.Global())); err != nil {
 		panic(err)
 	}
+	runtimeService := siteconfig.New(db.MasterDB(), config.Global())
+	if err := runtimeService.Initialize(context.Background()); err != nil {
+		panic(fmt.Errorf("runtime configuration unavailable: %w", err))
+	}
+	accounts.Configure(runtimeService)
+	r := route.InitRoute()
+	runtimeService.Start(context.Background())
+	webprojects.StartMaintenance(config.Runtime().WebProjects)
 
 	if err := r.Run(address); err != nil {
 		panic(err)

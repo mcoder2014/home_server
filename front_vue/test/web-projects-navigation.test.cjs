@@ -25,7 +25,7 @@ test('accepts only project content paths as open targets', () => {
     assert.equal(isSafeProjectTarget('/p/ab/'), false)
 })
 
-test('limits login redirects to project management and project content paths', () => {
+test('limits login redirects to known application pages and project content paths', () => {
     assert.equal(normalizeInternalRedirect('/applications'), '/applications')
     assert.equal(normalizeInternalRedirect('/web-share'), '/web-share')
     assert.equal(normalizeInternalRedirect('/web-share/123?tab=releases'), '/web-share/123?tab=releases')
@@ -48,7 +48,12 @@ test('limits login redirects to project management and project content paths', (
     assert.equal(normalizeInternalRedirect('/web-projects\\evil'), '/')
     assert.equal(normalizeInternalRedirect('/web-projects/%5cevil'), '/')
     assert.equal(normalizeInternalRedirect('/web-projects/%0anext'), '/')
-    assert.equal(normalizeInternalRedirect('/book/list'), '/')
+    assert.equal(normalizeInternalRedirect('/book/list'), '/book/list')
+    assert.equal(normalizeInternalRedirect('/account/security'), '/account/security')
+    assert.equal(normalizeInternalRedirect('/admin/config'), '/admin/config')
+    assert.equal(normalizeInternalRedirect('/invitations'), '/invitations')
+    assert.equal(normalizeInternalRedirect('/api/admin/users'), '/')
+    assert.equal(normalizeInternalRedirect('/admin-evil'), '/')
 })
 
 test('preserves a project bookmark fragment through the login redirect', () => {

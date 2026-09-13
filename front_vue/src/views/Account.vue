@@ -1,0 +1,99 @@
+<template>
+  <MyHeader />
+  <main class="page-container">
+    <div class="page-eyebrow">账户设置</div><h1 class="page-title">个人中心</h1>
+    <el-alert v-if="user?.must_change_password" type="warning" title="请先修改管理员提供的初始密码" description="修改完成后需重新登录，随后才能使用站点功能。" :closable="false" show-icon class="form-message" />
+    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="form-message" />
+    <el-tabs v-model="tab" @tab-change="changeTab">
+      <el-tab-pane label="个人资料" name="profile" :disabled="user?.must_change_password">
+        <div class="account-grid">
+          <section class="surface-card section-card">
+            <h2>编辑个人资料</h2>
+            <el-alert v-if="conflict" type="warning" title="资料已发生变化，草稿已保留" description="请先查看最新资料，再决定使用草稿覆盖相应资料字段。" :closable="false" class="form-message" />
+            <el-form label-position="top" @submit.prevent="saveProfile">
+              <el-form-item label="显示名称" :error="profileErrors.display_name"><el-input v-model="profile.display_name" maxlength="64" show-word-limit /></el-form-item>
+              <el-form-item label="联系邮箱" :error="profileErrors.contact_email"><el-input v-model="profile.contact_email" type="email" autocomplete="email" maxlength="254" /></el-form-item>
+              <el-form-item label="联系电话" :error="profileErrors.contact_mobile"><el-input v-model="profile.contact_mobile" type="tel" autocomplete="tel" maxlength="32" /></el-form-item>
+              <p class="muted">联系信息仅用于沟通，不用于登录或找回密码。修改资料不会更换已有登录别名。</p>
+              <div class="action-row"><el-button type="primary" native-type="submit" :loading="saving" :disabled="!dirty || conflict">保存资料</el-button><el-button :disabled="saving || !dirty" @click="resetProfile">取消修改</el-button><el-button v-if="conflict" @click="loadLatest">查看最新资料</el-button></div>
+            </el-form>
+            <el-dialog v-model="latestVisible" title="最新个人资料" width="540px"><dl class="meta-list"><dt>显示名称</dt><dd>{{ latest?.display_name }}</dd><dt>联系邮箱</dt><dd>{{ latest?.contact_email || '—' }}</dd><dt>联系电话</dt><dd>{{ latest?.contact_mobile || '—' }}</dd></dl><template #footer><el-button @click="discardDraft">使用最新资料</el-button><el-button type="primary" @click="keepDraft">保留草稿继续编辑</el-button></template></el-dialog>
+          </section>
+          <section class="surface-card section-card"><h2>账号与功能权限</h2><dl class="meta-list"><dt>用户 ID</dt><dd>{{ user?.id }}</dd><dt>登录用户名</dt><dd>{{ user?.user_name }}</dd><dt>{{ user?.source === 'config_import' ? '导入时间' : '创建时间' }}</dt><dd>{{ dateTime(user?.source === 'config_import' ? user?.imported_at || user?.create_time : user?.create_time) }}</dd><dt>账号角色</dt><dd>{{ user?.role === 'admin' ? '管理员' : '普通用户' }}</dd><dt>家庭藏书</dt><dd>{{ user?.library_enabled ? '已开通 · 可查看和修改' : '未开通，请联系管理员' }}</dd><dt>WebDAV</dt><dd>{{ webdavText }}</dd></dl><p class="muted">家庭藏书为全站共用库存。管理员身份不自动开通家庭藏书或 WebDAV。</p></section>
+        </div>
+      </el-tab-pane>
+      <el-tab-pane label="账户安全" name="security">
+        <section class="surface-card section-card account-narrow"><h2>{{ user?.must_change_password ? '修改初始密码' : '修改密码' }}</h2>
+          <p class="danger-note">修改密码后，所有已有登录态失效，应用凭证停用。你需要重新登录；重新启用应用前请核对来源。</p>
+          <el-form label-position="top" @submit.prevent="changePassword">
+            <el-form-item label="当前密码"><el-input v-model="password.current_password" type="password" show-password autocomplete="current-password" /></el-form-item>
+            <el-form-item label="新密码" :error="passwordValidation"><el-input v-model="password.new_password" type="password" show-password autocomplete="new-password" :placeholder="`至少 ${minimum} 个字符，允许空格和粘贴`" /></el-form-item>
+            <el-form-item label="确认新密码"><el-input v-model="password.confirm_password" type="password" show-password autocomplete="new-password" /></el-form-item>
+            <el-button type="primary" native-type="submit" :loading="saving">确认修改并退出登录</el-button>
+          </el-form>
+        </section>
+        <section v-if="!user?.must_change_password" class="surface-card section-card account-narrow"><h2>登录会话</h2><p class="muted">退出所有设备上的登录会话，也会退出当前设备。忘记密码请联系管理员重置。</p><el-button type="danger" plain :loading="saving" @click="logoutAll">退出全部登录会话</el-button></section>
+      </el-tab-pane>
+    </el-tabs>
+  </main>
+</template>
+<script>
+import MyHeader from '@/components/MyHeader'
+const {accountsApi} = require('@/api/accounts.cjs')
+const {profilePayload, profileError, passwordError, dateTime} = require('@/utils/accounts_behavior.cjs')
+export default {
+  name: 'AccountPage', components: {MyHeader},
+  data() { return {tab: this.$route.path.endsWith('/security') ? 'security' : 'profile', profile: {display_name: '', contact_email: '', contact_mobile: ''}, savedProfile: {}, revision: '', saving: false, error: '', profileErrors: {}, passwordValidation: '', conflict: false, latest: null, latestVisible: false, password: {current_password: '', new_password: '', confirm_password: ''}} },
+  computed: {
+    minimum() { return this.user?.password_policy?.min_length || 15 },
+    user() { return this.$store.state.userInfo },
+    dirty() { return JSON.stringify(this.profile) !== JSON.stringify(this.savedProfile) },
+    webdavText() { return {none: '未开通，请联系管理员', read: '共享目录 · 只读', write: '共享目录 · 读写'}[this.user?.webdav_permission] || '未开通' },
+  },
+  created() { this.resetProfile() },
+  mounted() { window.addEventListener('beforeunload', this.beforeUnload) },
+  beforeUnmount() { window.removeEventListener('beforeunload', this.beforeUnload); this.password = {current_password: '', new_password: '', confirm_password: ''} },
+  async beforeRouteLeave() {
+    if (!this.dirty || this.user?.must_change_password) return true
+    try { await this.$confirm('个人资料尚未保存，离开会丢失修改。', '离开个人中心', {type: 'warning', confirmButtonText: '离开', cancelButtonText: '继续编辑'}); return true } catch (_) { return false }
+  },
+  watch: {'$route.path'(path) { this.tab = path.endsWith('/security') ? 'security' : 'profile' }},
+  methods: {
+    dateTime,
+    beforeUnload(event) { if (this.dirty) { event.preventDefault(); event.returnValue = '' } },
+    changeTab(tab) { this.$router.replace(tab === 'security' ? '/account/security' : '/account') },
+    resetProfile() { this.profile = profilePayload(this.user || {}); this.savedProfile = {...this.profile}; this.revision = this.user?.revision; this.conflict = false; this.error = ''; this.profileErrors = {} },
+    async saveProfile() {
+      this.error = profileError(this.profile)
+      this.profileErrors = {}
+      if (this.error) {
+        this.profileErrors[this.error.includes('邮箱') ? 'contact_email' : this.error.includes('电话') ? 'contact_mobile' : 'display_name'] = this.error
+        return
+      }
+      this.saving = true
+      try { const me = await accountsApi.profile(this.revision, profilePayload(this.profile)); this.$store.commit('SET_USERINFO', me); this.resetProfile(); this.$message.success('个人资料已保存') }
+      catch (error) { this.error = error.message; if (error.status === 409) this.conflict = true }
+      finally { this.saving = false }
+    },
+    async loadLatest() { try { this.latest = await accountsApi.me(); this.latestVisible = true } catch (error) { this.error = error.message } },
+    discardDraft() { this.$store.commit('SET_USERINFO', this.latest); this.resetProfile(); this.latestVisible = false },
+    keepDraft() { this.$store.commit('SET_USERINFO', this.latest); this.savedProfile = profilePayload(this.latest); this.revision = this.latest.revision; this.conflict = false; this.latestVisible = false; this.error = '' },
+    async changePassword() {
+      this.error = ''; this.passwordValidation = passwordError(this.password.new_password, this.password.confirm_password, this.minimum)
+      if (!this.password.current_password) { this.error = '请输入当前密码'; return }
+      if (this.passwordValidation || this.saving) return
+      this.saving = true
+      try { await accountsApi.changePassword({...this.password}); this.password = {current_password: '', new_password: '', confirm_password: ''}; this.savedProfile = {...this.profile}; this.$store.commit('REMOVE_INFO'); await this.$router.replace({path: '/login', query: {changed: '1'}}) }
+      catch (error) { this.error = error.message }
+      finally { this.saving = false }
+    },
+    async logoutAll() {
+      try { await this.$confirm('这会退出包括当前设备在内的所有登录会话。', '退出全部会话', {type: 'warning', confirmButtonText: '确认退出', cancelButtonText: '取消'}) } catch (_) { return }
+      this.saving = true
+      try { await accountsApi.logoutAll(); this.savedProfile = {...this.profile}; this.$store.commit('REMOVE_INFO'); await this.$router.replace('/login') }
+      catch (error) { this.error = error.message }
+      finally { this.saving = false }
+    },
+  },
+}
+</script>

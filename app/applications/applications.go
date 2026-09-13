@@ -63,7 +63,7 @@ func CreateApplicationCredential(ctx context.Context, actor *utils.Principal, re
 	}
 	application, secret, err := applicationService.Create(ctx, ownerID, service.CreateInput{
 		Name: request.Name, Description: request.Description, Scopes: request.Scopes, ExpiresInDays: request.ExpiresInDays,
-	})
+	}, actor.AuthVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func UpdateApplicationCredential(ctx context.Context, actor *utils.Principal, ap
 	}
 	application, err := applicationService.Update(ctx, ownerID, applicationID, revision, service.UpdateInput{
 		Name: request.Name, Description: request.Description, Scopes: request.Scopes, ExpiresInDays: request.ExpiresInDays, Status: request.Status,
-	})
+	}, actor.AuthVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func RotateApplicationSecret(ctx context.Context, actor *utils.Principal, applic
 	if err != nil {
 		return nil, err
 	}
-	application, secret, err := applicationService.Rotate(ctx, ownerID, applicationID, revision)
+	application, secret, err := applicationService.Rotate(ctx, ownerID, applicationID, revision, actor.AuthVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func RevokeApplicationCredential(ctx context.Context, actor *utils.Principal, ap
 	if err != nil {
 		return nil, err
 	}
-	application, err := applicationService.Revoke(ctx, ownerID, applicationID, revision)
+	application, err := applicationService.Revoke(ctx, ownerID, applicationID, revision, actor.AuthVersion)
 	if err != nil {
 		return nil, err
 	}

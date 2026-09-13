@@ -24,6 +24,9 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
+// serveProjectContent resolves the live project/owner state and reader identity
+// before opening a validated published file. Public visibility bypasses reader
+// login only; owner bans, moderation, module policy and path checks still apply.
 func serveProjectContent(c *gin.Context) {
 	project, release, err := application.Default.GetPublishedProject(c.Param("slug"))
 	if err != nil {
@@ -79,7 +82,7 @@ func serveProjectContent(c *gin.Context) {
 		c.Redirect(http.StatusPermanentRedirect, target)
 		return
 	}
-	conf := config.Global().WebProjects
+	conf := config.Runtime().WebProjects
 	contentRoot, err := service.ReleaseContentRoot(&conf, release)
 	if err != nil {
 		ginfmt.Fail(c, err)
@@ -134,7 +137,7 @@ func downloadRelease(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	conf := config.Global().WebProjects
+	conf := config.Runtime().WebProjects
 	serveReleaseDownload(c, &conf, release)
 }
 

@@ -3,7 +3,6 @@ const test = require('node:test')
 
 const {
     createWebShareApi,
-    synchronizeBrowserIdentity,
 } = require('../src/api/web_projects.cjs')
 
 function createTransport(responseData = {code: 0, message: 'success', data: {ok: true}}) {
@@ -17,7 +16,7 @@ function createTransport(responseData = {code: 0, message: 'success', data: {ok:
     }
 }
 
-test('management requests stay same-origin and carry the passport token', async () => {
+test('management requests stay same-origin and use cookie identity with CSRF protection', async () => {
     const transport = createTransport()
     const api = createWebShareApi(transport, () => 'token-value')
 
@@ -28,7 +27,7 @@ test('management requests stay same-origin and carry the passport token', async 
         method: 'get',
         url: '/api/web-share',
         params: {cursor: 'next', limit: 20, status: 'deleted'},
-        headers: {passport: 'token-value'},
+        headers: {'X-CSRF-Token': 'token-value'},
     })
 })
 
@@ -45,83 +44,11 @@ test('mutating an existing project sends its revision in If-Match', async () => 
     assert.equal(transport.calls[1].headers['If-Match'], '8')
 })
 
-test('browser login is a same-origin POST with no token in its URL or body', async () => {
+test('existing content navigation confirms the cookie with me without bridging a stored token', async () => {
     const transport = createTransport()
-    const api = createWebShareApi(transport, () => 'secret-token')
-
-    await api.createBrowserLogin()
-
-    assert.deepEqual(transport.calls[0], {
-        method: 'post',
-        url: '/api/auth/browser-login',
-        headers: {passport: 'secret-token'},
-    })
-})
-
-test('browser login can explicitly use the newly returned token', async () => {
-    const transport = createTransport()
-    const api = createWebShareApi(transport, () => 'old-token')
-
-    await api.createBrowserLogin('new-token')
-
-    assert.deepEqual(transport.calls[0], {
-        method: 'post',
-        url: '/api/auth/browser-login',
-        headers: {passport: 'new-token'},
-    })
-})
-
-test('ordinary login synchronizes the browser identity before committing it locally', async () => {
-    const events = []
-    const api = {
-        async createBrowserLogin(token) {
-            events.push(`sync:${token}`)
-        },
-    }
-
-    const available = await synchronizeBrowserIdentity(api, {token: 'new-token', user_name: 'user-b'}, (identity) => {
-        events.push(`commit:${identity.user_name}`)
-    })
-
-    assert.equal(available, true)
-    assert.deepEqual(events, ['sync:new-token', 'commit:user-b'])
-})
-
-test('browser-login 404 keeps legacy book login available', async () => {
-    let committedUser = ''
-    const api = {
-        async createBrowserLogin() {
-            const error = new Error('not found')
-            error.status = 404
-            throw error
-        },
-    }
-
-    const available = await synchronizeBrowserIdentity(api, {token: 'new-token', user_name: 'legacy-user'}, (identity) => {
-        committedUser = identity.user_name
-    })
-
-    assert.equal(available, false)
-    assert.equal(committedUser, 'legacy-user')
-})
-
-test('browser-login failure does not commit the new identity', async () => {
-    let committed = false
-    const api = {
-        async createBrowserLogin() {
-            const error = new Error('service unavailable')
-            error.status = 503
-            throw error
-        },
-    }
-
-    await assert.rejects(
-        () => synchronizeBrowserIdentity(api, {token: 'new-token', user_name: 'user-b'}, () => {
-            committed = true
-        }),
-        /service unavailable/,
-    )
-    assert.equal(committed, false)
+    const api = createWebShareApi(transport, () => 'csrf')
+    await api.checkBrowserSession()
+    assert.deepEqual(transport.calls[0], {method: 'get', url: '/api/auth/me', headers: {'X-CSRF-Token': 'csrf'}})
 })
 
 test('checks the content Cookie with a credentialed HEAD and no passport header', async () => {

@@ -17,6 +17,11 @@ type WebProject struct {
 	Revision         int64            `json:"revision" gorm:"column:revision"`
 	ClientRequestID  *string          `json:"-" gorm:"column:client_request_id"`
 	DeletedAt        *time.Time       `json:"-" gorm:"column:deleted_at"`
+	ModerationStatus string           `json:"moderation_status" gorm:"column:moderation_status"`
+	ModerationReason string           `json:"moderation_reason" gorm:"column:moderation_reason"`
+	ModeratedBy      *int64           `json:"-" gorm:"column:moderated_by"`
+	ModeratedAt      *time.Time       `json:"moderated_at,omitempty" gorm:"column:moderated_at"`
+	PurgeAfter       *time.Time       `json:"purge_after,omitempty" gorm:"column:purge_after"`
 	CreateTime       time.Time        `json:"create_time" gorm:"column:create_time"`
 	UpdateTime       time.Time        `json:"update_time" gorm:"column:update_time"`
 }

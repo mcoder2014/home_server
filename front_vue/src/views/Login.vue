@@ -1,6 +1,6 @@
 <template>
   <div class="login-page">
-    <router-link to="/" class="login-brand"><span class="brand-mark" aria-hidden="true">CQ</span>CQ Home Server</router-link>
+    <router-link to="/" class="login-brand"><span class="brand-mark" aria-hidden="true">CQ</span>{{ $store.state.site.title }}</router-link>
     <main class="login-layout">
       <section class="login-intro">
         <span class="page-eyebrow">一个属于自己的数字空间</span>
@@ -14,6 +14,7 @@
         <p class="login-subtitle">欢迎回来，请输入账号信息。</p>
       </div>
 
+      <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon class="form-message" />
       <el-form
         :model="ruleForm"
         :rules="rules"
@@ -48,130 +49,58 @@
             size="large"
             class="login-btn"
             native-type="submit"
+            :loading="loading"
           >
             登录
           </el-button>
         </el-form-item>
       </el-form>
+      <router-link v-if="$store.state.registration.enabled" to="/register" class="back-home register-link">有邀请码？注册账号</router-link>
+      <p v-else class="closed-registration">网站暂未开放注册，请联系管理员</p>
       <router-link to="/" class="back-home">返回首页</router-link>
       </div>
     </main>
-    <footer class="login-footer">CQ Home Server · 留给生活的一点数字空间</footer>
+    <footer class="login-footer">{{ $store.state.site.title }} · 留给生活的一点数字空间</footer>
   </div>
 </template>
 
 <script>
-import axios from "axios";
-import {JSEncrypt} from 'jsencrypt'
-import { User, Lock } from '@element-plus/icons-vue'
-
-const {synchronizeBrowserIdentity, webShareApi} = require('@/api/web_projects.cjs')
+import {User, Lock} from '@element-plus/icons-vue'
+const {accountsApi} = require('@/api/accounts.cjs')
 const {isSafeProjectTarget, normalizeInternalRedirect} = require('@/utils/web_projects_navigation.cjs')
-
-let rsa = ""
-
-function encrypt(passwd) {
-  if (rsa.length === 0) {
-    alert("get rsa public key failed")
-    return
-  }
-  let jsEncrypt = new JSEncrypt()
-  jsEncrypt.setPublicKey(rsa)
-  return jsEncrypt.encrypt(passwd)
-}
-
 export default {
-  name: "MyLogin",
-  components: { User, Lock },
-
-  data() {
-    return {
-      ruleForm: {
-        username: '',
-        password: ''
-      },
-      rules: {
-        username: [
-          {required: true, message: '请输入用户名', trigger: 'blur'},
-          {min: 3, max: 15, message: '长度在 3 到 15 个字符', trigger: 'blur'}
-        ],
-        password: [
-          {required: true, message: '请选择密码', trigger: 'change'}
-        ]
-      },
-      rsa: "rsa"
-    };
-  },
-  setup() {
-    return { User, Lock }
+  name: 'MyLogin',
+  data() { return {ruleForm: {username: '', password: ''}, loading: false, error: '', rules: {username: [{required: true, message: '请输入用户名', trigger: 'blur'}], password: [{required: true, message: '请输入密码', trigger: 'blur'}]}} },
+  setup() { return {User, Lock} },
+  async created() {
+    if (this.$route.query.registered) this.$message.success('账号已创建，请登录')
+    if (this.$route.query.expired) this.error = '登录状态已失效，请重新登录'
+    if (this.$route.query.changed) this.$message.success('密码已更新，请使用新密码重新登录')
+    try { await this.$store.dispatch('loadBootstrap') } catch (error) { this.error = error.message }
   },
   methods: {
-    submitForm(formName) {
-      let url = this.$store.state.global.baseUrl + "/"
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-      });
-      let enPasswd = encrypt(this.ruleForm.password)
-      let loginParam = {
-        user_name: this.ruleForm.username,
-        crypt_passwd: enPasswd
-      }
-
-      let curStore = this.$store
-      let curRouter = this.$router
-      const redirect = normalizeInternalRedirect(this.$route.query.redirect)
-
-      apiBase.post("/passport/login", loginParam).then(async function (response) {
-        if (response.data.code === 0) {
-          const browserLoginAvailable = await synchronizeBrowserIdentity(webShareApi, response.data.data, (identity) => {
-            curStore.commit('SET_TOKEN', identity.token)
-            localStorage.setItem("user_name", identity.user_name)
-          })
-
-          if (isSafeProjectTarget(redirect)) {
-            if (!browserLoginAvailable) {
-              curRouter.push('/')
-              return
-            }
-            window.location.replace(redirect)
-            return
-          }
-          curRouter.push(redirect)
-        } else {
-          alert("login failed")
-        }
-      }).catch(function (err) {
-        alert("error " + err)
-      })
+    async submitForm() {
+      if (this.loading || !await this.$refs.ruleForm.validate().catch(() => false)) return
+      this.loading = true
+      this.error = ''
+      try {
+        const user = await accountsApi.login({user_name: this.ruleForm.username, password: this.ruleForm.password})
+        this.$store.commit('SET_USERINFO', user)
+        this.ruleForm.password = ''
+        if (user.must_change_password) { await this.$router.replace('/account/security'); return }
+        const redirect = normalizeInternalRedirect(this.$route.query.redirect)
+        if (isSafeProjectTarget(redirect)) window.location.replace(redirect)
+        else await this.$router.replace(redirect)
+      } catch (error) { this.error = error.message || '登录失败，请稍后重试' }
+      finally { this.loading = false }
     },
-    loadRsaKey() {
-      let url = this.$store.state.global.baseUrl + "/"
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-      });
-
-      apiBase.get("/passport/rsa", {}).then(function (response) {
-        console.log(response);
-        if (response.data.code === 0) {
-          console.log(response.data.data)
-          rsa = response.data.data
-        } else {
-          alert("get failed.")
-        }
-      }).catch(function (err) {
-        alert("error " + err)
-      })
-    }
   },
-  created() {
-    this.loadRsaKey()
-  }
 }
 </script>
-
 <style scoped>
+.form-message {margin-bottom:20px}
+.register-link {margin-bottom:18px;color:var(--primary-color)}
+.closed-registration {font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:20px}
 .login-page { min-height: 100vh; display: flex; flex-direction: column; padding: 32px 48px 24px; background: radial-gradient(ellipse at 12% 46%, #e3eee2 0%, transparent 58%), #f5f6f1; }
 .login-brand { display: inline-flex; gap: 12px; align-items: center; align-self: flex-start; color: var(--text-primary); text-decoration: none; font-size: 17px; font-weight: 700; letter-spacing: -0.4px; }
 .login-layout { display: grid; grid-template-columns: 1fr 400px; align-items: center; gap: 80px; max-width: 1000px; width: 100%; flex: 1; margin: 50px auto; }
@@ -190,7 +119,10 @@ export default {
 .back-home:hover { color: var(--primary-color); }
 .login-footer { text-align: center; color: #7c8a80; font-size: 11px; }
 @media (max-width: 820px) {
-  .login-page { padding: 24px; }
+  .form-message {margin-bottom:20px}
+.register-link {margin-bottom:18px;color:var(--primary-color)}
+.closed-registration {font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:20px}
+.login-page { padding: 24px; }
   .login-layout { grid-template-columns: 1fr; max-width: 420px; gap: 26px; margin: 40px auto; }
   .login-intro h1 { font-size: 28px; margin: 12px 0; }
   .login-intro p, .intro-note { display: none; }

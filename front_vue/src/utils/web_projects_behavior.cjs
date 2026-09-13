@@ -1,5 +1,5 @@
 function canPublishRelease(project, release) {
-    if (!project || !release || release.status !== 'ready' || project.status === 'deleted') {
+    if (!project || !release || release.status !== 'ready' || project.status === 'deleted' || (project.moderation_status && project.moderation_status !== 'normal')) {
         return false
     }
     return project.status !== 'enabled' || project.current_release_id !== release.id

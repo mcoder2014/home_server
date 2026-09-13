@@ -42,18 +42,21 @@ var (
 )
 
 type ProjectView struct {
-	ID               string    `json:"id"`
-	Name             string    `json:"name"`
-	Description      string    `json:"description"`
-	Slug             string    `json:"slug"`
-	AccessMode       string    `json:"access_mode"`
-	Status           string    `json:"status"`
-	CurrentReleaseID string    `json:"current_release_id"`
-	Revision         int64     `json:"revision"`
-	MemberUserIDs    []string  `json:"member_user_ids"`
-	URL              string    `json:"url"`
-	CreateTime       time.Time `json:"create_time"`
-	UpdateTime       time.Time `json:"update_time"`
+	ID               string     `json:"id"`
+	ModerationStatus string     `json:"moderation_status"`
+	ModerationReason string     `json:"moderation_reason"`
+	PurgeAfter       *time.Time `json:"purge_after,omitempty"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description"`
+	Slug             string     `json:"slug"`
+	AccessMode       string     `json:"access_mode"`
+	Status           string     `json:"status"`
+	CurrentReleaseID string     `json:"current_release_id"`
+	Revision         int64      `json:"revision"`
+	MemberUserIDs    []string   `json:"member_user_ids"`
+	URL              string     `json:"url"`
+	CreateTime       time.Time  `json:"create_time"`
+	UpdateTime       time.Time  `json:"update_time"`
 }
 
 type CreateProjectInput struct {
@@ -110,10 +113,17 @@ func ValidateProjectInput(name, description, slug, mode string, memberStrings []
 	if mode != AccessModeMembers.String() && len(memberIDs) > 0 {
 		return nil, fmt.Errorf("%w: members require members access mode", ErrInvalid)
 	}
-	for _, userID := range memberIDs {
-		identity, lookupErr := passport.GetMockData().GetByID(userID)
-		if lookupErr != nil || identity == nil {
-			return nil, fmt.Errorf("%w: unknown member", ErrInvalid)
+	// Database members are validated together under sorted row locks by the
+	// write repository, avoiding a separate query per selected member.
+	if config.Global().IdentitySource != "database" {
+		for _, userID := range memberIDs {
+			identity, lookupErr := passport.GetByID(context.Background(), userID)
+			if lookupErr != nil {
+				return nil, ErrDependency
+			}
+			if identity == nil {
+				return nil, fmt.Errorf("%w: unknown member", ErrInvalid)
+			}
 		}
 	}
 	return memberIDs, nil
@@ -125,6 +135,9 @@ func ValidateProjectInput(name, description, slug, mode string, memberStrings []
 func ProjectStatusFields(project *model.WebProject, action string, retentionDays int, now time.Time) (map[string]interface{}, error) {
 	if project == nil || retentionDays <= 0 {
 		return nil, ErrInvalid
+	}
+	if action == "restore" && project.ModerationStatus != "" && project.ModerationStatus != "normal" {
+		return nil, ErrForbidden
 	}
 	fields := map[string]interface{}{"revision": gorm.Expr("revision + 1"), "update_time": now}
 	switch action {
@@ -139,12 +152,32 @@ func ProjectStatusFields(project *model.WebProject, action string, retentionDays
 		}
 		fields["status"] = ProjectStatusDeleted
 		fields["deleted_at"] = now
+		if config.Global().IdentitySource == "database" {
+			fields["purge_after"] = now.Add(time.Duration(retentionDays) * 24 * time.Hour)
+		}
 	case "restore":
-		if project.Status != ProjectStatusDeleted || project.DeletedAt == nil || now.Sub(*project.DeletedAt) > time.Duration(retentionDays)*24*time.Hour {
+		deadline := time.Time{}
+		restoreRetention := retentionDays
+		if config.Global().IdentitySource == "database" && project.PurgeAfter == nil {
+			restoreRetention = config.Global().WebProjects.DeleteRetentionDays
+			if restoreRetention <= 0 {
+				restoreRetention = 7
+			}
+		}
+		if project.DeletedAt != nil {
+			deadline = project.DeletedAt.Add(time.Duration(restoreRetention) * 24 * time.Hour)
+		}
+		if project.PurgeAfter != nil {
+			deadline = *project.PurgeAfter
+		}
+		if project.Status != ProjectStatusDeleted || project.DeletedAt == nil || now.After(deadline) {
 			return nil, ErrNotFound
 		}
 		fields["status"] = ProjectStatusDisabled
 		fields["deleted_at"] = nil
+		if config.Global().IdentitySource == "database" {
+			fields["purge_after"] = nil
+		}
 	default:
 		return nil, ErrInvalid
 	}

@@ -42,16 +42,16 @@ export default {
         return
       }
 
-      if (!localStorage.getItem('token')) {
+      if (!this.$store.state.userInfo) {
         this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
         return
       }
 
       try {
-        await webShareApi.createBrowserLogin()
+        await webShareApi.checkBrowserSession()
       } catch (error) {
         if (error.status === 401) {
-          localStorage.removeItem('token')
+          this.$store.commit('REMOVE_INFO')
           this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
           return
         }

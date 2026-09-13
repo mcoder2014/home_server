@@ -338,3 +338,16 @@ func (r *incrementReader) Read(buffer []byte) (int, error) {
 	}
 	return len(buffer), nil
 }
+
+func TestAuthenticateTokenCarriesOriginalWriteAuthorizationSnapshot(t *testing.T) {
+	service, _, now := testService()
+	application, secret, err := service.Create(context.Background(), 101, CreateInput{Name: "snapshot", Scopes: []string{ScopeWebProjectsWrite}})
+	require.NoError(t, err)
+	token, err := service.IssueToken(context.Background(), application.AccessKey, secret)
+	require.NoError(t, err)
+	principal, err := service.AuthenticateToken(context.Background(), token.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, application.Revision, principal.ApplicationRevision)
+	require.Equal(t, application.SecretVersion, principal.SecretVersion)
+	require.Equal(t, now.Add(15*time.Minute), principal.TokenExpiresAt)
+}

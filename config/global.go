@@ -3,9 +3,13 @@ package config
 import (
 	"github.com/mcoder2014/home_server/utils"
 	"github.com/sirupsen/logrus"
+	"sync"
 )
 
 type Config struct {
+	IdentitySource       string `json:"identity_source" yaml:"identity_source"`
+	ConfigSource         string `json:"config_source" yaml:"config_source"`
+	UploadHardLimitBytes int64  `json:"upload_hard_limit_bytes" yaml:"upload_hard_limit_bytes"`
 	// 服务相关配置
 	Server struct {
 		// http 服务端口号
@@ -61,6 +65,7 @@ type AuthConfig struct {
 
 // WebProjectsConfig controls the isolated storage and hard safety limits for hosted web projects.
 type WebProjectsConfig struct {
+	CleanupEnabled              bool   `json:"cleanup_enabled" yaml:"-"`
 	Enabled                     bool   `json:"enabled" yaml:"enabled"`
 	StorageRoot                 string `json:"storage_root" yaml:"storage_root"`
 	SiteOrigin                  string `json:"site_origin" yaml:"site_origin"`
@@ -70,6 +75,9 @@ type WebProjectsConfig struct {
 	MaxFileCount                int    `json:"max_file_count" yaml:"max_file_count"`
 	MaxDirectoryDepth           int    `json:"max_directory_depth" yaml:"max_directory_depth"`
 	MaxProjectBytes             int64  `json:"max_project_bytes" yaml:"max_project_bytes"`
+	MaxProjectsPerUser          int    `json:"max_projects_per_user" yaml:"-"`
+	MaxUserBytes                int64  `json:"max_user_bytes" yaml:"-"`
+	MinFreeDiskBytes            int64  `json:"min_free_disk_bytes" yaml:"-"`
 	MaxReleases                 int    `json:"max_releases" yaml:"max_releases"`
 	MaxConcurrentUploadsPerUser int    `json:"max_concurrent_uploads_per_user" yaml:"max_concurrent_uploads_per_user"`
 	MaxConcurrentExtracts       int    `json:"max_concurrent_extracts" yaml:"max_concurrent_extracts"`
@@ -78,9 +86,15 @@ type WebProjectsConfig struct {
 
 // 全局配置
 var globalConfig = Config{}
+var globalConfigLock sync.RWMutex
 
 func Global() Config {
-	return globalConfig
+	globalConfigLock.RLock()
+	defer globalConfigLock.RUnlock()
+	result := globalConfig
+	result.Auth.SiteOrigins = append([]string(nil), result.Auth.SiteOrigins...)
+	result.Auth.TrustedProxyCIDRs = append([]string(nil), result.Auth.TrustedProxyCIDRs...)
+	return result
 }
 
 // Normalize shared configuration before any router or service consumes it.
@@ -89,7 +103,14 @@ func SetGlobalConfig(c Config) {
 	if c.Auth.SiteOrigin == "" && c.WebProjects.Enabled {
 		c.Auth.SiteOrigin = c.WebProjects.SiteOrigin
 	}
+	c.Auth.SiteOrigins = append([]string(nil), c.Auth.SiteOrigins...)
+	c.Auth.TrustedProxyCIDRs = append([]string(nil), c.Auth.TrustedProxyCIDRs...)
+	globalConfigLock.Lock()
 	globalConfig = c
+	globalConfigLock.Unlock()
+	runtimeLock.Lock()
+	runtimeSnapshot.Store(nil)
+	runtimeLock.Unlock()
 }
 
 // InitGlobalConfig 从指定配置文件中读取配置信息

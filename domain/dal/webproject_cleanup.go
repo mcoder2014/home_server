@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
 	"gorm.io/gorm"
@@ -60,9 +61,12 @@ func DeleteDeletingWebProjectRelease(projectID, releaseID int64) (bool, error) {
 }
 
 func ListExpiredWebProjects(before time.Time, afterDeletedAt *time.Time, afterID int64, limit int) ([]*model.WebProject, error) {
-	query := db.MasterDB().Table(WebProjectTable).
-		Select(projectColumns).
-		Where("status = ? AND deleted_at IS NOT NULL AND deleted_at < ?", model.WebProjectStatusDeleted, before)
+	query := db.MasterDB().Table(WebProjectTable).Select(WebProjectColumns()).Where("status = ? AND deleted_at IS NOT NULL", model.WebProjectStatusDeleted)
+	if config.Global().IdentitySource == "database" {
+		query = query.Where("(purge_after IS NOT NULL AND purge_after <= ?) OR (purge_after IS NULL AND deleted_at < ?)", time.Now(), before)
+	} else {
+		query = query.Where("deleted_at < ?", before)
+	}
 	if afterDeletedAt != nil {
 		query = query.Where("(deleted_at, id) > (?, ?)", *afterDeletedAt, afterID)
 	}
@@ -94,7 +98,7 @@ func ListDeletingWebProjectReleases(limit int) ([]*model.WebProjectRelease, erro
 func LockWebProjectByID(tx *gorm.DB, projectID int64) (*model.WebProject, error) {
 	var project model.WebProject
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Table(WebProjectTable).
-		Select(projectColumns).Where("id = ?", projectID).Take(&project).Error
+		Select(WebProjectColumns()).Where("id = ?", projectID).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -112,8 +116,12 @@ func ListWebProjectReleasesForCleanup(tx *gorm.DB, projectID int64, limit int) (
 }
 
 func ClearExpiredWebProjectCurrentRelease(tx *gorm.DB, projectID int64, before time.Time) (bool, error) {
-	result := tx.Table(WebProjectTable).
-		Where("id = ? AND status = ? AND deleted_at IS NOT NULL AND deleted_at < ?", projectID, model.WebProjectStatusDeleted, before).
-		Updates(map[string]interface{}{"current_release_id": nil, "revision": gorm.Expr("revision + 1"), "update_time": time.Now()})
+	query := tx.Table(WebProjectTable).Where("id = ? AND status = ? AND deleted_at IS NOT NULL", projectID, model.WebProjectStatusDeleted)
+	if config.Global().IdentitySource == "database" {
+		query = query.Where("(purge_after IS NOT NULL AND purge_after <= ?) OR (purge_after IS NULL AND deleted_at < ?)", time.Now(), before)
+	} else {
+		query = query.Where("deleted_at < ?", before)
+	}
+	result := query.Updates(map[string]interface{}{"current_release_id": nil, "revision": gorm.Expr("revision + 1"), "update_time": time.Now()})
 	return result.RowsAffected == 1, result.Error
 }

@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"strings"
+	"time"
 )
 
 const (
@@ -14,10 +15,18 @@ const (
 // Principal keeps authentication kind distinct from the user whose existing
 // resource permissions apply. Secrets and access tokens never belong here.
 type Principal struct {
-	Kind          string
-	UserID        int64
-	ApplicationID int64
-	Scopes        []string
+	Kind                string
+	UserID              int64
+	ApplicationID       int64
+	ApplicationRevision int64
+	SecretVersion       int64
+	TokenExpiresAt      time.Time
+	Scopes              []string
+	AuthVersion         int64
+	Role                string
+	LibraryEnabled      bool
+	WebDAVPermission    string
+	MustChangePassword  bool
 }
 
 func (p *Principal) Allows(scope string) bool {

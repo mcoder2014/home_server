@@ -11,21 +11,22 @@ const (
 // Application stores an owner's application credential. SecretDigest is the
 // only persisted representation of the secret key.
 type Application struct {
-	ID            int64      `json:"-" gorm:"column:id"`
-	OwnerUserID   int64      `json:"-" gorm:"column:owner_user_id"`
-	Name          string     `json:"-" gorm:"column:name"`
-	Description   string     `json:"-" gorm:"column:description"`
-	AccessKey     string     `json:"-" gorm:"column:access_key"`
-	SecretDigest  []byte     `json:"-" gorm:"column:secret_digest"`
-	Scopes        []string   `json:"-" gorm:"column:scopes;serializer:json"`
-	Status        int        `json:"-" gorm:"column:status"`
-	ActiveSlot    *int       `json:"-" gorm:"column:active_slot"`
-	Revision      int64      `json:"-" gorm:"column:revision"`
-	SecretVersion int64      `json:"-" gorm:"column:secret_version"`
-	ExpiresAt     time.Time  `json:"-" gorm:"column:expires_at"`
-	LastIssuedAt  *time.Time `json:"-" gorm:"column:last_issued_at"`
-	CreateTime    time.Time  `json:"-" gorm:"column:create_time"`
-	UpdateTime    time.Time  `json:"-" gorm:"column:update_time"`
+	ActorAuthVersion int64      `json:"-" gorm:"-"`
+	ID               int64      `json:"-" gorm:"column:id"`
+	OwnerUserID      int64      `json:"-" gorm:"column:owner_user_id"`
+	Name             string     `json:"-" gorm:"column:name"`
+	Description      string     `json:"-" gorm:"column:description"`
+	AccessKey        string     `json:"-" gorm:"column:access_key"`
+	SecretDigest     []byte     `json:"-" gorm:"column:secret_digest"`
+	Scopes           []string   `json:"-" gorm:"column:scopes;serializer:json"`
+	Status           int        `json:"-" gorm:"column:status"`
+	ActiveSlot       *int       `json:"-" gorm:"column:active_slot"`
+	Revision         int64      `json:"-" gorm:"column:revision"`
+	SecretVersion    int64      `json:"-" gorm:"column:secret_version"`
+	ExpiresAt        time.Time  `json:"-" gorm:"column:expires_at"`
+	LastIssuedAt     *time.Time `json:"-" gorm:"column:last_issued_at"`
+	CreateTime       time.Time  `json:"-" gorm:"column:create_time"`
+	UpdateTime       time.Time  `json:"-" gorm:"column:update_time"`
 }
 
 // ApplicationAccessToken stores an opaque bearer token digest and the

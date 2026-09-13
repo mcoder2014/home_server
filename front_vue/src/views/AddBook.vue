@@ -39,7 +39,7 @@
 <script>
 import MyHeader from "@/components/MyHeader";
 import {handleError} from "@/utils/handle_http_error"
-import axios from "axios";
+import axios from "@/axios";
 import { Tickets, Check, Camera } from '@element-plus/icons-vue'
 
 export default {
@@ -60,7 +60,6 @@ export default {
     },
     add_book() {
       console.log('add book isbn', this.isbn)
-      let url = this.$store.state.global.baseUrl + "/"
       let param = {
         isbn: this.isbn,
         quantity: 1,
@@ -68,18 +67,10 @@ export default {
         lib_id: 4
       }
 
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-        headers: {
-          'Content-Type': 'application/json;charset=UTF-8',
-          'passport': localStorage.getItem('token')
-        },
-      });
+      const apiBase = axios
 
       apiBase.post("/library/book/add", param).then(function (response) {
-        console.log(response);
-        handleError(response);
+        handleError(response.data);
         if (response.data.code === 0) {
           alert("添加成功")
         } else {

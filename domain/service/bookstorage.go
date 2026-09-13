@@ -8,7 +8,10 @@ import (
 	"github.com/mcoder2014/home_server/errors"
 
 	"github.com/mcoder2014/home_server/domain/dal"
+	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
+	"gorm.io/gorm"
 )
 
 // QueryStorageByIsbn 根据 isbn 查询库存
@@ -47,7 +50,17 @@ func AddStorageByIsbn(ctx context.Context, isbn string, quantity int, t model.St
 		Type:      t,
 		Quantity:  quantity,
 	}
-	e = dal.InsertBookStorage(&s)
+	if accounts.DatabaseMode() {
+		principal, _ := ctx.Value(utils.CtxKeyPrincipal).(*utils.Principal)
+		e = db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := accounts.RequireLibraryWriteTx(tx, principal); err != nil {
+				return err
+			}
+			return dal.InsertBookStorage(&s, tx)
+		})
+	} else {
+		e = dal.InsertBookStorage(&s)
+	}
 	return e
 }
 
@@ -56,6 +69,19 @@ func UpdateStorage(ctx context.Context, dto *model.UpdateBookStorageDto) error {
 }
 
 func AddAddress(ctx context.Context, address *model.BookAddress) (int64, error) {
+	if accounts.DatabaseMode() {
+		principal, _ := ctx.Value(utils.CtxKeyPrincipal).(*utils.Principal)
+		var id int64
+		err := db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := accounts.RequireLibraryWriteTx(tx, principal); err != nil {
+				return err
+			}
+			var err error
+			id, err = dal.InsertBookAddress(address, tx)
+			return err
+		})
+		return id, err
+	}
 	return dal.InsertBookAddress(address)
 }
 

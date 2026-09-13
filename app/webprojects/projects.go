@@ -1,11 +1,13 @@
 package webprojects
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"strconv"
@@ -17,8 +19,11 @@ import (
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	repository "github.com/mcoder2014/home_server/domain/repository/webprojects"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
+	apperrors "github.com/mcoder2014/home_server/errors"
+	"github.com/mcoder2014/home_server/utils"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -28,24 +33,26 @@ const maxReadyReleaseScan = 1000
 type Application struct {
 	repository *repository.Repository
 	uploads    uploadLimiter
+	diskFree   func(string) (uint64, error)
 }
 
 type uploadLimiter struct {
 	sync.Mutex
-	byUser map[int64]int
-	global int
+	byUser        map[int64]int
+	global        int
+	reservedBytes uint64
 }
 
 var Default = New(repository.New())
 
 func New(repository *repository.Repository) *Application {
-	return &Application{repository: repository, uploads: uploadLimiter{byUser: make(map[int64]int)}}
+	return &Application{repository: repository, diskFree: webDiskFreeBytes, uploads: uploadLimiter{byUser: make(map[int64]int)}}
 }
 
 // CreateProject validates the complete aggregate before persistence, then writes
 // the project and members in one transaction. A repeated request returns only an
 // exactly matching aggregate; a reused key with different input is a conflict.
-func (application *Application) CreateProject(ownerUserID int64, input service.CreateProjectInput) (*service.ProjectView, error) {
+func (application *Application) CreateProject(ownerUserID int64, input service.CreateProjectInput, principals ...*utils.Principal) (*service.ProjectView, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	memberIDs, err := service.ValidateProjectInput(input.Name, input.Description, input.Slug, input.AccessMode, input.MemberUserIDs, true)
 	if err != nil {
@@ -80,11 +87,11 @@ func (application *Application) CreateProject(ownerUserID int64, input service.C
 	if input.ClientRequestID != "" {
 		project.ClientRequestID = &input.ClientRequestID
 	}
-	if err := application.repository.Create(project, memberIDs); err != nil {
+	if err := application.repository.Create(project, memberIDs, principals...); err != nil {
 		if isDuplicateKey(err) {
 			return nil, fmt.Errorf("%w: create project", service.ErrConflict)
 		}
-		return nil, fmt.Errorf("%w: create project", service.ErrDependency)
+		return nil, projectPersistenceError(err, "create project")
 	}
 	return projectView(&repository.ProjectAggregate{Project: project, MemberIDs: memberIDs}), nil
 }
@@ -133,7 +140,7 @@ func (application *Application) ListOwnedProjects(ownerUserID, cursor int64, lim
 
 // UpdateProject resolves omitted member input before validating the resulting
 // aggregate. The project revision and member replacement commit atomically.
-func (application *Application) UpdateProject(ownerUserID, projectID, revision int64, input service.UpdateProjectInput) (*service.ProjectView, error) {
+func (application *Application) UpdateProject(ownerUserID, projectID, revision int64, input service.UpdateProjectInput, principals ...*utils.Principal) (*service.ProjectView, error) {
 	aggregate, err := application.repository.FindOwned(ownerUserID, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: query project", service.ErrDependency)
@@ -174,12 +181,12 @@ func (application *Application) UpdateProject(ownerUserID, projectID, revision i
 	}
 	accessMode, _ := model.ParseWebProjectAccess(mode)
 	fields := map[string]interface{}{"name": name, "description": description, "slug": slug, "access_mode": accessMode, "revision": gorm.Expr("revision + 1"), "update_time": time.Now()}
-	updated, err := application.repository.Update(ownerUserID, projectID, revision, fields, memberIDs)
+	updated, err := application.repository.Update(ownerUserID, projectID, revision, fields, memberIDs, principals...)
 	if err != nil {
 		if isDuplicateKey(err) {
 			return nil, service.ErrConflict
 		}
-		return nil, fmt.Errorf("%w: update project", service.ErrDependency)
+		return nil, projectPersistenceError(err, "update project")
 	}
 	if !updated {
 		return nil, service.ErrConflict
@@ -187,7 +194,7 @@ func (application *Application) UpdateProject(ownerUserID, projectID, revision i
 	return application.GetOwnedProject(ownerUserID, projectID)
 }
 
-func (application *Application) ChangeProjectStatus(ownerUserID, projectID, revision int64, action string, retentionDays int) (*service.ProjectView, error) {
+func (application *Application) ChangeProjectStatus(ownerUserID, projectID, revision int64, action string, retentionDays int, principals ...*utils.Principal) (*service.ProjectView, error) {
 	aggregate, err := application.repository.FindOwned(ownerUserID, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: query project", service.ErrDependency)
@@ -199,9 +206,9 @@ func (application *Application) ChangeProjectStatus(ownerUserID, projectID, revi
 	if err != nil {
 		return nil, err
 	}
-	updated, err := application.repository.UpdateFields(ownerUserID, projectID, revision, fields)
+	updated, err := application.repository.UpdateFields(ownerUserID, projectID, revision, fields, principals...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: update project status", service.ErrDependency)
+		return nil, projectPersistenceError(err, "update project status")
 	}
 	if !updated {
 		return nil, service.ErrConflict
@@ -217,6 +224,9 @@ func (application *Application) CheckUploadOwner(ownerUserID, projectID int64) e
 	if aggregate == nil || aggregate.Project.Status == service.ProjectStatusDeleted {
 		return service.ErrNotFound
 	}
+	if aggregate.Project.ModerationStatus != "" && aggregate.Project.ModerationStatus != "normal" {
+		return service.ErrForbidden
+	}
 	return nil
 }
 
@@ -226,20 +236,49 @@ func (application *Application) AcquireUpload(ownerUserID int64, conf *config.We
 	if conf == nil || !conf.Enabled || application.uploads.byUser[ownerUserID] >= conf.MaxConcurrentUploadsPerUser || application.uploads.global >= conf.MaxConcurrentExtracts {
 		return nil, service.ErrRateLimited
 	}
+	var reservation uint64
+	if accounts.DatabaseMode() && conf.StorageRoot != "" {
+		if conf.MaxExpandedBytes <= 0 || conf.MaxUploadBytes < 0 || conf.MinFreeDiskBytes < 0 || application.diskFree == nil {
+			return nil, service.ErrDependency
+		}
+		reservation = uint64(conf.MaxExpandedBytes)
+		// HTTP staging and ZIP parsing can temporarily keep two compressed
+		// copies alongside the expanded content, so reserve those as well.
+		compressed := uint64(conf.MaxUploadBytes)
+		if compressed > (math.MaxUint64-reservation)/2 {
+			return nil, service.ErrDependency
+		}
+		reservation += 2 * compressed
+		free, err := application.diskFree(conf.StorageRoot)
+		if err != nil {
+			return nil, service.ErrDependency
+		}
+		minimum := uint64(conf.MinFreeDiskBytes)
+		if minimum > free || application.uploads.reservedBytes > free-minimum || reservation > free-minimum-application.uploads.reservedBytes {
+			return nil, apperrors.WithMessage(service.ErrRateLimited, "网页存储磁盘可用空间不足，请等待上传或清理完成")
+		}
+	}
 	application.uploads.byUser[ownerUserID]++
 	application.uploads.global++
+	application.uploads.reservedBytes += reservation
+	released := false
 	return func() {
 		application.uploads.Lock()
 		defer application.uploads.Unlock()
+		if released {
+			return
+		}
+		released = true
 		application.uploads.byUser[ownerUserID]--
 		application.uploads.global--
+		application.uploads.reservedBytes -= reservation
 	}, nil
 }
 
 // UploadRelease writes and validates the artifact before opening a short
 // database transaction. Project locking protects quota/current-release state;
 // failed persistence removes only the newly generated release directory.
-func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ownerUserID, projectID int64, fileName, entryFile, idempotencyKey string, src io.Reader) (*model.WebProjectRelease, error) {
+func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ownerUserID, projectID int64, fileName, entryFile, idempotencyKey string, src io.Reader, principals ...*utils.Principal) (*model.WebProjectRelease, error) {
 	if len(idempotencyKey) > 256 {
 		return nil, service.ErrInvalid
 	}
@@ -266,9 +305,9 @@ func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ow
 	var existing *model.WebProjectRelease
 	var retired []*model.WebProjectRelease
 	err = application.repository.Transaction(func(tx *repository.Transaction) error {
-		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID)
+		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID, principals...)
 		if lockErr != nil {
-			return fmt.Errorf("%w: lock project", service.ErrDependency)
+			return projectPersistenceError(lockErr, "lock project")
 		}
 		if project == nil || project.Status == service.ProjectStatusDeleted {
 			return service.ErrNotFound
@@ -284,6 +323,9 @@ func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ow
 				}
 				return nil
 			}
+		}
+		if err := tx.CheckUserUploadQuota(ownerUserID, artifact.TotalBytes); err != nil {
+			return err
 		}
 		ready, listErr := tx.ListReadyReleases(projectID, maxReadyReleaseScan+1)
 		if listErr != nil {
@@ -359,11 +401,11 @@ func (application *Application) ListReleases(ownerUserID, projectID, cursor int6
 // PublishRelease locks project before release, matching upload lock order. The
 // filesystem entry check runs while locked so a missing artifact cannot become
 // current and optimistic revision still resolves concurrent status changes.
-func (application *Application) PublishRelease(conf *config.WebProjectsConfig, ownerUserID, projectID, releaseID, revision int64) (*service.ProjectView, error) {
+func (application *Application) PublishRelease(conf *config.WebProjectsConfig, ownerUserID, projectID, releaseID, revision int64, principals ...*utils.Principal) (*service.ProjectView, error) {
 	err := application.repository.Transaction(func(tx *repository.Transaction) error {
-		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID)
+		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID, principals...)
 		if lockErr != nil {
-			return fmt.Errorf("%w: lock project", service.ErrDependency)
+			return projectPersistenceError(lockErr, "lock project")
 		}
 		if project == nil || project.Status == service.ProjectStatusDeleted {
 			return service.ErrNotFound
@@ -430,12 +472,31 @@ func (application *Application) GetReleaseForDownload(ownerUserID, projectID, re
 }
 
 func (application *Application) GetPublishedProject(slug string) (*model.WebProject, *model.WebProjectRelease, error) {
+	enabled, gateErr := accounts.ModuleEnabled(context.Background(), "web_projects")
+	if gateErr != nil {
+		return nil, nil, service.ErrDependency
+	}
+	if !enabled {
+		return nil, nil, service.ErrForbidden
+	}
 	project, release, err := application.repository.FindPublished(slug)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: query published project", service.ErrDependency)
 	}
 	if project == nil || project.Status != service.ProjectStatusEnabled || project.CurrentReleaseID == nil {
 		return nil, nil, service.ErrNotFound
+	}
+	if project.ModerationStatus != "" && project.ModerationStatus != "normal" {
+		return nil, nil, service.ErrNotFound
+	}
+	if accounts.DatabaseMode() {
+		owner, ownerErr := accounts.GetByID(context.Background(), project.OwnerUserID)
+		if ownerErr != nil {
+			return nil, nil, service.ErrDependency
+		}
+		if owner == nil || owner.Status != model.AccountActive {
+			return nil, nil, service.ErrNotFound
+		}
 	}
 	if release == nil || release.Status != service.ReleaseStatusReady {
 		return nil, nil, service.ErrDependency
@@ -450,8 +511,11 @@ func (application *Application) IsMember(projectID, userID int64) (bool, error) 
 	return application.repository.IsMember(projectID, userID)
 }
 
-func (application *Application) EligibleUsers() []service.EligibleUser {
-	identities := passport.ListUsers()
+func (application *Application) EligibleUsers() ([]service.EligibleUser, error) {
+	identities, err := passport.ListUsersWithError(context.Background())
+	if err != nil {
+		return nil, service.ErrDependency
+	}
 	users := make([]service.EligibleUser, 0, len(identities))
 	for _, identity := range identities {
 		if identity != nil && identity.ID > 0 {
@@ -459,12 +523,12 @@ func (application *Application) EligibleUsers() []service.EligibleUser {
 		}
 	}
 	sort.Slice(users, func(i, j int) bool { return users[i].ID < users[j].ID })
-	return users
+	return users, nil
 }
 
 func projectView(aggregate *repository.ProjectAggregate) *service.ProjectView {
 	project := aggregate.Project
-	view := &service.ProjectView{ID: strconv.FormatInt(project.ID, 10), Name: project.Name, Description: project.Description, Slug: project.Slug, AccessMode: project.AccessMode.String(), Status: project.Status.String(), Revision: project.Revision, MemberUserIDs: int64sToStrings(aggregate.MemberIDs), URL: "/p/" + project.Slug + "/", CreateTime: project.CreateTime, UpdateTime: project.UpdateTime}
+	view := &service.ProjectView{ModerationStatus: project.ModerationStatus, ModerationReason: project.ModerationReason, PurgeAfter: project.PurgeAfter, ID: strconv.FormatInt(project.ID, 10), Name: project.Name, Description: project.Description, Slug: project.Slug, AccessMode: project.AccessMode.String(), Status: project.Status.String(), Revision: project.Revision, MemberUserIDs: int64sToStrings(aggregate.MemberIDs), URL: "/p/" + project.Slug + "/", CreateTime: project.CreateTime, UpdateTime: project.UpdateTime}
 	if project.CurrentReleaseID != nil {
 		view.CurrentReleaseID = strconv.FormatInt(*project.CurrentReleaseID, 10)
 	}
@@ -509,4 +573,12 @@ func newID() (int64, error) {
 func isDuplicateKey(err error) bool {
 	var mysqlErr *mysql.MySQLError
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
+}
+
+func projectPersistenceError(err error, operation string) error {
+	var apiError *apperrors.APIError
+	if errors.As(err, &apiError) {
+		return err
+	}
+	return fmt.Errorf("%w: %s", service.ErrDependency, operation)
 }

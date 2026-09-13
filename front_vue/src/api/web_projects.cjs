@@ -1,18 +1,5 @@
 const axios = require('axios')
-
-async function synchronizeBrowserIdentity(api, identity, commitIdentity) {
-    let browserLoginAvailable = true
-    try {
-        await api.createBrowserLogin(identity.token)
-    } catch (error) {
-        if (error.status !== 404) {
-            throw error
-        }
-        browserLoginAvailable = false
-    }
-    commitIdentity(identity)
-    return browserLoginAvailable
-}
+const {browserHeaders, requestError} = require('./browser_client.cjs')
 
 function envelopeError(response) {
     const body = response && response.data ? response.data : {}
@@ -22,23 +9,14 @@ function envelopeError(response) {
     return error
 }
 
-function requestError(error) {
-    if (error && error.response) {
-        return envelopeError(error.response)
-    }
-    return error instanceof Error ? error : new Error('请求失败')
-}
 
-function createWebShareApi(transport, getToken) {
+function createWebShareApi(transport, getCSRF) {
     const client = transport || axios.create({
         baseURL: '/',
         withCredentials: true,
     })
-    const tokenProvider = getToken || (() => localStorage.getItem('token') || '')
-
-    function headers(extra, token) {
-        const passport = token === undefined ? tokenProvider() : token
-        return Object.assign({passport}, extra || {})
+    function headers(extra) {
+        return browserHeaders(extra, getCSRF)
     }
 
     async function request(config) {
@@ -49,7 +27,7 @@ function createWebShareApi(transport, getToken) {
             }
             return response.data.data
         } catch (error) {
-            throw requestError(error)
+            throw requestError(error, config.headers && config.headers['X-CSRF-Token'] || '')
         }
     }
 
@@ -133,18 +111,18 @@ function createWebShareApi(transport, getToken) {
                     headers: headers(),
                 })
             } catch (error) {
-                throw requestError(error)
+                throw requestError(error, error.config && error.config.headers && error.config.headers['X-CSRF-Token'])
             }
         },
-        createBrowserLogin(token) {
-            return request({method: 'post', url: '/api/auth/browser-login', headers: headers(null, token)})
+        checkBrowserSession() {
+            return request({method: 'get', url: '/api/auth/me', headers: headers()})
         },
         async probeProjectSession(target) {
             try {
                 await client.request({method: 'head', url: target, withCredentials: true})
                 return true
             } catch (error) {
-                throw requestError(error)
+                throw requestError(error, error.config && error.config.headers && error.config.headers['X-CSRF-Token'])
             }
         },
     }
@@ -154,6 +132,5 @@ const webShareApi = createWebShareApi()
 
 module.exports = {
     createWebShareApi,
-    synchronizeBrowserIdentity,
     webShareApi,
 }

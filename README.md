@@ -142,7 +142,7 @@ ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平�
 
 管理页面使用 `/web-share`，主 API 使用 `/api/web-share`。旧 `/web-projects` 页面地址和 `/api/web-projects` API 保留兼容；写 API 直接调用相同处理逻辑，不依赖重定向。已有 `/p/{slug}/` 分享链接不变，已授权的 `web-projects:read/write` scope 值也保持不变。
 
-用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，`/api/web-share/browser-login` 和旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
+浏览器使用 `POST /api/auth/login` 设置通用 `__Host-cq_session` Cookie，管理 API 和 `/p/` 使用同一服务端身份。Cookie 带 Secure、HttpOnly、SameSite=Lax 和 Path=/；浏览器写操作要求可信 Origin 与 `/api/auth/me` 返回的 CSRF token。页面只在内存中保存身份，不把登录 Token 写入 localStorage。已有 API 客户端的 `passport` 请求头和应用短期 Bearer Token 保留；`/api/auth/browser-login`、`/api/web-share/browser-login`、`/api/web-projects/browser-login` 继续支持旧显式凭证桥接，应用不能建立用户 Cookie。
 
 多个受信任入口可以同时使用。`auth.site_origin` 保留旧单值配置，`auth.site_origins` 添加额外来源，实际允许集合为两者并集：
 
@@ -155,7 +155,7 @@ auth:
 
 每项必须是完整、精确的 HTTPS Origin（包含实际非默认端口），不能带路径、查询参数、片段、用户信息或通配符。两个域名的 DNS 和证书须分别正确配置，网关 `server_name` 同时接受两个名称。前端保持同源请求和相对跳转；浏览器在两个域名下分别登录，Cookie 仍为 host-only，不向其他子域共享。空、`null`、多值或未列入配置的 Origin 均被拒绝。
 
-登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
+登录或切换账号时，由同一个登录响应设置 Cookie 并返回本人资料和 CSRF；旧会话的迟到响应不能覆盖新登录身份。已有用户名、邮箱和手机登录别名在迁移后仍映射到同一用户 ID。
 
 退出操作只有在服务端确认 token 已失效后才清理本地身份。服务端报错或网络失败时保留当前登录状态并提示重试，避免界面显示已退出而内容 Cookie 仍有效。
 
@@ -220,6 +220,23 @@ go build -o output/bin/web-projects-storage-migrate ./cmd/web-projects-storage-m
 
 迁移日志绑定用户、网页、版本、源目标路径和目录的设备号/inode。重跑只接受匹配的日志和目录，不能手工删除日志或随意改动目标路径。恢复机制面向进程中断，不代替数据库与文件备份；遇到日志损坏、存储卷损坏或身份不一致，需要根据备份人工核对。迁移完成后先运行只读审计，再恢复服务并验证网页访问与版本下载。
 
+## 邀请注册、个人中心与管理员
+
+数据库账号模式支持受邀注册、个人资料与改密、邀请记录、用户管理、网页审核和通用动态配置。迁移流程与回滚边界见 [账号迁移和配置运维](docs/accounts-migration.md)，页面与交互见 [前端说明](front_vue/README.md)。
+
+| 能力 | 行为 |
+| --- | --- |
+| 邀请注册 | 存量用户每个 Asia/Singapore 自然月最多生成3个单次邀请码，固定168小时有效；新用户次月获得资格。关闭注册会永久废弃旧未用码。 |
+| 个人中心 | 编辑本人显示名称和联系资料，修改密码必须验证当前密码；密码修改后退出旧会话、停用原应用，联系资料不会自动改变旧登录别名。 |
+| 管理员 | 管理用户、角色、初始密码与功能授权；封禁/删除阻断用户会话、应用和WebDAV，恢复不复活旧凭证。不能在网页端操作自己的封禁/删除/撤销管理员。 |
+| 功能授权 | 家庭藏书和WebDAV分别授权，默认关闭；管理员也需显式授权。应用权限是用户能力与scope的交集。藏书继续共用库存，WebDAV保留现有共享根。 |
+| 网页审核 | 管理员可审核所有可见性和保留版本，预览入口记录审计；下架/删除带审核锁，用户不能自行重新发布，恢复不会自动上线。 |
+| 动态配置 | 代码定义schema，按分组发布并保留历史；显示已保存与已加载版本，支持校验、冲突保护和回滚；数据库连接、存储根与密钥仍是启动配置。 |
+
+密码只存bcrypt哈希，新会话只存摘要；所有密码验证入口共享失败限速。旧 `passport` 和Basic客户端保持协议兼容，数据库账号模式要求HTTPS。当前少量好友场景接受同源HTML执行风险，不提供脚本沙箱或独立内容域。
+
+账号迁移默认只读计划，显式审核计划哈希、数据库名、维护窗口和授权清单后才执行。未迁移时保持 `identity_source: config` / `config_source: file`；完成后同时切换为 `database`。不要在生产目录编译，不用生产凭据运行测试，也不要把新增表当成已经完成迁移。
+
 ## 应用身份与 AK/SK
 
 ### 创建和保管
@@ -249,7 +266,7 @@ AK 是公开标识，SK 是高熵秘密。两者由 `crypto/rand` 生成；数�
 | --- | --- | --- |
 | `/api/web-share` 及子接口、受保护的 `/p/` | `web-projects:read` / `web-projects:write` | 应用继承所属用户的项目管理或成员读取权限，不能访问其他用户的私有项目。 |
 | `/bookinfo/query`、`/library/*` | `library:read` / `library:write` | 沿用现有图书共享语义。 |
-| `/webdav/*`、`/webdav_dev/*` | `webdav:read` / `webdav:write` | 沿用现有共享目录；GET/HEAD/OPTIONS/PROPFIND 为读，其他已注册方法为写。 |
+| `/webdav/*`、`/webdav_dev/*` | `webdav:read` / `webdav:write` | 需用户WebDAV授权及全站开关允许；GET/HEAD/OPTIONS/PROPFIND为读，其他方法为写。 |
 | `/api/applications*`、用户退出、browser-login | 不允许应用身份 | 需要用户 `passport` token；浏览器 Cookie 也不能代替它。 |
 | 原公开 DDNS、ping 等 | 保持原公开行为 | 不把公开接口当成应用权限隔离的一部分。 |
 

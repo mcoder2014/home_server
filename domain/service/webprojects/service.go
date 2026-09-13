@@ -19,7 +19,7 @@ const (
 )
 
 func Init(conf *config.WebProjectsConfig) error {
-	if conf == nil || !conf.Enabled {
+	if conf == nil || (!conf.Enabled && config.Global().IdentitySource != "database") {
 		return nil
 	}
 	if !filepath.IsAbs(conf.StorageRoot) {

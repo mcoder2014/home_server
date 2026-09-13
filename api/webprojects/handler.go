@@ -42,7 +42,7 @@ func createProject(c *gin.Context) {
 		ginfmt.Fail(c, service.ErrInvalid)
 		return
 	}
-	project, err := application.Default.CreateProject(currentUserID(c), input)
+	project, err := application.Default.CreateProject(currentUserID(c), input, currentPrincipal(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -75,7 +75,7 @@ func updateProject(c *gin.Context) {
 		ginfmt.Fail(c, service.ErrInvalid)
 		return
 	}
-	project, err := application.Default.UpdateProject(currentUserID(c), projectID, revision, input)
+	project, err := application.Default.UpdateProject(currentUserID(c), projectID, revision, input, currentPrincipal(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -93,7 +93,7 @@ func changeStatus(c *gin.Context, action string) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	project, err := application.Default.ChangeProjectStatus(currentUserID(c), projectID, revision, action, config.Global().WebProjects.DeleteRetentionDays)
+	project, err := application.Default.ChangeProjectStatus(currentUserID(c), projectID, revision, action, config.Runtime().WebProjects.DeleteRetentionDays, currentPrincipal(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -102,7 +102,12 @@ func changeStatus(c *gin.Context, action string) {
 }
 
 func eligibleUsers(c *gin.Context) {
-	ginfmt.Success(c, http.StatusOK, gin.H{"items": application.Default.EligibleUsers()})
+	items, err := application.Default.EligibleUsers()
+	if err != nil {
+		ginfmt.Fail(c, err)
+		return
+	}
+	ginfmt.Success(c, http.StatusOK, gin.H{"items": items})
 }
 
 func uploadRelease(c *gin.Context) {
@@ -111,7 +116,7 @@ func uploadRelease(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	conf := config.Global().WebProjects
+	conf := config.Runtime().WebProjects
 	if err := application.Default.CheckUploadOwner(currentUserID(c), projectID); err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -134,7 +139,7 @@ func uploadRelease(c *gin.Context) {
 		return
 	}
 	defer file.Close()
-	release, err := application.Default.UploadRelease(&conf, currentUserID(c), projectID, fileName, entryFile, c.GetHeader("Idempotency-Key"), file)
+	release, err := application.Default.UploadRelease(&conf, currentUserID(c), projectID, fileName, entryFile, c.GetHeader("Idempotency-Key"), file, currentPrincipal(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -184,8 +189,8 @@ func publishRelease(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	conf := config.Global().WebProjects
-	project, err := application.Default.PublishRelease(&conf, currentUserID(c), projectID, releaseID, revision)
+	conf := config.Runtime().WebProjects
+	project, err := application.Default.PublishRelease(&conf, currentUserID(c), projectID, releaseID, revision, currentPrincipal(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -294,4 +299,16 @@ func receiveMultipartUpload(c *gin.Context, conf *config.WebProjectsConfig) (str
 	}
 	keep = true
 	return tempPath, fileName, entryFile, nil
+}
+
+func currentPrincipal(c *gin.Context) *utils.Principal {
+	value, ok := c.Get(utils.CtxKeyPrincipal)
+	if !ok {
+		return nil
+	}
+	principal, ok := value.(*utils.Principal)
+	if !ok || principal == nil {
+		return nil
+	}
+	return principal
 }

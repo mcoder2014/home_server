@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/api/accounts"
 	"github.com/mcoder2014/home_server/api/applications"
 	"github.com/mcoder2014/home_server/api/middleware"
 	authapp "github.com/mcoder2014/home_server/app/auth"
@@ -15,6 +16,9 @@ import (
 )
 
 func InitRouter() error {
+	if err := accounts.InitAuthRouter(); err != nil {
+		return err
+	}
 	conf := config.Global()
 	// Browser login converts a user credential into an HttpOnly cookie. Registering
 	// it requires at least one configured origin so browserLogin can reject cross-site writes.
@@ -27,9 +31,7 @@ func InitRouter() error {
 			data.AddRoute(http.MethodPost, "/api/web-projects/browser-login", handlers...)
 		}
 	}
-	if conf.Auth.ApplicationsEnabled {
-		data.AddRoute(http.MethodPost, "/api/auth/token", middleware.RequireHTTPS(), applications.IssueApplicationAccessToken)
-	}
+	data.AddRoute(http.MethodPost, "/api/auth/token", middleware.RequireHTTPS(), applications.IssueApplicationAccessToken)
 	return nil
 }
 

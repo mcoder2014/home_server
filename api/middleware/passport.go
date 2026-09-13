@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	apperrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
@@ -21,7 +23,7 @@ const (
 // application identity for the existing library routes listed in legacyScope.
 func ValidateLogin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if _, err := ResolveIdentity(c, legacyScope(c), false, false); err != nil {
+		if _, err := ResolveIdentity(c, legacyScope(c), true, false); err != nil {
 			if c.GetHeader("Authorization") != "" {
 				ginfmt.Fail(c, err)
 			} else {
@@ -29,6 +31,13 @@ func ValidateLogin() gin.HandlerFunc {
 			}
 			c.Abort()
 			return
+		}
+		if c.GetHeader(HeaderKey) == "" && c.GetHeader("Authorization") == "" && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+			guard := BrowserWrite()
+			guard(c)
+			if c.IsAborted() {
+				return
+			}
 		}
 		c.Next()
 	}
@@ -61,6 +70,11 @@ func ValidateBasicAuth() gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		if accounts.DatabaseMode() && !IsHTTPS(c) {
+			ginfmt.Fail(c, apperrors.ErrForbidden)
+			c.Abort()
+			return
+		}
 		if len(c.Request.Header.Values("Authorization")) > 1 || c.GetHeader(HeaderKey) != "" {
 			ginfmt.Fail(c, apperrors.ErrInvalid)
 			c.Abort()
@@ -77,6 +91,7 @@ func ValidateBasicAuth() gin.HandlerFunc {
 			c.Next()
 			return
 		}
+		c.Set(accounts.PasswordSourceIPKey, TrustedClientIP(c.Request))
 		ctx := ginfmt.RPCContext(c)
 		username, password, ok := c.Request.BasicAuth()
 		if !ok {
@@ -87,17 +102,35 @@ func ValidateBasicAuth() gin.HandlerFunc {
 
 		res, err := passport.ValidateUser(ctx, username, password)
 		if err != nil {
+			if errors.Is(err, apperrors.ErrRateLimited) {
+				ginfmt.Fail(c, err)
+				c.Abort()
+				return
+			}
 			unauhtorized(c)
-			log.Ctx(ctx).Warnf("user:%v, err:%+v", username, err)
+			log.Ctx(ctx).Warn("basic authentication failed")
 			return
 		}
 		if res == nil {
 			unauhtorized(c)
-			log.Ctx(ctx).Warnf("user not found:%v, err:%+v", username, err)
+			log.Ctx(ctx).Warn("basic authentication failed")
 			return
 		}
+		if accounts.DatabaseMode() {
+			enabled, e := accounts.ModuleEnabled(ctx, "webdav")
+			if e != nil {
+				ginfmt.Fail(c, e)
+				c.Abort()
+				return
+			}
+			if !enabled || res.MustChangePassword || !accounts.WebDAVAllowed(res.WebDAVPermission, c.Request.Method) {
+				ginfmt.Fail(c, apperrors.ErrForbidden)
+				c.Abort()
+				return
+			}
+		}
 
-		logrus.Infof("basic auth success, user:%v", username)
+		logrus.Infof("basic auth success, user_id:%d", res.ID)
 		c.Set(utils.CtxKeyLoginUseID, res.ID)
 		c.Next()
 	}

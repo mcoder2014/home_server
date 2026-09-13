@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/applications"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	apperrors "github.com/mcoder2014/home_server/errors"
@@ -114,7 +115,11 @@ func ResolveIdentity(c *gin.Context, scope string, allowSession, userOnly bool) 
 		if userOnly {
 			return nil, apperrors.ErrForbidden
 		}
-		if !config.Global().Auth.ApplicationsEnabled || !IsHTTPS(c) {
+		enabled, enabledErr := accounts.ModuleEnabled(ginfmt.RPCContext(c), "auth")
+		if enabledErr != nil {
+			return nil, enabledErr
+		}
+		if !enabled || !IsHTTPS(c) {
 			return nil, apperrors.ErrUnauthorized
 		}
 		principal, err := applications.AuthenticateToken(ginfmt.RPCContext(c), fields[1])
@@ -123,6 +128,9 @@ func ResolveIdentity(c *gin.Context, scope string, allowSession, userOnly bool) 
 		}
 		if principal == nil || principal.UserID <= 0 || principal.Kind != "application" || !principal.Allows(scope) {
 			return nil, apperrors.ErrForbidden
+		}
+		if err := AuthorizeCapability(ginfmt.RPCContext(c), principal, scope); err != nil {
+			return nil, err
 		}
 		setPrincipal(c, principal, "")
 		return principal, nil
@@ -136,7 +144,7 @@ func ResolveIdentity(c *gin.Context, scope string, allowSession, userOnly bool) 
 	user, err := passport.CheckToken(ginfmt.RPCContext(c), passportToken)
 	if err != nil {
 		var cause *apperrors.Error
-		if errors.As(err, &cause) && cause.Code == apperrors.ErrorCodeDbError {
+		if errors.Is(err, apperrors.ErrDependency) || (errors.As(err, &cause) && cause.Code == apperrors.ErrorCodeDbError) {
 			return nil, apperrors.ErrDependency
 		}
 		return nil, apperrors.ErrUnauthorized
@@ -144,20 +152,30 @@ func ResolveIdentity(c *gin.Context, scope string, allowSession, userOnly bool) 
 	if user == nil || user.ID <= 0 {
 		return nil, apperrors.ErrUnauthorized
 	}
-	principal := &utils.Principal{Kind: "user", UserID: user.ID}
+	principal := &utils.Principal{Kind: "user", UserID: user.ID, AuthVersion: user.AuthVersion, TokenExpiresAt: user.SessionExpiry, Role: user.Role, LibraryEnabled: user.LibraryEnabled, WebDAVPermission: user.WebDAVPermission, MustChangePassword: user.MustChangePassword}
+	if err := AuthorizeCapability(ginfmt.RPCContext(c), principal, scope); err != nil {
+		return nil, err
+	}
 	setPrincipal(c, principal, passportToken)
 	return principal, nil
 }
 
 func RequireIdentity(scope string, userOnly bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if _, err := ResolveIdentity(c, scope, false, userOnly); err != nil {
+		if _, err := ResolveIdentity(c, scope, true, userOnly); err != nil {
 			if c.GetHeader("Authorization") != "" {
 				c.Header("WWW-Authenticate", `Bearer realm="CQ Home Server"`)
 			}
 			ginfmt.Fail(c, err)
 			c.Abort()
 			return
+		}
+		if c.GetHeader(HeaderKey) == "" && c.GetHeader("Authorization") == "" && c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+			guard := BrowserWrite()
+			guard(c)
+			if c.IsAborted() {
+				return
+			}
 		}
 		c.Next()
 	}

@@ -80,7 +80,7 @@
 
 <script>
 import MyHeader from "@/components/MyHeader";
-import axios from "axios";
+import axios from "@/axios";
 import {handleError} from "@/utils/handle_http_error";
 import { Plus } from '@element-plus/icons-vue'
 import bookFallback from '@/assets/book-fallback.svg'
@@ -123,22 +123,15 @@ export default {
       }))
     },
     getBookStorages(offset, limit) {
-      console.log("current token:" + localStorage.getItem('token'))
-      let url = this.$store.state.global.baseUrl + "/"
       let param = { offset, limit }
 
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-        headers: {'passport': localStorage.getItem('token')}
-      });
+      const apiBase = axios
 
       let updateTable = this.updateTable
       let refThis = this
 
       apiBase.get("/library/book/total", {params: param}).then(function (response) {
-        console.log(response);
-        handleError(response)
+        handleError(response.data)
         if (response.data.code === 0) {
           updateTable(response.data.data.book_storages)
           refThis.totalCount = response.data.data.count

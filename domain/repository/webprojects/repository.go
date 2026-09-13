@@ -4,6 +4,8 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	apperrors "github.com/mcoder2014/home_server/errors"
+	"github.com/mcoder2014/home_server/utils"
 	"gorm.io/gorm"
 )
 
@@ -72,8 +74,17 @@ func (repository *Repository) ListOwned(ownerUserID, cursor int64, limit int, st
 
 // Create persists a project and its member rows atomically. Member replacement
 // remains visible here because it is part of the aggregate, not a DAL concern.
-func (repository *Repository) Create(project *model.WebProject, memberIDs []int64) error {
+func (repository *Repository) Create(project *model.WebProject, memberIDs []int64, principals ...*utils.Principal) error {
 	return db.MasterDB().Transaction(func(tx *gorm.DB) error {
+		if err := requireWritePolicy(tx, project.OwnerUserID, principals, memberIDs); err != nil {
+			return err
+		}
+		if err := requireProjectSlot(tx, project.OwnerUserID); err != nil {
+			return err
+		}
+		if err := checkWriteExpiry(principals); err != nil {
+			return err
+		}
 		if err := dal.CreateWebProject(tx, project); err != nil {
 			return err
 		}
@@ -81,10 +92,25 @@ func (repository *Repository) Create(project *model.WebProject, memberIDs []int6
 	})
 }
 
-func (repository *Repository) Update(ownerUserID, projectID, revision int64, fields map[string]interface{}, memberIDs []int64) (bool, error) {
+func (repository *Repository) Update(ownerUserID, projectID, revision int64, fields map[string]interface{}, memberIDs []int64, principals ...*utils.Principal) (bool, error) {
 	updated := false
 	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
-		var err error
+		if err := requireWritePolicy(tx, ownerUserID, principals, memberIDs); err != nil {
+			return err
+		}
+		project, err := dal.LockOwnedWebProject(tx, ownerUserID, projectID)
+		if err != nil {
+			return err
+		}
+		if project == nil {
+			return apperrors.ErrNotFound
+		}
+		if project.ModerationStatus != "" && project.ModerationStatus != "normal" {
+			return apperrors.ErrForbidden
+		}
+		if err := checkWriteExpiry(principals); err != nil {
+			return err
+		}
 		updated, err = dal.UpdateProjectFields(tx, ownerUserID, projectID, revision, fields)
 		if err != nil || !updated {
 			return err
@@ -94,8 +120,34 @@ func (repository *Repository) Update(ownerUserID, projectID, revision int64, fie
 	return updated, err
 }
 
-func (repository *Repository) UpdateFields(ownerUserID, projectID, revision int64, fields map[string]interface{}) (bool, error) {
-	return dal.UpdateProjectFields(db.MasterDB(), ownerUserID, projectID, revision, fields)
+func (repository *Repository) UpdateFields(ownerUserID, projectID, revision int64, fields map[string]interface{}, principals ...*utils.Principal) (bool, error) {
+	updated := false
+	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
+		if err := requireWritePolicy(tx, ownerUserID, principals, nil); err != nil {
+			return err
+		}
+		project, err := dal.LockOwnedWebProject(tx, ownerUserID, projectID)
+		if err != nil {
+			return err
+		}
+		if project == nil {
+			return apperrors.ErrNotFound
+		}
+		if project.ModerationStatus != "" && project.ModerationStatus != "normal" {
+			return apperrors.ErrForbidden
+		}
+		if status, ok := fields["status"].(model.WebProjectStatus); ok && project.Status == model.WebProjectStatusDeleted && status != model.WebProjectStatusDeleted {
+			if err := requireProjectSlot(tx, ownerUserID); err != nil {
+				return err
+			}
+		}
+		if err := checkWriteExpiry(principals); err != nil {
+			return err
+		}
+		updated, err = dal.UpdateProjectFields(tx, ownerUserID, projectID, revision, fields)
+		return err
+	})
+	return updated, err
 }
 
 func (repository *Repository) ListReleases(projectID, cursor int64, limit int) ([]*model.WebProjectRelease, error) {
@@ -142,11 +194,20 @@ func (repository *Repository) Transaction(run func(*Transaction) error) error {
 }
 
 type Transaction struct {
-	database *gorm.DB
+	database   *gorm.DB
+	principals []*utils.Principal
 }
 
-func (tx *Transaction) LockOwnedProject(ownerUserID, projectID int64) (*model.WebProject, error) {
-	return dal.LockOwnedWebProject(tx.database, ownerUserID, projectID)
+func (tx *Transaction) LockOwnedProject(ownerUserID, projectID int64, principals ...*utils.Principal) (*model.WebProject, error) {
+	if err := requireWritePolicy(tx.database, ownerUserID, principals, nil); err != nil {
+		return nil, err
+	}
+	tx.principals = append([]*utils.Principal(nil), principals...)
+	project, err := dal.LockOwnedWebProject(tx.database, ownerUserID, projectID)
+	if err == nil && project != nil && project.ModerationStatus != "" && project.ModerationStatus != "normal" {
+		return nil, apperrors.ErrForbidden
+	}
+	return project, err
 }
 
 func (tx *Transaction) FindReleaseByIdempotencyKey(projectID int64, key string) (*model.WebProjectRelease, error) {
@@ -158,10 +219,16 @@ func (tx *Transaction) ListReadyReleases(projectID int64, limit int) ([]*model.W
 }
 
 func (tx *Transaction) MarkReleasesDeleting(projectID int64, releaseIDs []int64) (int64, error) {
+	if err := checkWriteExpiry(tx.principals); err != nil {
+		return 0, err
+	}
 	return dal.MarkWebProjectReleasesDeleting(tx.database, projectID, releaseIDs, true)
 }
 
 func (tx *Transaction) CreateRelease(release *model.WebProjectRelease) error {
+	if err := checkWriteExpiry(tx.principals); err != nil {
+		return err
+	}
 	if err := release.EncodeExtra(); err != nil {
 		return err
 	}
@@ -173,5 +240,8 @@ func (tx *Transaction) LockRelease(projectID, releaseID int64) (*model.WebProjec
 }
 
 func (tx *Transaction) UpdateProject(ownerUserID, projectID, revision int64, fields map[string]interface{}) (bool, error) {
+	if err := checkWriteExpiry(tx.principals); err != nil {
+		return false, err
+	}
 	return dal.UpdateProjectFields(tx.database, ownerUserID, projectID, revision, fields)
 }
