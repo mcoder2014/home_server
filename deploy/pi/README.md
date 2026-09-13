@@ -54,3 +54,7 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 保留每次部署的旧 systemd 单元、旧后端配置、旧二进制或 release 指针，以及网关站点备份。回滚时恢复匹配的旧配置与程序，校验配置后重启对应服务；已有入口应恢复到备份记录的位置。
 
 本次新增表和索引是兼容性增量。回滚程序时不要 DROP 新表、清空数据库或覆盖新产生的数据；数据库恢复必须单独核对业务写入时间与影响范围。前端和后端应使用匹配的 release，避免新页面请求旧接口。
+
+## 多个受信任域名
+
+网关 `server_name` 可以列出主域名和内部域名，例如 `home.example.com home.internal.example.com`。证书必须包含所有域名，DNS 地址在私有配置中维护。后端保留 `auth.site_origin` 作为原入口，通过 `auth.site_origins` 添加完整的额外 HTTPS Origin；不要添加通配域或设置共享 Cookie Domain。两个域名使用相同账号和数据库，但浏览器登录状态分别保存。

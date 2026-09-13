@@ -17,8 +17,8 @@ import (
 func InitRouter() error {
 	conf := config.Global()
 	// Browser login converts a user credential into an HttpOnly cookie. Registering
-	// it requires one configured origin so browserLogin can reject cross-site writes.
-	if conf.Auth.SiteOrigin != "" {
+	// it requires at least one configured origin so browserLogin can reject cross-site writes.
+	if conf.Auth.SiteOrigin != "" || len(conf.Auth.SiteOrigins) > 0 {
 		handlers := []gin.HandlerFunc{middleware.RequireHTTPS(), middleware.RequireIdentity("", true), browserLogin}
 		data.AddRoute(http.MethodPost, "/api/auth/browser-login", handlers...)
 		// Web-share aliases use the same handler and shared session cookie.
@@ -36,7 +36,7 @@ func InitRouter() error {
 func browserLogin(c *gin.Context) {
 	// Strict equality is the CSRF boundary for the cookie-setting endpoint. Empty,
 	// missing, and foreign origins must not create an authenticated browser session.
-	if c.GetHeader("Origin") != config.Global().Auth.SiteOrigin {
+	if !browserOriginAllowed(c.Request, config.Global().Auth) {
 		ginfmt.Fail(c, apperrors.ErrForbidden)
 		return
 	}
@@ -48,4 +48,20 @@ func browserLogin(c *gin.Context) {
 	}
 	utils.SetBrowserSession(c, token, session.ExpireTime)
 	ginfmt.Success(c, http.StatusOK, session)
+}
+
+func browserOriginAllowed(request *http.Request, conf config.AuthConfig) bool {
+	origins := request.Header.Values("Origin")
+	if len(origins) != 1 || origins[0] == "" {
+		return false
+	}
+	if origins[0] == conf.SiteOrigin {
+		return true
+	}
+	for _, configuredOrigin := range conf.SiteOrigins {
+		if origins[0] == configuredOrigin {
+			return true
+		}
+	}
+	return false
 }

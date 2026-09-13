@@ -144,6 +144,17 @@ ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平�
 
 用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，`/api/web-share/browser-login` 和旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
 
+多个受信任入口可以同时使用。`auth.site_origin` 保留旧单值配置，`auth.site_origins` 添加额外来源，实际允许集合为两者并集：
+
+```yaml
+auth:
+  site_origin: https://home.example.com:8080
+  site_origins:
+    - https://home.internal.example.com:8080
+```
+
+每项必须是完整、精确的 HTTPS Origin（包含实际非默认端口），不能带路径、查询参数、片段、用户信息或通配符。两个域名的 DNS 和证书须分别正确配置，网关 `server_name` 同时接受两个名称。前端保持同源请求和相对跳转；浏览器在两个域名下分别登录，Cookie 仍为 host-only，不向其他子域共享。空、`null`、多值或未列入配置的 Origin 均被拒绝。
+
 登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
 
 退出操作只有在服务端确认 token 已失效后才清理本地身份。服务端报错或网络失败时保留当前登录状态并提示重试，避免界面显示已退出而内容 Cookie 仍有效。

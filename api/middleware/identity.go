@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -35,14 +36,32 @@ func ConfigureAuthentication(conf config.AuthConfig) error {
 		}
 		networks = append(networks, network)
 	}
-	if conf.SiteOrigin != "" {
-		origin, err := url.Parse(conf.SiteOrigin)
-		if err != nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || origin.Path != "" || origin.RawQuery != "" || origin.Fragment != "" {
-			return fmt.Errorf("auth.site_origin must be an HTTPS origin without path")
+	if conf.SiteOrigin != "" && !validAuthSiteOrigin(conf.SiteOrigin) {
+		return fmt.Errorf("auth.site_origin must be an HTTPS origin without path")
+	}
+	for _, configuredOrigin := range conf.SiteOrigins {
+		if !validAuthSiteOrigin(configuredOrigin) {
+			return fmt.Errorf("auth.site_origins must contain only non-empty HTTPS origins without path")
 		}
 	}
 	trustedAuthProxies = networks
 	return nil
+}
+
+func validAuthSiteOrigin(value string) bool {
+	if value == "" || strings.TrimSpace(value) != value || strings.ContainsAny(value, "*?#") {
+		return false
+	}
+	origin, err := url.Parse(value)
+	if err != nil || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil ||
+		strings.HasSuffix(origin.Host, ":") || origin.Opaque != "" || origin.Path != "" || origin.RawPath != "" {
+		return false
+	}
+	if origin.Port() == "" {
+		return true
+	}
+	port, err := strconv.Atoi(origin.Port())
+	return err == nil && port > 0 && port <= 65535
 }
 
 // IsHTTPS accepts direct TLS or HTTPS asserted by an explicitly trusted proxy.

@@ -51,6 +51,7 @@ type Config struct {
 type AuthConfig struct {
 	ApplicationsEnabled      bool     `json:"applications_enabled" yaml:"applications_enabled"`
 	SiteOrigin               string   `json:"site_origin" yaml:"site_origin"`
+	SiteOrigins              []string `json:"site_origins" yaml:"site_origins"`
 	TokenTTLSeconds          int      `json:"token_ttl_seconds" yaml:"token_ttl_seconds"`
 	DefaultCredentialTTLDays int      `json:"default_credential_ttl_days" yaml:"default_credential_ttl_days"`
 	MaxCredentialTTLDays     int      `json:"max_credential_ttl_days" yaml:"max_credential_ttl_days"`

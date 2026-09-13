@@ -38,6 +38,8 @@ auth:
   applications_enabled: false
   # Set the actual HTTPS origin; an enabled web_projects origin is reused when empty.
   site_origin: ''
+  # Additional exact HTTPS origins allowed to create browser sessions.
+  site_origins: []
   token_ttl_seconds: 900
   default_credential_ttl_days: 90
   max_credential_ttl_days: 365
