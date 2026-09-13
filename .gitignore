@@ -136,3 +136,7 @@ __pycache__/
 
 # Preserve local client configuration privacy after the client source is moved.
 /client/config/
+
+# Private skill configuration, credentials and local verification artifacts
+/skills/*/local/
+/skills/**/*.local.json

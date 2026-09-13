@@ -293,6 +293,8 @@ Nginx 引入 `config/nginx/api_auth_locations.conf`，将固定 `/api/auth/*`、
 
 ### AI 客户端
 
+网页上传、更新、下架和可见范围管理可使用项目内的 [home-server-web-share skill](skills/home-server-web-share/SKILL.md)。它提供语义化命令、私有内外网配置、只读探活和离线预览，并复用下面的 API 客户端。安装及沙箱内外调用方式见 [配置说明](skills/home-server-web-share/references/configuration.md)。
+
 仓库提供无第三方依赖的 `script/home_server_api.py`。从管理页下载凭证 JSON 后放到 Git 之外的受控路径，并设置权限为 600。也可以通过 `CQ_HOME_SERVER_ACCESS_KEY`、`CQ_HOME_SERVER_SECRET_KEY` 和 `CQ_HOME_SERVER_BASE_URL` 由受控环境注入；不支持把 SK 写成命令行参数。
 
 ```bash
@@ -305,7 +307,7 @@ python3 script/home_server_api.py \
 
 上传网页版本使用 `--method POST --path /api/web-share/项目ID/releases --upload-file /path/to/site.zip`；ZIP 可加 `--entry-file index.html`。写 JSON 用 `--json-file`，修改时加 `--if-match`；下载二进制用 `--output`。只有单 HTML/ZIP 上传会构造 multipart，它不是通用 WebDAV 上传器。
 
-客户端校验证书和主机名，自签名测试证书使用 `--ca-file`；不提供关闭校验的选项。它固定同一 HTTPS origin，不跟随重定向，不自动重试写请求，不把短期 Token 存盘，终端输出会脱敏。
+客户端校验证书和主机名，自签名测试证书使用 `--ca-file`；不提供关闭校验的选项。它固定同一 HTTPS origin，不跟随重定向，不自动重试写请求，不把短期 Token 存盘，终端输出会脱敏，包括认证错误中回显的 Basic 凭证编码。上传拒绝符号链接，并从同一文件描述符检查类型、大小和读取内容，防止检查后替换为符号链接或文件增长越过上传限制。
 
 ### 代码结构与公共约定
 

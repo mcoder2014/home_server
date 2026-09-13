@@ -266,7 +266,8 @@ class HomeServerAPI:
 
     def exchange_token(self) -> str:
         raw = f"{self.credentials.access_key}:{self.credentials.secret_key}".encode("utf-8")
-        authorization = "Basic " + base64.b64encode(raw).decode("ascii")
+        encoded_credentials = base64.b64encode(raw).decode("ascii")
+        authorization = "Basic " + encoded_credentials
         response = self.transport.request(
             "POST",
             "/api/auth/token",
@@ -277,7 +278,7 @@ class HomeServerAPI:
             },
             body=b"grant_type=client_credentials",
         )
-        sensitive = (self.credentials.access_key, self.credentials.secret_key)
+        sensitive = (self.credentials.access_key, self.credentials.secret_key, encoded_credentials)
         if not 200 <= response.status < 300:
             raise _response_error(response, sensitive)
         payload = _response_json(response, sensitive)
@@ -317,12 +318,21 @@ def build_multipart(upload_file: Path, entry_file: Optional[str], *, boundary: O
     if suffix not in {".html", ".htm", ".zip"}:
         raise ClientError("--upload-file 仅支持 HTML 或 ZIP")
     try:
-        metadata = upload_file.stat()
+        metadata = upload_file.lstat()
         if not stat.S_ISREG(metadata.st_mode):
-            raise ClientError("--upload-file 必须是普通文件")
-        if metadata.st_size > MAX_UPLOAD_BYTES:
-            raise ClientError("上传文件不能超过 50 MiB")
-        content = upload_file.read_bytes()
+            raise ClientError("--upload-file 必须是普通文件，不能是符号链接")
+        # Open without following a replaced symlink; validate and read the same
+        # descriptor. Bound the read even if the file grows after inspection.
+        flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        with os.fdopen(os.open(upload_file, flags), "rb") as uploaded:
+            metadata = os.fstat(uploaded.fileno())
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ClientError("--upload-file 必须是普通文件")
+            if metadata.st_size > MAX_UPLOAD_BYTES:
+                raise ClientError("上传文件不能超过 50 MiB")
+            content = uploaded.read(MAX_UPLOAD_BYTES + 1)
+            if len(content) > MAX_UPLOAD_BYTES:
+                raise ClientError("上传文件不能超过 50 MiB")
     except OSError as error:
         raise ClientError(f"无法读取上传文件：{upload_file}") from error
     if entry_file is not None:

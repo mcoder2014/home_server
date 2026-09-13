@@ -166,6 +166,21 @@ class RequestTest(unittest.TestCase):
         self.assertNotIn("Basic Zm9v", message)
         self.assertNotIn("Bearer", message)
 
+    def test_token_failure_does_not_include_base64_encoded_basic_credentials(self):
+        encoded_credentials = base64.b64encode(f"{ACCESS_KEY}:{SECRET_KEY}".encode()).decode()
+        transport = FakeTransport([
+            client.Response(401, {"content-type": "application/json"}, json.dumps({
+                "error": "invalid_client",
+                "error_description": f"rejected credentials {encoded_credentials}",
+            }).encode()),
+        ])
+        api = client.HomeServerAPI(transport, client.Credentials(ACCESS_KEY, SECRET_KEY))
+
+        with self.assertRaises(client.ClientError) as raised:
+            api.exchange_token()
+
+        self.assertNotIn(encoded_credentials, str(raised.exception))
+
     def test_business_output_redacts_authentication_fields_and_values(self):
         result = {
             "id": "12",
@@ -214,6 +229,18 @@ class RequestTest(unittest.TestCase):
         self.assertIn(b'name="file"; filename="site.zip"', request["body"])
         self.assertIn(b"PK\x03\x04fixture", request["body"])
         self.assertEqual(len(transport.calls), 2)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "Symbolic links are not supported")
+    def test_multipart_upload_rejects_a_symbolic_link_before_reading_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private_target = root / "secret.txt"
+            private_target.write_text("private-target-content", encoding="utf-8")
+            upload = root / "site.html"
+            upload.symlink_to(private_target)
+
+            with self.assertRaises(client.ClientError):
+                client.build_multipart(upload, None, boundary="fixture-boundary")
 
 
 class ArgumentPrivacyTests(unittest.TestCase):

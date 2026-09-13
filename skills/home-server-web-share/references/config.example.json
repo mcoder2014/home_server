@@ -1,0 +1,8 @@
+{
+  "internal_url": "https://home.internal.example.com",
+  "external_url": "https://home.example.com",
+  "endpoint": "auto",
+  "credentials_file": "credentials.json",
+  "connect_timeout": 3,
+  "timeout": 30
+}
