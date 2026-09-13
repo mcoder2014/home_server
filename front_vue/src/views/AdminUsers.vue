@@ -82,6 +82,7 @@ export default {
     },
     beginAction(user, action) { this.selected = user; this.action = action; this.actionError = ''; this.actionForm = {role: user.role, enabled: !!user.library_enabled, permission: user.webdav_permission || 'none', generate_password: true, password: ''}; this.actionVisible = true },
     beginRevoke(invitation) { this.invitation = invitation; this.beginAction(this.detail.user, 'revoke-invitation') },
+    // 合并管理员确认信息与选定动作参数，带账号版本提交；处理一次性密码、本人会话退出及并发修改冲突。
     async executeAction(confirmation) {
       if (this.saving) return
       const data = {...confirmation}

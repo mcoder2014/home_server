@@ -44,6 +44,7 @@ func TestConfigureAuthenticationAcceptsHTTPSOriginConfigurations(t *testing.T) {
 	}
 }
 
+// TestConfigureAuthenticationRejectsInvalidOrigins 验证认证配置拒绝带路径、通配或非法端口的来源定义，同时保留合法 HTTPS Origin。
 func TestConfigureAuthenticationRejectsInvalidOrigins(t *testing.T) {
 	tests := []struct {
 		name string

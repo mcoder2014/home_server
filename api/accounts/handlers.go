@@ -19,6 +19,7 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
+// bind 按接口指定上限解码一个 JSON 对象；拒绝未知字段和尾随第二个对象，失败时写出统一参数错误。
 func bind(c *gin.Context, value interface{}, limit int64) bool {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
 	decoder := json.NewDecoder(c.Request.Body)
@@ -34,6 +35,7 @@ func bind(c *gin.Context, value interface{}, limit int64) bool {
 	return true
 }
 
+// currentUser 读取账号中间件已经确认的用户快照；不从请求参数接受操作者身份。
 func currentUser(c *gin.Context) *model.UserAccount {
 	value, exists := c.Get(middleware.AccountContextKey)
 	if !exists {
@@ -43,6 +45,7 @@ func currentUser(c *gin.Context) *model.UserAccount {
 	return user
 }
 
+// positiveID 解析命名路径参数中的正整数资源 ID；非法值直接返回参数错误，避免后续查库。
 func positiveID(c *gin.Context, name string) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param(name), 10, 64)
 	if err != nil || id <= 0 {
@@ -52,6 +55,7 @@ func positiveID(c *gin.Context, name string) (int64, bool) {
 	return id, true
 }
 
+// revision 解析唯一的 If-Match 正整数版本，供账号和管理接口检测并发修改。
 func revision(c *gin.Context) (int64, bool) {
 	values := c.Request.Header.Values("If-Match")
 	if len(values) != 1 {
@@ -66,6 +70,7 @@ func revision(c *gin.Context) (int64, bool) {
 	return id, true
 }
 
+// pagination 为账号管理类列表解析游标和每页条数，限制单次查询在 1 到 100 条之间。
 func pagination(c *gin.Context) (int64, int, bool) {
 	cursor := int64(0)
 	limit := 20
@@ -87,6 +92,7 @@ func pagination(c *gin.Context) (int64, int, bool) {
 	return cursor, limit, true
 }
 
+// respond 统一输出账号接口的数据或错误，并禁止浏览器缓存账号与配置响应。
 func respond(c *gin.Context, value interface{}, err error) {
 	c.Header("Cache-Control", "no-store")
 	if err != nil {
@@ -109,6 +115,8 @@ func view(user *model.UserAccount, token string) accountView {
 	return accountView{UserAccount: user, CSRFToken: middleware.CSRFToken(token), Capabilities: map[string]bool{"library": user.LibraryEnabled && runtime.LibraryEnabled, "webdav": user.WebDAVPermission != model.WebDAVNone && runtime.WebDAVEnabled, "applications": runtime.Auth.ApplicationsEnabled, "web_projects": runtime.WebProjects.Enabled}, PasswordPolicy: map[string]int{"min_length": runtime.AccountPolicy.MinPasswordLength}, ApplicationPolicy: map[string]int{"default_credential_ttl_days": runtime.Auth.DefaultCredentialTTLDays, "max_credential_ttl_days": runtime.Auth.MaxCredentialTTLDays, "max_applications_per_user": runtime.Auth.MaxApplicationsPerUser}}
 }
 
+// login 处理 POST /api/auth/login：验证用户名和密码，建立 HttpOnly 浏览器会话并返回本人资料与 CSRF 信息。
+// 数据库模式交由账号服务签发受版本约束的会话；配置模式保留旧用户和令牌兼容。
 func login(c *gin.Context) {
 	var input struct {
 		UserName string `json:"user_name"`
@@ -144,6 +152,7 @@ func login(c *gin.Context) {
 	respond(c, view(user, token), nil)
 }
 
+// me 处理 GET /api/auth/me：返回已认证用户的资料、当前可用能力、密码策略及 CSRF 信息。
 func me(c *gin.Context) {
 	user := currentUser(c)
 	if user == nil {
@@ -153,6 +162,7 @@ func me(c *gin.Context) {
 	respond(c, view(user, c.GetString(utils.CtxKeyLoginToken)), nil)
 }
 
+// logout 处理 POST /api/auth/logout：撤销当前用户会话，只有服务端撤销成功才清除浏览器 Cookie。
 func logout(c *gin.Context) {
 	err := passport.DeleteToken(ginfmt.RPCContext(c), c.GetString(utils.CtxKeyLoginToken))
 	if err == nil {
@@ -161,6 +171,7 @@ func logout(c *gin.Context) {
 	respond(c, nil, err)
 }
 
+// logoutAll 处理 POST /api/auth/logout-all：使本人全部已有网站会话失效，成功后清理当前浏览器 Cookie。
 func logoutAll(c *gin.Context) {
 	user := currentUser(c)
 	err := accountservice.LogoutAll(ginfmt.RPCContext(c), user.ID, user.AuthVersion)
@@ -170,6 +181,7 @@ func logoutAll(c *gin.Context) {
 	respond(c, nil, err)
 }
 
+// changePassword 处理 POST /api/auth/change-password：验证当前密码与新密码确认，完成改密及凭证撤销后退出当前浏览器会话。
 func changePassword(c *gin.Context) {
 	var input struct {
 		Current  string `json:"current_password"`
@@ -187,6 +199,7 @@ func changePassword(c *gin.Context) {
 	respond(c, nil, err)
 }
 
+// updateProfile 处理 PATCH /api/account/profile：按用户版本更新本人的白名单资料字段，并返回新的资料快照。
 func updateProfile(c *gin.Context) {
 	var input accountservice.ProfileInput
 	if !bind(c, &input, 16<<10) {
@@ -205,6 +218,7 @@ func updateProfile(c *gin.Context) {
 	respond(c, view(updated, c.GetString(utils.CtxKeyLoginToken)), nil)
 }
 
+// registrationValues 生成公开注册规则；数据库模式实时读取注册开关，固定月额度和邀请码有效期不由客户端决定。
 func registrationValues(c *gin.Context) (map[string]interface{}, error) {
 	enabled := false
 	if accountservice.DatabaseMode() {
@@ -217,11 +231,13 @@ func registrationValues(c *gin.Context) (map[string]interface{}, error) {
 	return map[string]interface{}{"enabled": enabled, "monthly_limit": 3, "ttl_days": 7, "min_password_length": config.Runtime().AccountPolicy.MinPasswordLength}, nil
 }
 
+// registrationPolicy 处理 GET /api/auth/registration-policy：向登录页和注册页提供注册是否开放及密码、邀请码规则。
 func registrationPolicy(c *gin.Context) {
 	value, err := registrationValues(c)
 	respond(c, value, err)
 }
 
+// publicBootstrap 处理 GET /api/site/bootstrap：返回匿名可读的站点标题、公告和注册规则，不暴露用户资料或启动密钥。
 func publicBootstrap(c *gin.Context) {
 	value, err := registrationValues(c)
 	if err != nil {
@@ -232,6 +248,7 @@ func publicBootstrap(c *gin.Context) {
 	respond(c, map[string]interface{}{"site": map[string]string{"title": runtime.SiteTitle, "notice": runtime.SiteNotice}, "registration": value}, nil)
 }
 
+// validateInvitation 处理 POST /api/auth/invitations/validate：在来源限流后校验邀请码，仅返回有效状态与到期时间，不消费邀请码。
 func validateInvitation(c *gin.Context) {
 	var input struct {
 		Code string `json:"code"`
@@ -251,6 +268,7 @@ func validateInvitation(c *gin.Context) {
 	respond(c, map[string]interface{}{"valid": true, "expires_at": inv.ExpiresAt}, nil)
 }
 
+// register 处理 POST /api/auth/register：限制请求体与来源频率，交由账号服务原子创建受邀用户并消费单次邀请码。
 func register(c *gin.Context) {
 	var input accountservice.RegistrationInput
 	if !bind(c, &input, 16<<10) {
@@ -268,11 +286,13 @@ func register(c *gin.Context) {
 	respond(c, map[string]string{"user_name": user.Username}, nil)
 }
 
+// listInvitations 处理 GET /api/account/invitations：列出本人的邀请码状态、本月剩余额度及下次重置时间。
 func listInvitations(c *gin.Context) {
 	page, err := accountservice.ListInvitations(ginfmt.RPCContext(c), currentUser(c).ID)
 	respond(c, page, err)
 }
 
+// createInvitation 处理 POST /api/account/invitations：按请求幂等键生成本人邀请码，并以已验证的 Origin 组成一次性分享链接。
 func createInvitation(c *gin.Context) {
 	var input struct {
 		Note      string `json:"note"`
@@ -294,6 +314,7 @@ func createInvitation(c *gin.Context) {
 	respond(c, map[string]interface{}{"invitation": inv.Invitation, "code": inv.Code, "invite_url": url}, nil)
 }
 
+// revokeInvitation 处理 POST /api/account/invitations/:id/revoke：撤销本人尚未使用的邀请码，不能操作其他邀请人的记录。
 func revokeInvitation(c *gin.Context) {
 	id, ok := positiveID(c, "id")
 	if !ok {

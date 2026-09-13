@@ -194,6 +194,7 @@ func (application *Application) UpdateProject(ownerUserID, projectID, revision i
 	return application.GetOwnedProject(ownerUserID, projectID)
 }
 
+// ChangeProjectStatus 计算所属项目的状态变更字段，按预期修订号持久化；未命中更新时返回并发冲突。
 func (application *Application) ChangeProjectStatus(ownerUserID, projectID, revision int64, action string, retentionDays int, principals ...*utils.Principal) (*service.ProjectView, error) {
 	aggregate, err := application.repository.FindOwned(ownerUserID, projectID)
 	if err != nil {
@@ -230,6 +231,7 @@ func (application *Application) CheckUploadOwner(ownerUserID, projectID int64) e
 	return nil
 }
 
+// AcquireUpload 在进程内锁下限制个人与全站上传并发；数据库身份模式且指定存储目录时额外预留磁盘空间，返回可重复调用的释放函数。
 func (application *Application) AcquireUpload(ownerUserID int64, conf *config.WebProjectsConfig) (func(), error) {
 	application.uploads.Lock()
 	defer application.uploads.Unlock()
@@ -304,6 +306,7 @@ func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ow
 	}
 	var existing *model.WebProjectRelease
 	var retired []*model.WebProjectRelease
+	// 锁定所属项目并核对请求幂等性和用户配额，将待淘汰版本标记与新版本记录原子提交。
 	err = application.repository.Transaction(func(tx *repository.Transaction) error {
 		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID, principals...)
 		if lockErr != nil {
@@ -368,6 +371,7 @@ func (application *Application) UploadRelease(conf *config.WebProjectsConfig, ow
 	return release, nil
 }
 
+// ListReleases 校验项目归属后按版本 ID 游标分页，使用额外一条记录判断是否还有下一页。
 func (application *Application) ListReleases(ownerUserID, projectID, cursor int64, limit int) (*service.ReleasePage, error) {
 	aggregate, err := application.repository.FindOwned(ownerUserID, projectID)
 	if err != nil {
@@ -402,6 +406,7 @@ func (application *Application) ListReleases(ownerUserID, projectID, cursor int6
 // filesystem entry check runs while locked so a missing artifact cannot become
 // current and optimistic revision still resolves concurrent status changes.
 func (application *Application) PublishRelease(conf *config.WebProjectsConfig, ownerUserID, projectID, releaseID, revision int64, principals ...*utils.Principal) (*service.ProjectView, error) {
+	// 依次锁定项目和版本，验证修订号、版本归属及入口文件后更新当前发布版本。
 	err := application.repository.Transaction(func(tx *repository.Transaction) error {
 		project, lockErr := tx.LockOwnedProject(ownerUserID, projectID, principals...)
 		if lockErr != nil {
@@ -450,6 +455,7 @@ func (application *Application) PublishRelease(conf *config.WebProjectsConfig, o
 	return application.GetOwnedProject(ownerUserID, projectID)
 }
 
+// GetReleaseForDownload 校验项目归属、版本就绪状态及上传者与项目所有者一致后，返回可下载的版本记录。
 func (application *Application) GetReleaseForDownload(ownerUserID, projectID, releaseID int64) (*model.WebProjectRelease, error) {
 	aggregate, err := application.repository.FindOwned(ownerUserID, projectID)
 	if err != nil {
@@ -471,6 +477,7 @@ func (application *Application) GetReleaseForDownload(ownerUserID, projectID, re
 	return release, nil
 }
 
+// GetPublishedProject 检查模块开关、项目发布及审核状态；数据库身份模式额外校验所有者状态，再返回归属一致的当前版本。
 func (application *Application) GetPublishedProject(slug string) (*model.WebProject, *model.WebProjectRelease, error) {
 	enabled, gateErr := accounts.ModuleEnabled(context.Background(), "web_projects")
 	if gateErr != nil {

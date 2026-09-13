@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TestBasicPasswordFailureBudgetAndTrustedSource 验证成功的 Basic 请求不耗尽失败额度，并检查来源 IP 只从可信代理链解析，不能用伪造转发头绕过限制。
 func TestBasicPasswordFailureBudgetAndTrustedSource(t *testing.T) {
 	old := config.Global()
 	oldProxies := trustedAuthProxies
@@ -80,6 +81,7 @@ func TestBasicPasswordFailureBudgetAndTrustedSource(t *testing.T) {
 	})
 }
 
+// TestDatabaseBasicRequiresHTTPS 验证数据库账号模式的 Basic 拒绝明文 HTTP，直接客户端伪造 HTTPS 转发头也不能越过传输边界。
 func TestDatabaseBasicRequiresHTTPS(t *testing.T) {
 	old := config.Global()
 	oldProxies := trustedAuthProxies

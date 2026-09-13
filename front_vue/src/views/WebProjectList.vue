@@ -90,6 +90,7 @@ const {webShareApi} = require('@/api/web_projects.cjs')
 export default {
   name: 'WebShareList',
   components: {MyHeader, Monitor, Plus, Refresh},
+  // 初始化托管列表的分页和筛选状态，并为不同可见范围、项目状态提供展示文案。
   data() {
     return {
       loading: false,
@@ -128,6 +129,7 @@ export default {
     statusTagType(status) {
       return {enabled: 'success', disabled: 'warning', deleted: 'danger'}[status] || 'info'
     },
+    // 确认登录后按游标加载本人托管项目，区分刷新与追加，并按删除筛选条件更新分页状态。
     async loadProjects(reset) {
       if (this.requireLogin()) {
         return

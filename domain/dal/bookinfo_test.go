@@ -19,6 +19,7 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
+// TestInsertBookInfo 在真实数据库中新增书目，核对单条与批量 ISBN 查询后删除新增记录。
 func TestInsertBookInfo(t *testing.T) {
 	e := InsertBookInfo(&model.BookInfo{
 		Title:     "测试图书",

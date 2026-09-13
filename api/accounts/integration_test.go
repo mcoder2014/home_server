@@ -253,6 +253,7 @@ func newHTTPFixture(t *testing.T, initialApplications ...bool) *httpFixture {
 	return fixture
 }
 
+// request 构造带可控身份、请求体和合成 TLS 状态的 Gin 请求，解析响应封包与 Cookie，供真实处理链集成用例复用。
 func (f *httpFixture) request(method, path string, session *browserSession, body interface{}, headers map[string]string) apiResponse {
 	var raw []byte
 	var bodyReader io.Reader
@@ -331,6 +332,7 @@ func object(value interface{}) map[string]interface{} {
 	return result
 }
 
+// login 通过真实账号登录 handler 建立合成浏览器会话，并验证安全 Cookie 属性以及响应没有泄露凭据。
 func (f *httpFixture) login(name, password string) *browserSession {
 	f.t.Helper()
 	response := f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": name, "password": password}, nil)
@@ -371,6 +373,7 @@ func (f *httpFixture) publish(admin *browserSession, namespace string, values ma
 	return f.request("PUT", "/api/admin/config/"+namespace, admin, map[string]interface{}{"values": values, "request_id": requestID, "reason": "isolated HTTP verification", "current_password": integrationPassword}, map[string]string{"If-Match": strconv.FormatInt(rev, 10)})
 }
 
+// TestHTTPLoginCSRFAndProfileIsolation 验证 Cookie 登录、资料写入的 CSRF 边界与白名单，防止客户端伪造身份或权限字段。
 func TestHTTPLoginCSRFAndProfileIsolation(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -407,6 +410,7 @@ func TestHTTPChangePasswordInvalidatesEveryOldSession(t *testing.T) {
 	f.login(f.member, integrationNextPassword)
 }
 
+// TestHTTPTemporaryPasswordSessionIsRestricted 验证管理员初始密码只能建立受限网站会话，完成改密后旧会话失效、新密码取得正常网站能力。
 func TestHTTPTemporaryPasswordSessionIsRestricted(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -430,6 +434,7 @@ func TestHTTPTemporaryPasswordSessionIsRestricted(t *testing.T) {
 	}
 }
 
+// TestHTTPInvitationConcurrencyAndFailureDoNotOverconsume 在合成库中并发生成和兑换邀请码，验证月额度、固定有效期、单次消费及失败不扣额。
 func TestHTTPInvitationConcurrencyAndFailureDoNotOverconsume(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -524,6 +529,7 @@ func (f *httpFixture) applicationToken(session *browserSession, scopes []string)
 	return issued.AccessToken
 }
 
+// TestHTTPCapabilitiesAreIndependentAndRevocable 验证管理员与普通用户都需独立藏书/WebDAV授权，且撤权同时约束用户请求和应用 scope。
 func TestHTTPCapabilitiesAreIndependentAndRevocable(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -564,6 +570,7 @@ func TestHTTPCapabilitiesAreIndependentAndRevocable(t *testing.T) {
 	requireDenied(t, f.request("GET", "/webdav/fixture.txt", nil, nil, basic))
 }
 
+// TestHTTPBanRestoreAndDeleteDoNotReviveCredentials 验证封禁使 Cookie、Bearer 和 Basic 访问失效；恢复与删除不会复活旧会话或功能授权。
 func TestHTTPBanRestoreAndDeleteDoNotReviveCredentials(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -592,6 +599,7 @@ func TestHTTPBanRestoreAndDeleteDoNotReviveCredentials(t *testing.T) {
 	requireDenied(t, f.request("POST", "/api/admin/users", owner, map[string]interface{}{"user_name": f.member, "generate_password": true}, nil))
 }
 
+// TestHTTPAdminPromotionAndSelfProtection 验证授予管理员会撤销旧会话但不附送业务能力，同时阻止管理者对自身执行受保护的降权动作。
 func TestHTTPAdminPromotionAndSelfProtection(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -618,6 +626,7 @@ func TestHTTPAdminPromotionAndSelfProtection(t *testing.T) {
 	requireDenied(t, f.adminAction(member, member.ID, "role", "PUT", map[string]interface{}{"role": "user"}))
 }
 
+// TestHTTPDynamicConfigCASHistoryAndRuntimeStatus 验证配置发布的版本冲突、幂等性与历史回滚，确认公开展示读取到运行时生效的新值。
 func TestHTTPDynamicConfigCASHistoryAndRuntimeStatus(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -670,6 +679,7 @@ func TestHTTPApplicationModuleCanOpenAfterDisabledStartup(t *testing.T) {
 	f.applicationToken(owner, []string{"web-projects:read"})
 }
 
+// TestHTTPAdminReviewsPrivatePageAndOwnerCannotSelfRestore 验证管理员可预览私有网页并下架或删除，原所有者不能发布或恢复被管理员锁定的内容。
 func TestHTTPAdminReviewsPrivatePageAndOwnerCannotSelfRestore(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -751,6 +761,7 @@ func TestHTTPExpiredInitialPasswordInvalidatesRestrictedSession(t *testing.T) {
 	requireDenied(t, f.request("POST", "/api/auth/change-password", session, map[string]interface{}{"current_password": integrationNextPassword, "new_password": integrationPassword, "confirm_password": integrationPassword}, nil))
 }
 
+// privatePage 通过真实上传与发布接口建立一份仅所有者可见的合成 HTML 网页，返回项目和版本供审核测试使用。
 func (f *httpFixture) privatePage(member *browserSession) (map[string]interface{}, string) {
 	f.t.Helper()
 	project := requireSuccess(f.t, f.request("POST", "/api/web-share", member, map[string]interface{}{"name": "Private review fixture", "description": "synthetic", "slug": "http-private-fixture", "access_mode": "owner", "member_user_ids": []string{}}, nil))
@@ -785,6 +796,7 @@ func (f *httpFixture) privatePage(member *browserSession) (map[string]interface{
 	return project, releaseID
 }
 
+// TestHTTPAdminPreviewRequiresDurableAudit 验证管理员预览文档必须先落审计，资产请求不重复记文档访问；模拟审计失败时不得泄露文件。
 func TestHTTPAdminPreviewRequiresDurableAudit(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -824,6 +836,7 @@ func TestHTTPAdminPreviewRequiresDurableAudit(t *testing.T) {
 	}
 }
 
+// TestHTTPLibraryWritesRequireCapabilityAndCorrectCredentialScope 验证 Cookie 与应用凭证写入共享藏书的独立授权和 scope，读权限不能借写接口修改库存或地址。
 func TestHTTPLibraryWritesRequireCapabilityAndCorrectCredentialScope(t *testing.T) {
 	f := newHTTPFixture(t)
 	owner := f.login(f.owner, integrationPassword)
@@ -883,6 +896,7 @@ func (b *blockedRequestBody) Read(buffer []byte) (int, error) {
 	return b.reader.Read(buffer)
 }
 
+// beginPausedRequest 异步发起在读取正文时阻塞的请求，并等待确定的暂停点，便于在认证和提交之间插入权限变更。
 func (f *httpFixture) beginPausedRequest(path, token, contentType string, payload []byte) (*blockedRequestBody, <-chan apiResponse) {
 	f.t.Helper()
 	body := &blockedRequestBody{reader: bytes.NewReader(payload), entered: make(chan struct{}), release: make(chan struct{}), finished: make(chan struct{})}
@@ -921,6 +935,7 @@ func (f *httpFixture) finishPausedRequest(body *blockedRequestBody, done <-chan 
 	return apiResponse{}
 }
 
+// mutateApplication 为并发集成用例执行指定的应用关闭、吊销、密钥轮换或重新启用动作，确保响应完成后再放行在途请求。
 func (f *httpFixture) mutateApplication(session *browserSession, id, action string) {
 	f.t.Helper()
 	if action == "disable_enable" {
@@ -944,8 +959,10 @@ func (f *httpFixture) mutateApplication(session *browserSession, id, action stri
 	}
 }
 
+// TestHTTPSlowBearerUploadRechecksApplicationAtCommit 将真实上传暂停在入口认证之后，变更应用状态再继续发送正文，验证最终事务拒绝已失效的凭据快照。
 func TestHTTPSlowBearerUploadRechecksApplicationAtCommit(t *testing.T) {
 	for _, action := range []string{"module_close", "revoke", "rotate", "disable_enable"} {
+		// 在当前应用变更场景中暂停上传、完成凭证变更并验证拒绝后没有新增版本或改动发布指针。
 		t.Run(action, func(t *testing.T) {
 			f := newHTTPFixture(t)
 			owner := f.login(f.owner, integrationPassword)
@@ -1004,8 +1021,10 @@ func TestHTTPSlowBearerUploadRechecksApplicationAtCommit(t *testing.T) {
 	}
 }
 
+// TestHTTPSlowLibraryWriteRechecksApplicationSnapshot 将藏书写请求暂停在认证与解码之间，轮换或禁启应用后验证旧凭据不能完成库存写入。
 func TestHTTPSlowLibraryWriteRechecksApplicationSnapshot(t *testing.T) {
 	for _, action := range []string{"rotate", "disable_enable"} {
+		// 在当前凭证变更场景中放行旧藏书请求，确认失败返回且数据库没有新增地址。
 		t.Run(action, func(t *testing.T) {
 			f := newHTTPFixture(t)
 			owner := f.login(f.owner, integrationPassword)

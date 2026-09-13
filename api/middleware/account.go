@@ -106,6 +106,7 @@ func BrowserWrite() gin.HandlerFunc {
 // RequireAccount permits only human account sessions, including the explicitly
 // restricted first-password session on me/change-password/logout routes.
 func RequireAccount(admin, allowPasswordChange bool) gin.HandlerFunc {
+	// 逐请求验证用户会话与当前管理员角色，并将受限改密会话限定在允许的接口内。
 	return func(c *gin.Context) {
 		if !IsHTTPS(c) {
 			ginfmt.Fail(c, apperrors.ErrForbidden)
@@ -159,6 +160,8 @@ func RequireAccount(admin, allowPasswordChange bool) gin.HandlerFunc {
 	}
 }
 
+// AuthorizeCapability 按请求所需 scope 检查模块开关、当前账号状态和个人藏书/WebDAV授权。
+// 用户会话还需匹配当前 auth_version；管理员身份不会隐式获得业务能力。
 func AuthorizeCapability(ctx context.Context, principal *utils.Principal, scope string) error {
 	if principal == nil {
 		return apperrors.ErrUnauthorized

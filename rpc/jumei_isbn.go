@@ -58,6 +58,7 @@ type JumeiBookModel struct {
 	Gist      string `json:"gist"`
 }
 
+// GetBookInfoByISBN 使用配置的 AppCode 查询聚美 ISBN 服务，映射接口错误并取第一条图书详情。
 func GetBookInfoByISBN(ctx context.Context, isbn string) (*model.BookInfo, error) {
 
 	// 构造 request
@@ -116,6 +117,7 @@ func GetBookInfoByISBN(ctx context.Context, isbn string) (*model.BookInfo, error
 	return JumeiToModel(jumeiModel.Data.Details[0]), nil
 }
 
+// statusCodeCheck 将聚美 HTTP 状态与网关错误头转换为图书不存在、额度不足等业务错误。
 func statusCodeCheck(resp *http.Response) error {
 	if resp == nil {
 		return errors.New(errors.ErrorCodeRpcFailed)
@@ -140,6 +142,7 @@ func statusCodeCheck(resp *http.Response) error {
 	return errors.NewWithMessage(errors.ErrorCodeUnknownError, fmt.Sprintf("Response Code: %v is not 200", resp.StatusCode))
 }
 
+// JumeiToModel 提取聚美图书详情中的入库字段；无法转成整数的页数按零保存。
 func JumeiToModel(jumei *JumeiBookModel) *model.BookInfo {
 	if jumei == nil {
 		return nil

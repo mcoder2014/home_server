@@ -48,6 +48,7 @@ func (repository *Repository) ListDeletingReleases(limit int) ([]*model.WebProje
 // before the lock or observes the incremented revision after commit.
 func (repository *Repository) PrepareExpiredProjectCleanup(projectID int64, cutoff time.Time, limit int) ([]*model.WebProjectRelease, error) {
 	var releases []*model.WebProjectRelease
+	// 锁内复核清理开关和删除保留期，将一页版本标记为删除中，并同时清空当前发布指针。
 	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
 		if accounts.DatabaseMode() {
 			enabled, err := accounts.EnabledTx(tx, "web_projects", "cleanup_enabled", true)

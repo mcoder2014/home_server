@@ -41,6 +41,7 @@ func CheckApplicationOwner(ctx context.Context, id int64, scopes []string) (*mod
 	return user, nil
 }
 
+// LockApplicationOwnerTx 按需锁定应用开关，再锁定所有者账号，复核认证版本及请求范围对应的账号权限。
 func LockApplicationOwnerTx(tx *gorm.DB, id int64, scopes []string, requireEnabled bool, authVersions ...int64) error {
 	if !DatabaseMode() {
 		return nil
@@ -89,6 +90,7 @@ func RequireApplicationSnapshotTx(tx *gorm.DB, principal *utils.Principal, scope
 	return nil
 }
 
+// RequireLibraryWriteTx 在图书写事务内锁定模块开关和账号，复核会话有效期；应用身份还需验证凭据快照。
 func RequireLibraryWriteTx(tx *gorm.DB, principal *utils.Principal) error {
 	if !DatabaseMode() {
 		return nil

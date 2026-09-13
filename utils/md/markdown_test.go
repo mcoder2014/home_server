@@ -2,6 +2,7 @@ package md
 
 import "testing"
 
+// TestMarkDownToHTML 将含标题和加粗文本的 Markdown 转换成 HTML，记录结果供人工检查。
 func TestMarkDownToHTML(t *testing.T) {
 
 	tests := []struct {

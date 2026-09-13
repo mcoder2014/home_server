@@ -29,6 +29,7 @@ type RuntimeConfig struct {
 var runtimeSnapshot atomic.Pointer[RuntimeConfig]
 var runtimeLock sync.Mutex
 
+// BuildRuntimeSnapshot 校验全部命名空间及其版本，将可编辑值合入启动配置并复制为独立运行时快照。
 func BuildRuntimeSnapshot(conf Config, generation int64, revisions map[string]int64, values map[string]map[string]interface{}) (RuntimeConfig, error) {
 	if len(values) != len(Registry(conf)) || generation < 0 {
 		return RuntimeConfig{}, fmt.Errorf("runtime configuration is incomplete")

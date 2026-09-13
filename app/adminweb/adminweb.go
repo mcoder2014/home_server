@@ -149,6 +149,7 @@ func List(ctx context.Context, actorID, version int64, filter Filter) (*Page, er
 	return result, nil
 }
 
+// Get 核验当前管理员身份后读取任意所有者的项目、用户名及版本列表，超过 1000 个版本时拒绝返回。
 func Get(ctx context.Context, actorID, version, projectID int64) (*Detail, error) {
 	if _, err := requireAdmin(ctx, actorID, version); err != nil {
 		return nil, err
@@ -205,6 +206,7 @@ func Change(ctx context.Context, actorID, version, projectID, revision int64, ac
 	}
 	var project *model.WebProject
 	var ownerName string
+	// 按运行状态、用户 ID 和项目的顺序加锁，重验管理员密码快照后原子保存审核状态与审计记录。
 	err = db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if _, err := dal.ReadSiteRuntimeState(tx, true); err != nil {
 			return err
@@ -369,6 +371,7 @@ func OpenPreview(ctx context.Context, actorID, version, projectID, releaseID int
 	// per CSS/image request. Failure cannot return any of the private content.
 	extension := strings.ToLower(filepath.Ext(requested))
 	if requested == release.EntryFile || extension == ".html" || extension == ".htm" {
+		// 对文档预览再次核验管理员和版本归属，在返回文件前持久化本次预览的审计记录。
 		err = db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			if _, err := dal.ReadSiteRuntimeState(tx, true); err != nil {
 				return err

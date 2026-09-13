@@ -92,8 +92,10 @@ func (repository *Repository) Create(project *model.WebProject, memberIDs []int6
 	})
 }
 
+// Update 在同一事务中校验写权限、锁定项目，并按修订号更新项目字段和完整成员集合。
 func (repository *Repository) Update(ownerUserID, projectID, revision int64, fields map[string]interface{}, memberIDs []int64, principals ...*utils.Principal) (bool, error) {
 	updated := false
+	// 在权限和审核状态仍允许写入时提交修订更新，只有项目更新成功才替换成员。
 	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
 		if err := requireWritePolicy(tx, ownerUserID, principals, memberIDs); err != nil {
 			return err
@@ -120,8 +122,10 @@ func (repository *Repository) Update(ownerUserID, projectID, revision int64, fie
 	return updated, err
 }
 
+// UpdateFields 在锁定项目后按修订号更新字段；恢复已删除项目时重新检查所有者的项目数量配额。
 func (repository *Repository) UpdateFields(ownerUserID, projectID, revision int64, fields map[string]interface{}, principals ...*utils.Principal) (bool, error) {
 	updated := false
+	// 串行复核权限、审核状态和恢复配额，并在写入前再次检查凭据有效期。
 	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
 		if err := requireWritePolicy(tx, ownerUserID, principals, nil); err != nil {
 			return err

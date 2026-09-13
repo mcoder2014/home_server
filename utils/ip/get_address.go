@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// GetClientAllIpv4 遍历本机接口地址，收集所有非回环 IPv4 地址。
 func GetClientAllIpv4() ([]string, error) {
 	addrs, err := net.InterfaceAddrs()
 
@@ -45,6 +46,7 @@ func GetClientAllIpv6() ([]string, error) {
 	return res, nil
 }
 
+// GetInterfaceIpv4 按网卡名称查找非回环 IPv4 地址，并在接口或地址读取失败时附带网卡信息。
 func GetInterfaceIpv4(name string) ([]string, error) {
 	netInterface, err := net.InterfaceByName(name)
 	if err != nil {
@@ -66,6 +68,7 @@ func GetInterfaceIpv4(name string) ([]string, error) {
 	return res, nil
 }
 
+// GetInterfaceIpv6 按网卡名称收集非回环且不能转换为 IPv4 的地址，保留接口查询错误。
 func GetInterfaceIpv6(name string) ([]string, error) {
 	netInterface, err := net.InterfaceByName(name)
 	if err != nil {

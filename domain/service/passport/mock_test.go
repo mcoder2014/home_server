@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGenMockData 为示例身份生成密码哈希并序列化为 JSON，确认生成与序列化过程没有错误。
 func TestGenMockData(t *testing.T) {
 	var testData = []*model.UserIdentity{
 		{

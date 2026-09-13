@@ -6,6 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// TestHashAndSalt 确认示例密码可以生成 bcrypt 哈希，并记录生成结果供检查。
 func TestHashAndSalt(t *testing.T) {
 
 	tests := []struct {
@@ -31,6 +32,7 @@ func TestHashAndSalt(t *testing.T) {
 	}
 }
 
+// TestComparePasswords 用已有 bcrypt 哈希验证正确密码通过、不同密码被拒绝。
 func TestComparePasswords(t *testing.T) {
 	tests := []struct {
 		name      string

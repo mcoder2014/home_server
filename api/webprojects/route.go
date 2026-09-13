@@ -32,6 +32,7 @@ func InitRouter() error {
 	return nil
 }
 
+// requireModule 逐请求检查网页托管模块；内容路径关闭时返回不可见结果，管理请求使用功能关闭错误。
 func requireModule(c *gin.Context) {
 	enabled, err := accounts.ModuleEnabled(c.Request.Context(), "web_projects")
 	if err != nil {

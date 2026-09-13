@@ -175,6 +175,7 @@ func BuildPlan(ctx context.Context, db *sql.DB, source *Source, opts Options) (*
 	return plan, nil
 }
 
+// tableSummary 按全部字段排序读取旧表数据，对逐行内容计算摘要和行数，以便后续检测计划生成后的数据漂移。
 func tableSummary(ctx context.Context, db queryer, schema *TableSchema) (TableSummary, error) {
 	summary := TableSummary{Name: schema.Name}
 	columns := make([]string, 0, len(schema.Columns))
@@ -210,6 +211,7 @@ func tableSummary(ctx context.Context, db queryer, schema *TableSchema) (TableSu
 	return summary, nil
 }
 
+// verifyReferences 检查旧表用户引用、登录令牌 ID 唯一性及应用和网页关联完整性；已导入时改用账号表作为用户集合。
 func verifyReferences(ctx context.Context, db queryer, source *Source, imported bool) error {
 	ids := make([]interface{}, 0, len(source.Users))
 	for _, user := range source.Users {
@@ -253,6 +255,7 @@ func verifyReferences(ctx context.Context, db queryer, source *Source, imported 
 	return nil
 }
 
+// verifyFiles 逐个核验就绪版本的存储路径及常规文件，比较文件数量和总字节数，并生成包含文件内容的清单摘要。
 func verifyFiles(ctx context.Context, db queryer, root string) ([]FileSummary, error) {
 	rows, err := db.QueryContext(ctx, "SELECT id,storage_key,file_count,total_bytes FROM web_project_release WHERE status=2 ORDER BY id")
 	if err != nil {
@@ -276,6 +279,7 @@ func verifyFiles(ctx context.Context, db queryer, root string) ([]FileSummary, e
 			return nil, fmt.Errorf("missing or symlinked content root for release ID %d", summary.ReleaseID)
 		}
 		hash := sha256.New()
+		// 跳过目录并拒绝非普通文件，将每个文件的相对路径、实际字节数和内容摘要纳入版本清单。
 		err = filepath.WalkDir(directory, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return errors.New("cannot walk content")

@@ -80,6 +80,7 @@ func (s *Service) Start(ctx context.Context) {
 	})
 }
 
+// Refresh 串行重建完整配置快照，数据库模式使用可重复读事务；校验或加载失败时保留上一份有效快照并记录状态。
 func (s *Service) Refresh(ctx context.Context) error {
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
@@ -91,6 +92,7 @@ func (s *Service) Refresh(ctx context.Context) error {
 		if s.database == nil {
 			err = appErrors.ErrDependency
 		} else {
+			// 在同一只读快照中读取代次和全部命名空间，逐项验证后组装待发布的运行时快照。
 			err = s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 				state, err := dal.ReadSiteRuntimeState(tx, false)
 				if err != nil || state.ConfigGeneration < 1 || state.RegistrationEpoch < 1 || state.Revision < 1 {
@@ -195,6 +197,7 @@ func (s *Service) Enabled(ctx context.Context, namespace, key string) (bool, err
 	return s.EnabledTx(s.database.WithContext(ctx), namespace, key, false)
 }
 
+// List 返回全部已注册命名空间的配置视图；文件模式使用启动配置对应的生效值，数据库模式要求记录完整。
 func (s *Service) List(ctx context.Context) (*NamespaceList, error) {
 	result := &NamespaceList{Items: make([]NamespaceView, 0)}
 	if s.bootstrap.ConfigSource != "database" {
@@ -256,6 +259,7 @@ func (s *Service) view(row model.SiteConfigCurrent) (*NamespaceView, error) {
 	return &NamespaceView{Namespace: row.Namespace, Revision: row.Revision, SchemaVersion: row.SchemaVersion, Values: values, UpdatedBy: strconv.FormatInt(row.UpdatedBy, 10), UpdateTime: row.UpdateTime, PersistedRevision: row.Revision, LoadedRevision: loadedRevision, ApplyState: state}, nil
 }
 
+// Validate 校验完整命名空间候选值，与当前版本逐项比较，返回变化字段及去重后的生效方式。
 func (s *Service) Validate(ctx context.Context, namespace string, values map[string]interface{}) (*ValidationResult, error) {
 	normalized, err := config.ValidateValues(s.bootstrap, namespace, values)
 	if err != nil {
@@ -286,6 +290,7 @@ func (s *Service) Validate(ctx context.Context, namespace string, values map[str
 	return result, nil
 }
 
+// History 按修订号游标返回配置历史，校验原始内容摘要但不以当前部署上限阻止历史审计。
 func (s *Service) History(ctx context.Context, namespace string, cursor int64, limit int) (*HistoryPage, error) {
 	if s.bootstrap.ConfigSource != "database" || s.database == nil {
 		return nil, appErrors.ErrForbidden
@@ -332,6 +337,7 @@ func (s *Service) History(ctx context.Context, namespace string, cursor int64, l
 	return result, nil
 }
 
+// Status 对照本进程已加载版本与数据库持久化版本，返回待加载或失效状态以及最近刷新信息。
 func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	s.stateMu.RLock()
 	result := RuntimeStatus{BootID: s.bootID, BinarySHA256: s.binarySHA256, LoadedGeneration: s.loaded.Generation, LastError: s.lastError, ApplyState: "applied", Namespaces: []NamespaceStatus{}}

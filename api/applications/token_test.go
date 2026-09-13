@@ -24,6 +24,7 @@ func TestParseApplicationAccessTokenRequestAcceptsBasicOrFormCredentials(t *test
 	require.Equal(t, "sk_cq_form", request.ClientSecret)
 }
 
+// TestParseApplicationAccessTokenRequestRejectsMixedDuplicateAndQueryCredentials 验证应用换 Token 只接受一种合法凭据来源，拒绝查询串、重复字段和 Basic/表单混传。
 func TestParseApplicationAccessTokenRequestRejectsMixedDuplicateAndQueryCredentials(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// QueryStorageByIsbn 根据 isbn 查询库存
+// QueryStorageByIsbn 根据 ISBN 查库存，再补充书目信息和库位；不存在库存时不继续查询关联信息。
 func QueryStorageByIsbn(ctx context.Context, isbn string) (*model.BookStorage, error) {
 	s, e := dal.QueryBookStorageByIsbn(isbn)
 	if e != nil || s == nil {
@@ -35,6 +35,7 @@ func QueryStorageByIsbn(ctx context.Context, isbn string) (*model.BookStorage, e
 	return bookStorage, nil
 }
 
+// AddStorageByIsbn 取得书目信息后新增库存；数据库身份模式下在写入事务内重新验证图书写权限。
 func AddStorageByIsbn(ctx context.Context, isbn string, quantity int, t model.StorageType, libId int64) error {
 	info, e := QueryBookInfoByIsbn(ctx, isbn)
 	if e != nil || info == nil {
@@ -85,7 +86,7 @@ func AddAddress(ctx context.Context, address *model.BookAddress) (int64, error) 
 	return dal.InsertBookAddress(address)
 }
 
-// GetTotalStorage 分页查询全部图书
+// GetTotalStorage 分页读取库存，批量补全书目和库位，并过滤关联信息不完整的记录。
 func GetTotalStorage(ctx context.Context, offset int, limit int) ([]*model.BookStorage, error) {
 
 	// 查询库存

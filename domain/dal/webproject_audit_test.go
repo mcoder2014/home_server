@@ -15,6 +15,7 @@ import (
 
 var auditTestIDCounter int64
 
+// TestQueryWebProjectReleaseReferencesSelectsRequestedRows 验证引用查询只返回存在的目标，并确认旧存储键只能成功替换一次。
 func TestQueryWebProjectReleaseReferencesSelectsRequestedRows(t *testing.T) {
 	database := requireAuditTestDB(t)
 	baseID := time.Now().UnixNano()/1000 + atomic.AddInt64(&auditTestIDCounter, 10)

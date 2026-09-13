@@ -181,6 +181,7 @@ func RequireIdentity(scope string, userOnly bool) gin.HandlerFunc {
 	}
 }
 
+// setPrincipal 把已解析的 Principal、用户 ID 和原用户令牌写入两种请求上下文，供后续 handler 与业务事务复用身份。
 func setPrincipal(c *gin.Context, principal *utils.Principal, userToken string) {
 	c.Set(utils.CtxKeyPrincipal, principal)
 	c.Set(utils.CtxKeyLoginUseID, principal.UserID)

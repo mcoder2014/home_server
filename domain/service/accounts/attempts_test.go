@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TestVerifyPassword 验证成功校验不占失败预算，以及并发失败、过期窗口和计数容量上限的行为。
 func TestVerifyPassword(t *testing.T) {
 	password := "SyntheticPasswordForLimiter123"
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), 4)
@@ -21,6 +22,7 @@ func TestVerifyPassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, scenario := range []string{"successful traffic", "concurrent failures", "expired failures", "capacity"} {
+		// 重置网站登录的失败计数，分别核对成功、并发失败、过期恢复及容量耗尽场景。
 		t.Run(scenario, func(t *testing.T) {
 			passwordFailureLock.Lock()
 			passwordFailures = map[[32]byte]passwordFailure{}
@@ -90,6 +92,7 @@ func TestVerifyPassword(t *testing.T) {
 	}
 }
 
+// TestRandomPasswordAndPolicyMessage 核对随机密码满足配置下限和 bcrypt 字节上限，错误文案显示实际下限。
 func TestRandomPasswordAndPolicyMessage(t *testing.T) {
 	for _, minimum := range []int{15, 21, 32, 64, 72} {
 		password, err := randomPassword(minimum)

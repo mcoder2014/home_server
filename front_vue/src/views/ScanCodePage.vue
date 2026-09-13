@@ -39,7 +39,9 @@ export default {
     }
   },
   methods: {
+    // 枚举摄像头并按现有设备顺序和后置标签选择输入；无设备时返回上一页，调用失败时更新提示状态。
     async openScan() {
+      // 取得设备后展示调用提示；首个设备标记为 back 时使用它，多设备且首个无该标签时选择第二个。
       this.codeReader.listVideoInputDevices().then((videoInputDevices) => {
         this.tipShow = true;
         this.tipMsg = '正在调用摄像头...';
@@ -73,8 +75,10 @@ export default {
         console.error(err);
       });
     },
+    // 重置读取器后启动持续条码识别；识别出的非空 ISBN 由回调保存并带回来源页面。
     decodeFromInputVideoFunc(firstDeviceId) {
       this.codeReader.reset(); // 重置
+      // 持续更新识别提示；收到非空条码后写入全局 ISBN，结束扫描并返回上一页。
       this.codeReader.decodeFromInputVideoDeviceContinuously(firstDeviceId, 'video', (result, err) => {
         this.tipMsg = '正在尝试识别...';
         this.scanText = '';

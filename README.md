@@ -336,6 +336,12 @@ HTTP 适配位于 `api/`，网页和应用管理用例位于 `app/`，领域规�
 
 协议依据：[OAuth 2.0 client_credentials](https://www.rfc-editor.org/rfc/rfc6749#section-4.4)、[Bearer Token](https://www.rfc-editor.org/rfc/rfc6750#section-2.1)、[OWASP 密钥生命周期](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)。
 
+## 代码注释约定
+
+超过 20 个物理行的函数（包括长匿名函数和测试回调）应在定义前说明用途、关键行为，以及需要调用方理解的副作用或兼容约束。已有准确说明可以保留，避免只把函数名翻译成一句空泛描述。
+
+API 层的每个 HTTP 处理函数无论长度都应说明接口用途；共享处理函数应覆盖其承接的路径或动作，并区分前置中间件和函数自身承担的身份、输入及响应职责。
+
 ## FAQ
 
 ##### Q: 为什么服务没有使用 SSL?

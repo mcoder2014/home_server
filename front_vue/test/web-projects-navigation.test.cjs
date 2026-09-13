@@ -25,6 +25,7 @@ test('accepts only project content paths as open targets', () => {
     assert.equal(isSafeProjectTarget('/p/ab/'), false)
 })
 
+// 验证登录回跳仅保留允许的业务页和托管路径，拒绝外部或混淆地址，同时保留合法查询参数。
 test('limits login redirects to known application pages and project content paths', () => {
     assert.equal(normalizeInternalRedirect('/applications'), '/applications')
     assert.equal(normalizeInternalRedirect('/web-share'), '/web-share')

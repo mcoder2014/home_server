@@ -30,8 +30,8 @@ func main() {
 	}
 }
 
-// run only reads until all apply confirmations and the fresh plan digest match.
-// It never stops services, backs up a database, changes YAML or writes content files.
+// run 默认生成脱敏迁移计划；应用模式先检查离线确认参数，再由 Apply 核对目标数据库和最新计划摘要。
+// 可将报告写入新建文件，应用后重建计划核验完成标记；不负责停服务、备份、修改 YAML 或写入网页内容。
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("accounts-migrate", flag.ContinueOnError)
 	flags.SetOutput(stderr)

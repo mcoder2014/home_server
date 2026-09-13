@@ -69,6 +69,7 @@ func ValidateBasicAuth() gin.HandlerFunc {
 		c.Abort()
 	}
 
+	// 在一次 WebDAV 请求中选择 Basic 或 Bearer 通道，校验账号与方法权限后再放行文件操作。
 	return func(c *gin.Context) {
 		if accounts.DatabaseMode() && !IsHTTPS(c) {
 			ginfmt.Fail(c, apperrors.ErrForbidden)

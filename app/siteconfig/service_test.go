@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// runtimeTestService 仅连接指定测试库，重建运行配置表并写入初始快照与历史，供 MariaDB 集成用例使用。
 func runtimeTestService(t *testing.T) (*Service, *gorm.DB) {
 	t.Helper()
 	dsn := os.Getenv("HOME_SERVER_RUNTIME_TEST_DSN")
@@ -77,6 +78,7 @@ func runtimeTestService(t *testing.T) (*Service, *gorm.DB) {
 
 func allowConfigTest(tx *gorm.DB) error { return nil }
 
+// TestPublishIsIdempotentAndRollbackNeverRestoresInvitationEpoch 验证重复发布幂等、异参冲突、关闭注册推进邀请代次，以及回滚重开不会恢复旧代次。
 func TestPublishIsIdempotentAndRollbackNeverRestoresInvitationEpoch(t *testing.T) {
 	service, database := runtimeTestService(t)
 	ctx := context.Background()
@@ -127,6 +129,7 @@ func TestPublishIsIdempotentAndRollbackNeverRestoresInvitationEpoch(t *testing.T
 	}
 }
 
+// TestPublishRequiresAuthorizationAndRejectsStaleRevision 验证发布在事务内重验权限，拒绝缺失授权和过期修订号，失败不更换运行时快照。
 func TestPublishRequiresAuthorizationAndRejectsStaleRevision(t *testing.T) {
 	service, _ := runtimeTestService(t)
 	ctx := context.Background()
@@ -149,6 +152,7 @@ func TestPublishRequiresAuthorizationAndRejectsStaleRevision(t *testing.T) {
 	}
 }
 
+// TestConcurrentConfigWritersHaveExactlyOneWinner 在专用测试库并发发布同一修订号，验证只有一个写入成功。
 func TestConcurrentConfigWritersHaveExactlyOneWinner(t *testing.T) {
 	service, _ := runtimeTestService(t)
 	ctx := context.Background()
@@ -178,6 +182,7 @@ func TestConcurrentConfigWritersHaveExactlyOneWinner(t *testing.T) {
 	}
 }
 
+// TestRefreshRetainsSnapshotAndFailsClosedForCorruptConfiguration 验证配置损坏时刷新保留旧快照、实时开关拒绝访问，且缺少命名空间时启动失败。
 func TestRefreshRetainsSnapshotAndFailsClosedForCorruptConfiguration(t *testing.T) {
 	service, database := runtimeTestService(t)
 	ctx := context.Background()
@@ -224,6 +229,7 @@ func TestHistoricalValuesRemainReadableAfterBootstrapLimitDecrease(t *testing.T)
 	}
 }
 
+// TestPublishReportsSavedWhenAnotherNamespaceCannotReload 验证其他命名空间损坏导致刷新失败时，已提交的配置仍报告保存成功且旧快照保持完整。
 func TestPublishReportsSavedWhenAnotherNamespaceCannotReload(t *testing.T) {
 	service, database := runtimeTestService(t)
 	ctx := context.Background()
@@ -249,6 +255,7 @@ func TestPublishReportsSavedWhenAnotherNamespaceCannotReload(t *testing.T) {
 	}
 }
 
+// TestLockedModuleCheckSerializesWithAdministrativeClose 通过持有模块配置行锁验证管理关闭等待在途事务提交，之后的新请求读取关闭状态。
 func TestLockedModuleCheckSerializesWithAdministrativeClose(t *testing.T) {
 	service, database := runtimeTestService(t)
 	ctx := context.Background()

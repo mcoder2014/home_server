@@ -13,6 +13,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal/migrations"
 )
 
+// fixtureDatabase 仅清空带专用前缀的测试库，重建合成旧表和数据，并读取内嵌迁移文件构造固定时间的迁移参数。
 func fixtureDatabase(t *testing.T) (*sql.DB, *Source, Options) {
 	t.Helper()
 	dsn := os.Getenv("ACCOUNTS_MIGRATION_TEST_DSN")
@@ -96,6 +97,7 @@ func fixtureDatabase(t *testing.T) (*sql.DB, *Source, Options) {
 	return db, source, opts
 }
 
+// TestMigrationPlansAppliesAndDoesNotResetChangedCredentials 验证计划只读、应用要求库名和摘要一致、首次迁移使旧会话失效，且重跑保留用户后来修改的密码及认证版本。
 func TestMigrationPlansAppliesAndDoesNotResetChangedCredentials(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	ctx := context.Background()
@@ -159,6 +161,7 @@ func TestMigrationRejectsUnknownOwnersBeforeDDL(t *testing.T) {
 	}
 }
 
+// TestMigrationResumesCompletedDDLWithStartedMarker 模拟 DDL 已生效但标记仍为 started 的中断，验证新计划可恢复完成且拒绝迁移文件摘要变化。
 func TestMigrationResumesCompletedDDLWithStartedMarker(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	ctx := context.Background()
@@ -210,6 +213,7 @@ func TestMigrationRejectsStructureAndSourceDriftBeforeApplying(t *testing.T) {
 	}
 }
 
+// TestMigrationSeedsEffectiveValuesAndFixedDeletionDeadline 验证导入保留源配置的配额和删除保留期，固定历史删除截止时间，并默认关闭邀请注册。
 func TestMigrationSeedsEffectiveValuesAndFixedDeletionDeadline(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	ctx := context.Background()
@@ -237,6 +241,7 @@ func TestMigrationSeedsEffectiveValuesAndFixedDeletionDeadline(t *testing.T) {
 	}
 }
 
+// TestMigrationFileManifestDetectsContentDrift 用临时网页文件验证计划含内容摘要但不泄漏私密字段，并拒绝同尺寸内容变化或文件缺失。
 func TestMigrationFileManifestDetectsContentDrift(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	root := t.TempDir()
@@ -333,6 +338,7 @@ func TestMigrationRejectsIncompatibleLegacyIdentityColumn(t *testing.T) {
 	}
 }
 
+// TestCompletedImportRequiresCompleteSchema 迁移完成后删除历史表及其 DDL 标记，验证再次规划仍会拒绝不完整结构。
 func TestCompletedImportRequiresCompleteSchema(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	ctx := context.Background()

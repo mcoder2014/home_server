@@ -49,6 +49,7 @@ func SendLogEvent(logEntity *model.WebDAVLogEntity) error {
 	return nil
 }
 
+// Routine 持续消费 WebDAV 日志队列，以限流器控制落库速率，并记录每条失败日志的 LogID。
 func (r *LogRoutine) Routine() {
 	if r == nil {
 		panic("LogRoutine is nil")

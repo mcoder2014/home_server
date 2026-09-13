@@ -101,6 +101,7 @@ func MigrateLegacyReleaseStorage(conf *config.WebProjectsConfig, projectID, rele
 	})
 }
 
+// migrateLegacyReleaseStorageAt 为单个旧版发布生成迁移报告；仅 apply 模式重新核对计划后执行目录和引用变更。
 func migrateLegacyReleaseStorageAt(conf *config.WebProjectsConfig, projectID, releaseID int64, apply bool, now time.Time, queries storageMigrationQueries) (*StorageMigrationReport, error) {
 	if conf == nil || !filepath.IsAbs(conf.StorageRoot) || projectID <= 0 || releaseID <= 0 ||
 		queries.queryReleases == nil || queries.queryProjects == nil || queries.compareAndSwapStorageKey == nil {
@@ -146,6 +147,7 @@ func migrateLegacyReleaseStorageAt(conf *config.WebProjectsConfig, projectID, re
 	return report, nil
 }
 
+// loadStorageMigrationPlan 读取发布与项目所有权，核对源目录、目标目录和恢复日志，返回可执行计划或明确的拒绝原因。
 func loadStorageMigrationPlan(conf *config.WebProjectsConfig, projectID, releaseID int64, queries auditReferenceQueries) (*storageMigrationPlan, error) {
 	oldKey, _ := LegacyReleaseStorageKey(projectID, releaseID)
 	plan := &storageMigrationPlan{action: StorageMigrationAction{
@@ -219,6 +221,7 @@ func loadStorageMigrationPlan(conf *config.WebProjectsConfig, projectID, release
 	return plan, nil
 }
 
+// validateStorageMigrationState 区分首次迁移和中断恢复，核对存储键、目录存在性及设备和 inode 身份，防止覆盖冲突目录。
 func validateStorageMigrationState(plan *storageMigrationPlan) string {
 	sourceExists, sourceIdentity, sourceReason := inspectMigrationReleaseDirectory(plan.sourcePath)
 	if sourceReason != "" {
@@ -259,6 +262,7 @@ func validateStorageMigrationState(plan *storageMigrationPlan) string {
 	return ""
 }
 
+// inspectMigrationReleaseDirectory 检查发布和 content 目录及其后代不含符号链接，返回设备与 inode 供重命名前后比对。
 func inspectMigrationReleaseDirectory(directory string) (bool, storageFileIdentity, string) {
 	info, err := os.Lstat(directory)
 	if errors.Is(err, os.ErrNotExist) {
@@ -304,8 +308,8 @@ func inspectMigrationReleaseDirectory(directory string) (bool, storageFileIdenti
 	return true, storageFileIdentity{Device: uint64(stat.Dev), Inode: uint64(stat.Ino)}, ""
 }
 
-// executeStorageMigrationPlan leaves target and journal untouched after rename
-// when the database outcome is unknown, so a process-interrupted run can resume.
+// executeStorageMigrationPlan 持久化恢复日志后重命名发布目录，再以旧存储键为条件更新数据库引用。
+// 数据库结果不明时保留目标目录和日志供下次恢复；只有确认引用已切换后才移除日志。
 func executeStorageMigrationPlan(conf *config.WebProjectsConfig, plan *storageMigrationPlan, now time.Time, queries storageMigrationQueries) error {
 	if plan.journal == nil {
 		journalDirectory, _, err := storageDirectory(conf, plan.action.OwnerID+"/upload/html/.migration", true)
@@ -438,6 +442,7 @@ func verifyStorageMigrationCommit(plan *storageMigrationPlan, queries auditRefer
 		releases[0].StorageKey == plan.action.TargetStorageKey, nil
 }
 
+// loadStorageMigrationJournal 读取权限仅限所有者的普通日志文件，限制读取大小并拒绝未知字段或尾随 JSON。
 func loadStorageMigrationJournal(journalPath string) (*storageMigrationJournal, error) {
 	info, err := os.Lstat(journalPath)
 	if errors.Is(err, os.ErrNotExist) {
@@ -471,6 +476,7 @@ func journalMatches(journal storageMigrationJournal, ownerID, projectID, release
 		journal.SourceIdentity.Inode > 0 && (journal.State == "prepared" || journal.State == "moved")
 }
 
+// writeStorageMigrationJournal 将日志写入私有临时文件并同步，通过硬链接独占创建或重命名替换后同步父目录。
 func writeStorageMigrationJournal(journalPath string, journal storageMigrationJournal, replace bool) error {
 	data, err := json.Marshal(journal)
 	if err != nil {

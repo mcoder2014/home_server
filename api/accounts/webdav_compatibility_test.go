@@ -16,6 +16,7 @@ func TestHTTPWebDAVBasicProtocolWithoutBrowserLogin(t *testing.T) {
 	owner := f.login(f.owner, integrationPassword)
 	requireSuccess(t, f.adminAction(owner, "1002", "webdav-permission", "PUT", map[string]interface{}{"permission": "write"}))
 	for _, prefix := range []string{"/webdav/", "/webdav_dev/"} {
+		// 对每个 WebDAV 别名独立验证目录发现、读写和文件锁协议，不借用浏览器会话。
 		t.Run(prefix, func(t *testing.T) {
 			request := func(method, path, body string, extra map[string]string) apiResponse {
 				headers := map[string]string{
@@ -87,6 +88,7 @@ func TestHTTPWebDAVBasicProtocolWithoutBrowserLogin(t *testing.T) {
 	}
 }
 
+// TestHTTPWebDAVBasicSurvivesWebsiteSessionExpiryAndLogout 验证网站会话到期或全部退出不阻断有效 Basic；改密后旧密码拒绝，新密码无需重新网页登录即可使用。
 func TestHTTPWebDAVBasicSurvivesWebsiteSessionExpiryAndLogout(t *testing.T) {
 	f := newHTTPFixture(t, false)
 	owner := f.login(f.owner, integrationPassword)
@@ -117,6 +119,7 @@ func TestHTTPWebDAVBasicSurvivesWebsiteSessionExpiryAndLogout(t *testing.T) {
 	}
 }
 
+// TestHTTPWebDAVBasicPasswordFailuresAreIndependentFromWebsite 验证网页登录与 Basic 的失败预算相互隔离，两个 WebDAV 路由仍共享同一套 Basic 失败限制。
 func TestHTTPWebDAVBasicPasswordFailuresAreIndependentFromWebsite(t *testing.T) {
 	f := newHTTPFixture(t, false)
 	// Failure budgets are process-wide. Give these two synthetic accounts IDs
@@ -162,6 +165,7 @@ func TestHTTPWebDAVBasicPasswordFailuresAreIndependentFromWebsite(t *testing.T) 
 	f.login(f.guest, integrationPassword)
 }
 
+// TestHTTPWebDAVBasicAcceptsGrantedUnexpiredInitialPassword 验证未授权初始账号不能访问 WebDAV，授权后有效初始密码可直接使用，而网站改密与密码到期检查仍在。
 func TestHTTPWebDAVBasicAcceptsGrantedUnexpiredInitialPassword(t *testing.T) {
 	f := newHTTPFixture(t, false)
 	owner := f.login(f.owner, integrationPassword)

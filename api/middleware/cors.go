@@ -8,6 +8,8 @@ import (
 	"github.com/mcoder2014/home_server/config"
 )
 
+// CORS 根据启动配置创建精确 Origin 白名单和跨域预检规则，允许受信任站点携带凭据访问 API。
+// 此中间件限制浏览器来源，不替代接口自身的用户或应用认证。
 func CORS() gin.HandlerFunc {
 	origins := append([]string(nil), config.Global().Auth.SiteOrigins...)
 	if origin := config.Global().Auth.SiteOrigin; origin != "" {

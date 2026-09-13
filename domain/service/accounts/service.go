@@ -84,6 +84,7 @@ func RequireUserTx(tx *gorm.DB, id, version int64, admin bool) (*model.UserAccou
 	return user, nil
 }
 
+// Authenticate 通过登录别名查找账号并校验密码预算，同时拒绝停用账号和已过期的临时密码。
 func Authenticate(ctx context.Context, key, password string) (*model.UserAccount, error) {
 	user, err := GetByLogin(ctx, key)
 	if err != nil {
@@ -130,6 +131,7 @@ func Login(ctx context.Context, key, password string) (*model.UserAccount, strin
 	var user *model.UserAccount
 	var token string
 	var session *model.AccountSession
+	// 锁定账号后确认凭据快照仍有效，必要时升级 bcrypt 成本，再原子写入新会话。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		var e error
 		user, e = dal.QueryAccount(tx, verified.ID, true)
@@ -155,6 +157,7 @@ func Login(ctx context.Context, key, password string) (*model.UserAccount, strin
 	return user, token, session, normalizeError(err)
 }
 
+// issueSessionTx 保存随机会话令牌的摘要并更新登录时间；待改密账号仅获得十分钟的改密专用会话。
 func issueSessionTx(tx *gorm.DB, user *model.UserAccount) (string, *model.AccountSession, error) {
 	token, err := randomSecret("us_cq_", 32)
 	if err != nil {
@@ -182,6 +185,7 @@ func issueSessionTx(tx *gorm.DB, user *model.UserAccount) (string, *model.Accoun
 	return token, session, nil
 }
 
+// IssueVerifiedSession 为已验证身份签发会话，锁内复核认证版本、账号状态和临时密码有效期。
 func IssueVerifiedSession(ctx context.Context, id, version int64) (string, error) {
 	database, err := database(ctx)
 	if err != nil {
@@ -205,6 +209,7 @@ func IssueVerifiedSession(ctx context.Context, id, version int64) (string, error
 	return token, normalizeError(err)
 }
 
+// CheckSession 通过令牌摘要校验会话、账号和认证版本，并按调用方许可限制改密专用会话的使用。
 func CheckSession(ctx context.Context, token string, allowPasswordChange bool) (*model.UserAccount, *model.AccountSession, error) {
 	database, err := database(ctx)
 	if err != nil {
@@ -254,6 +259,7 @@ func UserIdentity(user *model.UserAccount) *model.UserIdentity {
 	return &model.UserIdentity{ID: user.ID, UserName: user.Username, BcryptPassword: user.PasswordHash, Email: user.ContactEmail, Mobile: user.ContactMobile, AuthVersion: user.AuthVersion, Role: user.Role, LibraryEnabled: user.LibraryEnabled, WebDAVPermission: user.WebDAVPermission, MustChangePassword: user.MustChangePassword, DalModel: model.DalModel{CreateTime: user.CreateTime, UpdateTime: user.UpdateTime}}
 }
 
+// EnabledTx 从配置文件或事务内的配置行读取布尔开关；数据库配置需通过版本、摘要和字段校验。
 func EnabledTx(tx *gorm.DB, namespace, key string, lock bool) (bool, error) {
 	conf := config.Global()
 	if conf.ConfigSource != "database" {

@@ -121,6 +121,7 @@ func NewService(repo Repository, options Options) *Service {
 	return service
 }
 
+// Create 校验应用信息和所有者权限，生成 AK/SK 并按数量配额保存应用；SK 仅持久化摘要，明文随创建结果返回。
 func (s *Service) Create(ctx context.Context, ownerUserID int64, input CreateInput, authVersions ...int64) (*model.Application, string, error) {
 	if ownerUserID <= 0 {
 		return nil, "", appErrors.ErrUnauthorized
@@ -193,6 +194,7 @@ func (s *Service) Get(ctx context.Context, ownerUserID, applicationID int64) (*m
 	return application, nil
 }
 
+// Update 校验所有者、修订号与修改后的授权范围，再保存应用资料及新修订号，使旧令牌快照失效。
 func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revision int64, input UpdateInput, authVersions ...int64) (*model.Application, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
@@ -226,6 +228,7 @@ func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, nil
 }
 
+// Rotate 按预期修订号更换应用 SK 摘要并增加密钥版本，成功后返回新 SK 明文，旧密钥和令牌随之失效。
 func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revision int64, authVersions ...int64) (*model.Application, string, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
@@ -257,6 +260,7 @@ func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, secretKey, nil
 }
 
+// Revoke 按所有者和修订号永久撤销应用，释放活跃名额，并增加修订号使已有令牌失效。
 func (s *Service) Revoke(ctx context.Context, ownerUserID, applicationID, revision int64, authVersions ...int64) (*model.Application, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
@@ -283,6 +287,7 @@ func (s *Service) Revoke(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, nil
 }
 
+// IssueToken 验证 AK/SK、应用状态和所有者权限，保存带授权快照的短期令牌摘要，并尝试清理过期令牌。
 func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (*IssuedToken, error) {
 	if !validCredential(accessKey, "ak_cq_", 16) || !validCredential(secretKey, "sk_cq_", 32) {
 		return nil, appErrors.ErrUnauthorized
@@ -323,6 +328,7 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 	return &IssuedToken{AccessToken: rawToken, ExpiresIn: int(options.TokenTTL / time.Second), Scopes: append([]string(nil), application.Scopes...)}, nil
 }
 
+// AuthenticateToken 校验令牌有效期及应用的密钥版本、修订号和授权范围，构造保留原快照的应用身份。
 func (s *Service) AuthenticateToken(ctx context.Context, rawToken string) (*utils.Principal, error) {
 	if !validCredential(rawToken, "at_cq_", 32) {
 		return nil, appErrors.ErrUnauthorized
@@ -349,6 +355,7 @@ func (s *Service) AuthenticateToken(ctx context.Context, rawToken string) (*util
 	return &utils.Principal{Kind: "application", UserID: application.OwnerUserID, ApplicationID: application.ID, ApplicationRevision: token.ApplicationRevision, SecretVersion: token.SecretVersion, TokenExpiresAt: token.ExpiredAt, Scopes: append([]string(nil), token.ScopeSnapshot...), AuthVersion: version}, nil
 }
 
+// validateCreate 规范化应用文本与授权范围，按给定配置快照或当前配置确定并限制凭据有效期。
 func (s *Service) validateCreate(input CreateInput, snapshots ...Options) (string, string, []string, time.Duration, error) {
 	name, description, err := validateText(input.Name, input.Description)
 	if err != nil {
@@ -376,6 +383,7 @@ func (s *Service) validateCreate(input CreateInput, snapshots ...Options) (strin
 	return name, description, scopes, ttl, nil
 }
 
+// applyUpdate 将显式更新项应用到内存中的应用记录，校验文本、范围、有效期及启停状态，不执行持久化。
 func (s *Service) applyUpdate(application *model.Application, input UpdateInput, snapshots ...Options) error {
 	options := s.runtimeOptions()
 	if len(snapshots) > 0 {
@@ -486,6 +494,7 @@ func validateText(name, description string) (string, string, error) {
 	return name, description, nil
 }
 
+// normalizeScopes 拒绝未知范围、去重并按固定顺序输出，写权限自动补齐读权限；新建时可使用默认网页读权限。
 func normalizeScopes(scopes []string, useDefault bool) ([]string, error) {
 	if scopes == nil && useDefault {
 		return []string{ScopeWebProjectsRead}, nil
@@ -554,6 +563,7 @@ var (
 	defaultLock    sync.RWMutex
 )
 
+// Init 填充应用凭据的默认有效期和数量上限，拒绝越界配置后替换默认应用服务实例。
 func Init(conf config.AuthConfig) error {
 	if conf.TokenTTLSeconds < 0 || conf.DefaultCredentialTTLDays < 0 || conf.MaxCredentialTTLDays < 0 || conf.MaxApplicationsPerUser < 0 {
 		return fmt.Errorf("invalid auth application limits")

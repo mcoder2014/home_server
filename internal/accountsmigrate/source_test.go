@@ -8,6 +8,7 @@ import (
 
 const fixtureHash = "$2a$04$R2Csdr0qO4JEHxawUyysM.xiv266hVHiNh.hoUCAwpNObRFMyisE6"
 
+// TestSourcePreservesIdentityAndRejectsCrossUserAliases 验证旧用户 ID、用户名和密码哈希完整保留，显式授权生效，不同用户之间的跨类型登录别名冲突被拒绝。
 func TestSourcePreservesIdentityAndRejectsCrossUserAliases(t *testing.T) {
 	raw := []byte(`mysql:
   master_db: "migration:secret@tcp(127.0.0.1:3306)/isolated_test?parseTime=True&loc=Local"
@@ -33,6 +34,7 @@ passport:
 	}
 }
 
+// TestSourceGrantsAreExplicitAndBoundToKnownUsers 验证授权只能指向已知用户、WebDAV 授权不冲突、管理员不会自动获得模块权限，且源对象序列化不泄漏私密字段。
 func TestSourceGrantsAreExplicitAndBoundToKnownUsers(t *testing.T) {
 	raw := []byte(`passport:
   mock_data: '[{"id":123,"user_name":"owner","password":"` + fixtureHash + `"}]'

@@ -10,6 +10,7 @@ function envelopeError(response) {
 }
 
 
+// 封装同源应用凭证管理请求；更新、轮换和吊销携带 If-Match，失败统一转为页面可处理的错误。
 function createApplicationsApi(transport, getCSRF) {
     const client = transport || axios.create({
         baseURL: '/',

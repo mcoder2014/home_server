@@ -60,6 +60,7 @@ func (s *Service) publish(ctx context.Context, namespace string, actorID, expect
 		}
 	}
 	var saved model.SiteConfigCurrent
+	// 锁定运行状态和命名空间后重验权限、请求幂等性及修订号，将当前值、历史和代次一起提交。
 	err = s.database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		state, err := dal.ReadSiteRuntimeState(tx, true)
 		if err != nil {

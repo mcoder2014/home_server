@@ -75,6 +75,7 @@ func pathsOverlap(left, right string) bool {
 	return left == right || strings.HasPrefix(left, right+separator) || strings.HasPrefix(right, left+separator)
 }
 
+// applyDefaults 为未设置的上传、解压、项目容量、并发和删除保留期限制填入默认值。
 func applyDefaults(conf *config.WebProjectsConfig) {
 	if conf.MaxUploadBytes <= 0 {
 		conf.MaxUploadBytes = 50 << 20

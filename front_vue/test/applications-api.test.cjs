@@ -14,6 +14,7 @@ function createTransport(responseData = {code: 0, message: 'success', data: {ok:
     }
 }
 
+// 用记录请求的 transport 验证列表/创建携带 CSRF，且创建载荷不接受调用方指定 owner 或 secret；不发送网络请求。
 test('application management requests use the browser CSRF header without owner or secret fields', async () => {
     const transport = createTransport()
     const api = createApplicationsApi(transport, () => 'user-token')

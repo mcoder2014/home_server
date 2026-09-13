@@ -8,6 +8,7 @@ import (
 	"github.com/mcoder2014/home_server/data"
 )
 
+// TestBrowserAccountEndpointsRemainAvailable 验证浏览器账号路由不依赖应用凭证开关，避免关闭机器认证时连带移除网站登录。
 func TestBrowserAccountEndpointsRemainAvailable(t *testing.T) {
 	oldConfig, oldRoutes := config.Global(), data.RouterMap
 	t.Cleanup(func() { config.SetGlobalConfig(oldConfig); data.RouterMap = oldRoutes })

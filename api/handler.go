@@ -18,6 +18,7 @@ var routeInit sync.Once
 // InitRouter 初始化路由， 仅执行一次
 func InitRouter() error {
 	var err error
+	// 首次初始化时按依赖顺序注册模块，任一初始化失败就停止后续注册。
 	routeInit.Do(func() {
 		if err = middleware.ConfigureAuthentication(config.Global().Auth); err != nil {
 			return

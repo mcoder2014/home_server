@@ -27,7 +27,8 @@ type queryer interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 }
 
-// OpenDatabase never logs a DSN or a server-supplied error containing connection details.
+// OpenDatabase 根据源配置及可选库名初始化单连接数据库句柄，并关闭多语句执行。
+// It never logs a DSN or a server-supplied error containing connection details.
 func OpenDatabase(source *Source, databaseOverride string) (*sql.DB, string, error) {
 	cfg, err := mysql.ParseDSN(source.Config.Mysql.MasterDB)
 	if err != nil {
@@ -139,6 +140,7 @@ func inspectTable(ctx context.Context, db queryer, database, table string) (*Tab
 	return schema, nil
 }
 
+// verifyStep 比较实际表与 DDL 步骤的列、索引和约束；返回是否已完成，定义冲突或已存在的新表结构不完整则报错。
 func verifyStep(step Step, schema *TableSchema) (bool, error) {
 	if schema == nil {
 		if step.Create {

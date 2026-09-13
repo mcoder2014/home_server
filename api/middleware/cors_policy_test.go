@@ -9,6 +9,7 @@ import (
 	"github.com/mcoder2014/home_server/config"
 )
 
+// TestCORSPermitsConfiguredBrowserWritesAndRejectsOtherOrigins 验证允许站点可携带凭据完成管理写预检，未配置的浏览器 Origin 被拒绝。
 func TestCORSPermitsConfiguredBrowserWritesAndRejectsOtherOrigins(t *testing.T) {
 	old := config.Global()
 	t.Cleanup(func() { config.SetGlobalConfig(old) })

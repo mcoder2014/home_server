@@ -92,6 +92,7 @@ def _validate_credentials(access_key: object, secret_key: object) -> Credentials
     return Credentials(access_key, secret_key)
 
 
+# 读取私有凭证文件，并在同一文件描述符上核对普通文件、POSIX 属主和权限；使用平台支持的防跟随标志并确保关闭句柄。
 def _read_private_file(path: Path) -> str:
     flags = os.O_RDONLY
     if hasattr(os, "O_CLOEXEC"):
@@ -150,6 +151,7 @@ def sanitize_message(message: object, sensitive_values=()) -> str:
     return value[:500]
 
 
+# 递归清理嵌套响应中的敏感字段及认证字符串，保留容器结构，避免打印 AK/SK、Token 或 Authorization。
 def redact_output(value: object, sensitive_values=()) -> object:
     sensitive_keys = {
         "access_key",
@@ -182,6 +184,7 @@ def redact_output(value: object, sensitive_values=()) -> object:
 class HTTPTransport:
     """A single-origin HTTPS transport that deliberately has no redirect logic."""
 
+    # 固定 HTTPS origin、连接超时和 CA 校验设置；测试可注入连接工厂，正常请求仍使用证书校验的连接。
     def __init__(
         self,
         base_url: str,
@@ -264,6 +267,7 @@ class HomeServerAPI:
         self.credentials = credentials
         self.access_token = ""
 
+    # 使用 Basic AK/SK 换取短期 Bearer，验证响应格式和期限后仅缓存在当前客户端；失败消息经过凭证脱敏。
     def exchange_token(self) -> str:
         raw = f"{self.credentials.access_key}:{self.credentials.secret_key}".encode("utf-8")
         encoded_credentials = base64.b64encode(raw).decode("ascii")
@@ -313,6 +317,7 @@ class HomeServerAPI:
         return response
 
 
+# 从已核对的普通 HTML/ZIP 文件构造有界 multipart 请求，验证入口字段并返回请求体和 Content-Type；不发送上传。
 def build_multipart(upload_file: Path, entry_file: Optional[str], *, boundary: Optional[str] = None):
     suffix = upload_file.suffix.lower()
     if suffix not in {".html", ".htm", ".zip"}:
@@ -401,6 +406,7 @@ class SafeArgumentParser(argparse.ArgumentParser):
         super().error(safe_message)
 
 
+# 解析同源调用、凭证来源和互斥请求体选项，约束入口文件依赖与正数超时；错误不回显敏感参数。
 def parse_args(argv=None):
     parser = SafeArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=os.environ.get(BASE_URL_ENV), help=f"HTTPS origin，也可用 {BASE_URL_ENV}")
@@ -425,6 +431,7 @@ def parse_args(argv=None):
     return args
 
 
+# 组装一次认证后的 API 调用，按响应类型脱敏输出或保存二进制；用退出码报告可打印的客户端错误。
 def main(argv=None) -> int:
     try:
         args = parse_args(argv)

@@ -25,6 +25,7 @@ import (
 var rawHandler *webdav.Handler
 var rawHandlerDev *webdav.Handler
 
+// InitRouter 为共享根目录创建两个 WebDAV 处理器，并为两套路径的文件、目录和锁方法挂载 Basic/Bearer 认证。
 func InitRouter() error {
 	sharePath := config.Global().WebDAV.SharePath
 	if len(sharePath) == 0 {
@@ -54,6 +55,7 @@ func InitRouter() error {
 	return nil
 }
 
+// WebDAV 处理 /webdav/*path 的 WebDAV 方法：修正反向代理后的 Destination，并把文件与锁操作交给标准 WebDAV 处理器。
 func WebDAV(c *gin.Context) {
 	// 用比较黑客的方式规避 Nginx 代理后 URL 与 Host 不一致的问题
 	logID := c.GetString(log.LogIDKey)
@@ -71,6 +73,7 @@ func WebDAV(c *gin.Context) {
 	rawHandler.ServeHTTP(c.Writer, c.Request)
 }
 
+// WebDAVDev 处理 /webdav_dev/*path 的兼容 WebDAV 方法：在文件操作前记录路径摘要及用户操作事件，并使用同一共享目录。
 func WebDAVDev(c *gin.Context) {
 	// 用比较黑客的方式规避 Nginx 代理后 URL 与 Host 不一致的问题
 	logID := c.GetString(log.LogIDKey)
@@ -104,6 +107,7 @@ func WebDAVDev(c *gin.Context) {
 	rawHandlerDev.ServeHTTP(c.Writer, c.Request)
 }
 
+// Logger 记录 WebDAV 请求结果；发生错误时补充主机、路径和脱敏请求头，不将认证头原文写入日志。
 func Logger(req *http.Request, err error) {
 	url := req.URL.Path
 	headers := req.Header

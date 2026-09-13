@@ -35,6 +35,8 @@ func InitRouter() error {
 	return nil
 }
 
+// browserLogin 处理 /api/auth/browser-login 及两个网页托管兼容入口：把有效用户令牌转换为浏览器 Cookie。
+// 仅精确匹配的站点 Origin 可设置会话，不允许应用凭据转换为用户登录态。
 func browserLogin(c *gin.Context) {
 	// Strict equality is the CSRF boundary for the cookie-setting endpoint. Empty,
 	// missing, and foreign origins must not create an authenticated browser session.

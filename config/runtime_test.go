@@ -4,6 +4,7 @@ import (
 	"testing"
 )
 
+// TestRuntimeRejectsInvalidAndUndeclaredValues 验证配置类型、只读字段、未注册字段和关联上限约束均拒绝非法输入。
 func TestRuntimeRejectsInvalidAndUndeclaredValues(t *testing.T) {
 	conf := Config{}
 	values := DefaultRuntimeValues(conf)
@@ -30,6 +31,7 @@ func TestRuntimeRejectsInvalidAndUndeclaredValues(t *testing.T) {
 	}
 }
 
+// TestRuntimeSnapshotIsCompleteImmutableAndMonotonic 验证快照完整性、读写副本隔离和代次不可回退，并保留部署时的存储路径。
 func TestRuntimeSnapshotIsCompleteImmutableAndMonotonic(t *testing.T) {
 	conf := Config{}
 	conf.Auth.SiteOrigins = []string{"https://home.example.com"}
@@ -66,6 +68,7 @@ func TestRuntimeSnapshotIsCompleteImmutableAndMonotonic(t *testing.T) {
 	}
 }
 
+// TestDefaultRuntimeValuesPreserveImportedLimitsAndHideSecrets 验证导入保留既有数值限制，但不导出站点来源地址和存储路径，且默认关闭注册。
 func TestDefaultRuntimeValuesPreserveImportedLimitsAndHideSecrets(t *testing.T) {
 	conf := Config{}
 	conf.Auth.TokenTTLSeconds = 1800
@@ -88,6 +91,7 @@ func TestDefaultRuntimeValuesPreserveImportedLimitsAndHideSecrets(t *testing.T) 
 	}
 }
 
+// TestBootstrapChangeInvalidatesPreviousSnapshot 验证更换启动配置会清除旧运行时快照，使后续读取使用新的部署配置。
 func TestBootstrapChangeInvalidatesPreviousSnapshot(t *testing.T) {
 	original := Global()
 	t.Cleanup(func() { SetGlobalConfig(original) })

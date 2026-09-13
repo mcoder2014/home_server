@@ -1,5 +1,6 @@
 const {createBrowserRequest} = require('./browser_client.cjs')
 
+// 统一封装登录、个人资料、邀请和管理接口；共用浏览器 Cookie/CSRF 请求器，并传递写入所需的修订号。
 function createAccountsApi(transport, getCSRF) {
     const request = createBrowserRequest(transport, getCSRF)
     const id = encodeURIComponent

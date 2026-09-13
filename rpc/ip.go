@@ -28,6 +28,7 @@ var ipv6Services = []string{
 	"https://v6.ident.me",
 }
 
+// getIpAddress 在五秒超时内查询单个公网 IP 服务，要求 HTTP 200 并返回原始响应文本。
 func getIpAddress(ctx context.Context, url string) (string, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,

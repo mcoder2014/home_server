@@ -84,6 +84,7 @@ type AccountFilter struct {
 	LibraryEnabled                        *bool
 }
 
+// ListAccounts 按 ID 倒序游标列出匹配用户名和权限筛选的账号，默认排除已删除账号。
 func ListAccounts(database *gorm.DB, filter AccountFilter) ([]*model.UserAccount, error) {
 	query := database.Session(&gorm.Session{Logger: logger.Discard}).Table(AccountTable).Select(AccountColumns)
 	if filter.Cursor > 0 {

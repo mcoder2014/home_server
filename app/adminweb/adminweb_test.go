@@ -29,6 +29,7 @@ import (
 
 const adminTestPassword = "test-admin-password-12345"
 
+// moderationDatabase 仅在专用测试库重建账号、配置和网页表，创建管理员、所有者及临时私有页面供集成用例使用。
 func moderationDatabase(t *testing.T) *gorm.DB {
 	t.Helper()
 	dsn := os.Getenv("HOME_SERVER_WEB_MODERATION_TEST_DSN")
@@ -116,6 +117,7 @@ func moderationDatabase(t *testing.T) *gorm.DB {
 	return database
 }
 
+// TestAdminModerationCannotBeBypassedByOwnerPublishOrRestore 验证普通用户不能读取全站管理列表，所有者不能绕过封禁或管理删除，且管理变更写入审计。
 func TestAdminModerationCannotBeBypassedByOwnerPublishOrRestore(t *testing.T) {
 	database := moderationDatabase(t)
 	ctx := context.Background()
@@ -156,6 +158,7 @@ func TestAdminModerationCannotBeBypassedByOwnerPublishOrRestore(t *testing.T) {
 	}
 }
 
+// TestAdminPreviewBypassesVisibilityButRequiresLiveAdminSession 验证管理员可预览私有且模块已关闭的内容，同时拒绝路径穿越和已撤销的认证版本。
 func TestAdminPreviewBypassesVisibilityButRequiresLiveAdminSession(t *testing.T) {
 	database := moderationDatabase(t)
 	ctx := context.Background()
@@ -178,6 +181,7 @@ func TestAdminPreviewBypassesVisibilityButRequiresLiveAdminSession(t *testing.T)
 	}
 }
 
+// TestBannedOwnerAndClosedSiteCannotPublish 验证封禁所有者的页面不可访问或发布，网页模块实时关闭后拒绝新建项目。
 func TestBannedOwnerAndClosedSiteCannotPublish(t *testing.T) {
 	database := moderationDatabase(t)
 	if err := database.Table(dal.AccountTable).Where("id=200").Update("status", model.AccountBanned).Error; err != nil {
@@ -205,6 +209,7 @@ func TestBannedOwnerAndClosedSiteCannotPublish(t *testing.T) {
 	}
 }
 
+// TestCleanupKeepsFrozenDeadlineAndChecksLiveCleanupSwitch 验证清理遵守删除时固定的截止时间，并在运行中读取清理开关决定是否删除到期文件。
 func TestCleanupKeepsFrozenDeadlineAndChecksLiveCleanupSwitch(t *testing.T) {
 	database := moderationDatabase(t)
 	now := time.Now()
@@ -259,6 +264,7 @@ func TestRevokedUploadSessionReturnsAuthenticationFailure(t *testing.T) {
 	}
 }
 
+// TestFileIdentityModeKeepsLegacyWebTableCompatible 移除新增审核字段模拟旧表，验证文件身份模式下创建、读取、删除和恢复项目仍兼容。
 func TestFileIdentityModeKeepsLegacyWebTableCompatible(t *testing.T) {
 	database := moderationDatabase(t)
 	for _, column := range []string{"moderation_status", "moderation_reason", "moderated_by", "moderated_at", "purge_after"} {
@@ -311,6 +317,7 @@ func setResourceQuota(t *testing.T, database *gorm.DB, changes map[string]interf
 	return config.Runtime().WebProjects
 }
 
+// TestConcurrentProjectCreationCannotExceedUserQuota 并发创建同一所有者的两个项目，验证最后一个可用名额只能由一个请求占用。
 func TestConcurrentProjectCreationCannotExceedUserQuota(t *testing.T) {
 	database := moderationDatabase(t)
 	setResourceQuota(t, database, map[string]interface{}{"max_projects_per_user": 2})
@@ -348,6 +355,7 @@ func TestConcurrentProjectCreationCannotExceedUserQuota(t *testing.T) {
 	}
 }
 
+// TestConcurrentCrossProjectUploadsShareOneUserBudget 并发向同一用户的不同项目上传，验证用户字节配额统一计费且只允许一个请求提交。
 func TestConcurrentCrossProjectUploadsShareOneUserBudget(t *testing.T) {
 	database := moderationDatabase(t)
 	ids := []int64{}
@@ -397,6 +405,7 @@ func TestConcurrentCrossProjectUploadsShareOneUserBudget(t *testing.T) {
 	}
 }
 
+// TestQuotaFailureDoesNotPruneAndDeletingBytesRemainCharged 验证配额拒绝不会修改或清理既有版本，待删除字节持续计费直到物理清理完成。
 func TestQuotaFailureDoesNotPruneAndDeletingBytesRemainCharged(t *testing.T) {
 	database := moderationDatabase(t)
 	now := time.Now()
@@ -436,6 +445,7 @@ func TestQuotaFailureDoesNotPruneAndDeletingBytesRemainCharged(t *testing.T) {
 	}
 }
 
+// TestDeletedProjectsReleaseCountButRestoreRequiresAFreeSlot 验证删除释放项目数量名额，名额被占用后恢复失败且保留原删除状态和页面文件。
 func TestDeletedProjectsReleaseCountButRestoreRequiresAFreeSlot(t *testing.T) {
 	database := moderationDatabase(t)
 	setResourceQuota(t, database, map[string]interface{}{"max_projects_per_user": 1})
@@ -458,9 +468,11 @@ func TestDeletedProjectsReleaseCountButRestoreRequiresAFreeSlot(t *testing.T) {
 	}
 }
 
+// TestLibraryWriteRejectsChangedApplicationSnapshot 逐项验证密钥版本、应用修订号、所有者或令牌有效期变化会使在途藏书写请求失效。
 func TestLibraryWriteRejectsChangedApplicationSnapshot(t *testing.T) {
 	cases := []string{"rotate", "disable-enable", "owner-mismatch", "token-expiry"}
 	for _, name := range cases {
+		// 在独立重建的测试库验证原应用快照可写，再改变当前场景对应的认证信息并断言旧快照被拒绝。
 		t.Run(name, func(t *testing.T) {
 			database := moderationDatabase(t)
 			auth := config.DefaultRuntimeValues(config.Global())["auth"]

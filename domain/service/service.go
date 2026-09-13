@@ -9,6 +9,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/service/webprojects"
 )
 
+// Init 校验身份与配置来源配套，初始化认证、网页存储和应用凭据服务，最后启动 WebDAV 日志消费。
 func Init(conf *config.Config) error {
 	if (conf.IdentitySource == "database") != (conf.ConfigSource == "database") {
 		return fmt.Errorf("database identity and configuration must be enabled together")

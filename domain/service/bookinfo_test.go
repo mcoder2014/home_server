@@ -18,6 +18,7 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
+// TestBatchQueryBookInfo 核对 ISBN-13、ISBN-10 及混合查询均能返回对应数量的书目信息。
 func TestBatchQueryBookInfo(t *testing.T) {
 	ctx := context.Background()
 

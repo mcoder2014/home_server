@@ -56,6 +56,7 @@ func GetIdentity(ctx context.Context, mobileEmailUsername string) (res *model.Us
 	return GetService().GetIdentity(ctx, mobileEmailUsername)
 }
 
+// ValidateUser 按身份来源校验登录凭据，保留限流错误，并将其他凭据失败转换为旧版用户名密码错误码。
 func ValidateUser(ctx context.Context, loginKey, loginPasswd string) (res *model.UserIdentity, err error) {
 	if accounts.DatabaseMode() {
 		user, e := accounts.Authenticate(ctx, loginKey, loginPasswd)
@@ -83,6 +84,7 @@ func ValidateUser(ctx context.Context, loginKey, loginPasswd string) (res *model
 	return identity, nil
 }
 
+// GetByID 查询可正常使用的身份；数据库模式过滤停用与待改密账号，配置模式补齐原有模块权限。
 func GetByID(ctx context.Context, id int64) (*model.UserIdentity, error) {
 	if accounts.DatabaseMode() {
 		user, err := accounts.GetByID(ctx, id)
@@ -105,6 +107,7 @@ func GetByID(ctx context.Context, id int64) (*model.UserIdentity, error) {
 	return &copy, nil
 }
 
+// ListUsersWithError 统一列出数据库或配置中的身份，保留查询失败，并为配置用户补齐历史权限默认值。
 func ListUsersWithError(ctx context.Context) ([]*model.UserIdentity, error) {
 	if accounts.DatabaseMode() {
 		users, err := accounts.ListActiveUsers(ctx)

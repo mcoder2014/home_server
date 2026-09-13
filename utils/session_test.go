@@ -20,6 +20,7 @@ func TestBrowserSessionPrefersCanonicalCookie(t *testing.T) {
 	require.Empty(t, BrowserSessionToken(request), "empty canonical session must not reactivate a legacy identity")
 }
 
+// TestBrowserSessionWritesOneSecureCookieAndExpiresOldKeys 确认新会话写入安全 Cookie，并同时过期两个旧名称。
 func TestBrowserSessionWritesOneSecureCookieAndExpiresOldKeys(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)

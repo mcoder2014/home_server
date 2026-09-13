@@ -10,6 +10,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/model"
 )
 
+// TestInsertBookStorage 在真实数据库中核对库存新增、两种 ISBN 查询、字段更新、计数和删除流程。
 func TestInsertBookStorage(t *testing.T) {
 	s := &model.DBBookStorage{
 		BookId:    1,

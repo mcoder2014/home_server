@@ -39,7 +39,9 @@ func Init() error {
 	return nil
 }
 
+// GetDefaultOutput 懒初始化标准输出与滚动日志文件的组合写入器，并监听 SIGHUP 触发日志轮转。
 func GetDefaultOutput() io.Writer {
+	// 只创建一次日志文件写入器和轮转监听，后续调用复用同一个输出实例。
 	defaultLogOutputOnce.Do(func() {
 		logFile := os.Getenv("HOME_SERVER_LOG_FILE")
 		if logFile == "" {

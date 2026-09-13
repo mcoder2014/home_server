@@ -37,8 +37,8 @@ var webDAVPasswordFailures = map[[32]byte]passwordFailure{}
 // VerifyPassword shares failed-password budgets across website login and password
 // confirmation. DAV Basic has independent account, IP and capacity budgets so
 // website lockouts cannot block native clients. Aliases share an account budget
-// within each scope; successes do not consume or reset it. In-flight failures
-// are counted atomically before any later request is admitted.
+// within each scope; successes do not consume or reset it. Failed checks update
+// counters under the mutex; requests already admitted can finish concurrently.
 func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password string) error {
 	accountKey := "login:" + strings.ToLower(strings.TrimSpace(loginKey))
 	if userID > 0 {

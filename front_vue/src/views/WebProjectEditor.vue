@@ -195,6 +195,7 @@ const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projec
 export default {
   name: 'WebShareEditor',
   components: {MyHeader, ArrowLeft, Refresh, UploadFilled},
+  // 初始化托管设置、成员选择、版本分页和上传状态，保留草稿表单与服务端项目状态的分别表示。
   data() {
     return {
       saving: false,
@@ -317,6 +318,7 @@ export default {
         member_user_ids: this.form.access_mode === 'members' ? this.form.member_user_ids : [],
       }
     },
+    // 校验并提交托管设置；新建成功后转到编辑地址并加载版本，更新时用服务端返回值刷新项目和修订号。
     async saveProject() {
       try {
         await this.$refs.projectForm.validate()
@@ -351,6 +353,7 @@ export default {
     handleFileExceed() {
       ElMessage.warning('一次只能选择一个 HTML 或 ZIP 文件')
     },
+    // 上传选定文件，并仅在明确选择 publishNow 时发布该版本；流程成功后清空选择并刷新版本列表。
     async uploadRelease(publishNow) {
       if (!this.uploadFile) {
         return

@@ -21,6 +21,7 @@ import (
 
 const reviewPassword = "SyntheticPasswordForReview123"
 
+// reviewAccountDatabase 仅在指定的独立测试库重建账号相关样例，清空失败预算并在结束时恢复全局配置。
 func reviewAccountDatabase(t *testing.T) *gorm.DB {
 	t.Helper()
 	passwordFailureLock.Lock()
@@ -76,6 +77,7 @@ func reviewAccountDatabase(t *testing.T) *gorm.DB {
 	return database
 }
 
+// TestPasswordFailuresAreSharedAcrossAccountEntryPoints 验证登录、管理员确认和自助改密共享账号失败预算，别名不能绕过限流。
 func TestPasswordFailuresAreSharedAcrossAccountEntryPoints(t *testing.T) {
 	reviewAccountDatabase(t)
 	ctx := context.WithValue(context.Background(), "home_server.password_source_ip", "198.51.100.71")
@@ -104,8 +106,10 @@ func TestPasswordFailuresAreSharedAcrossAccountEntryPoints(t *testing.T) {
 	}
 }
 
+// TestAdminGeneratedPasswordsFollowRuntimeMinimum 验证管理员建号和重置密码遵循动态长度策略，并保留临时密码的强制修改状态。
 func TestAdminGeneratedPasswordsFollowRuntimeMinimum(t *testing.T) {
 	for _, minimum := range []int{15, 21, 64} {
+		// 为当前密码下限重新准备独立账号数据，核对自动生成的初始密码和重置密码。
 		t.Run(strconv.Itoa(minimum), func(t *testing.T) {
 			reviewAccountDatabase(t)
 			snapshot := config.Runtime()

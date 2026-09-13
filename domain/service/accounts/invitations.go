@@ -29,6 +29,7 @@ type CreatedInvitation struct {
 	Code       string                `json:"code,omitempty"`
 }
 
+// ListInvitations 返回最近一百条邀请及新加坡当月配额，补充使用者名称并在响应中标示已失效或过期邀请。
 func ListInvitations(ctx context.Context, id int64) (*InvitationPage, error) {
 	database, err := database(ctx)
 	if err != nil {
@@ -96,6 +97,7 @@ func ListInvitations(ctx context.Context, id int64) (*InvitationPage, error) {
 	return page, nil
 }
 
+// CreateInvitation 校验邀请资格并分配当月三个名额之一；幂等重试返回原记录，邀请码明文仅在新建成功时返回。
 func CreateInvitation(ctx context.Context, id, version int64, note, requestID string) (*CreatedInvitation, error) {
 	if len(note) > 128 || !requestIDPattern.MatchString(requestID) {
 		return nil, apperrors.ErrInvalid
@@ -110,6 +112,7 @@ func CreateInvitation(ctx context.Context, id, version int64, note, requestID st
 		return nil, err
 	}
 	result := &CreatedInvitation{}
+	// 按运行状态、注册开关和账号顺序加锁，复核幂等请求与月度名额后保存邀请码摘要。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		state, e := dal.ReadSiteRuntimeState(tx, true)
 		if e != nil {
@@ -172,6 +175,7 @@ func CreateInvitation(ctx context.Context, id, version int64, note, requestID st
 	return result, normalizeError(err)
 }
 
+// ValidateInvitation 预检查注册开关、邀请码摘要、注册代次和有效期，并要求邀请人仍为有效账号。
 func ValidateInvitation(ctx context.Context, code string) (*model.UserInvitation, error) {
 	if len(code) < 16 || len(code) > 128 {
 		return nil, apperrors.ErrNotFound
@@ -241,6 +245,7 @@ func Register(ctx context.Context, input RegistrationInput) (*model.UserAccount,
 		return nil, err
 	}
 	var user *model.UserAccount
+	// 锁内重新检查注册和邀请状态，原子创建账号及登录别名，并将邀请码标记为已使用。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		state, e := dal.ReadSiteRuntimeState(tx, true)
 		if e != nil {
@@ -285,6 +290,7 @@ func Register(ctx context.Context, input RegistrationInput) (*model.UserAccount,
 	return user, normalizeError(err)
 }
 
+// RevokeInvitation 在事务中复核当前账号认证版本，仅允许邀请人撤销自己尚未使用的邀请码。
 func RevokeInvitation(ctx context.Context, id, version, invitationID int64) error {
 	database, err := database(ctx)
 	if err != nil {

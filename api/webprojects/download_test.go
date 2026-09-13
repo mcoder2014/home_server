@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestServeReleaseDownloadBuildsCompleteZIPBeforeSuccess 验证下载在返回成功前生成包含完整文件的版本 ZIP，并确认附件响应与临时文件清理。
 func TestServeReleaseDownloadBuildsCompleteZIPBeforeSuccess(t *testing.T) {
 	conf, release, contentRoot := downloadFixture(t)
 	require.NoError(t, os.WriteFile(filepath.Join(contentRoot, "index.html"), []byte("index"), 0600))

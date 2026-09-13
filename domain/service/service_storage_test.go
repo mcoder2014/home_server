@@ -78,6 +78,7 @@ func storageIsolationDatabase(t *testing.T) *gorm.DB {
 	return database
 }
 
+// TestInitStorageIsolation 覆盖目录嵌套、相同路径和符号链接，验证服务启动的存储隔离及数据库动态启用兼容性。
 func TestInitStorageIsolation(t *testing.T) {
 	database := storageIsolationDatabase(t)
 	before := config.Global()
@@ -102,6 +103,7 @@ func TestInitStorageIsolation(t *testing.T) {
 		{"file_enabled_creates_separate_root", "separate", false, true, false, false},
 	}
 	for _, test := range tests {
+		// 构造当前目录布局和配置来源，核对重叠拒绝、目录初始化与数据库启用后的实际配置。
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()
 			shared := filepath.Join(root, "shared")

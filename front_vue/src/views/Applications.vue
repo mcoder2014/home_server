@@ -182,6 +182,7 @@ const {
 export default {
   name: 'ApplicationsPage',
   components: {MyHeader, Key, Plus, Refresh},
+  // 初始化凭证列表、分页和编辑弹窗状态，并提供权限选项、有效期表单及一次性密钥展示所需的数据。
   data() {
     return {
       loading: false,
@@ -286,6 +287,7 @@ export default {
     writeSelected(resource) {
       return this.form.scopes.includes(`${resource}:write`)
     },
+    // 校验表单并规范权限集合；编辑时使用当前修订号，新建时展示仅本次返回的密钥并刷新列表。
     async saveApplication() {
       try {
         await this.$refs.applicationForm.validate()

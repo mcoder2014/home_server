@@ -70,6 +70,7 @@ func CreateApplicationCredential(ctx context.Context, actor *utils.Principal, re
 	return &IssuedApplicationCredential{Application: buildApplicationCredentialView(application), SecretKey: secret}, nil
 }
 
+// ListApplicationCredentials 按当前用户分页读取应用凭证，将记录转换为不含密钥摘要的视图并生成后续游标。
 func ListApplicationCredentials(ctx context.Context, actor *utils.Principal, cursor int64, limit int) (*ListApplicationCredentialsResponse, error) {
 	ownerID, err := requireApplicationCredentialOwner(actor)
 	if err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// InitRoute 初始化业务路由后构建 Gin 引擎，安装访问日志、恢复、LogID 与 CORS，再挂载注册表中的方法和路径。
+// 健康检查单独注册，不执行后续业务中间件。
 func InitRoute() *gin.Engine {
 	// 先初始化路由
 	if err := api.InitRouter(); err != nil {
@@ -19,6 +21,7 @@ func InitRoute() *gin.Engine {
 
 	engine := gin.New()
 	engine.Use(gin.LoggerWithConfig(gin.LoggerConfig{Output: log.GetDefaultOutput(), Formatter: middleware.AccessLogFormatter}), gin.RecoveryWithWriter(log.GetDefaultOutput()))
+	// GET /ping 返回进程存活信号，不执行数据库或业务依赖检查。
 	engine.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"message": "pong",

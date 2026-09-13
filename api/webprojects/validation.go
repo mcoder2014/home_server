@@ -22,6 +22,7 @@ func parseIfMatch(value string) (int64, error) {
 	return revision, nil
 }
 
+// validateProjectTarget 只允许规范化的站内 /p/{slug} 内容路径作为跳转目标，拒绝外部 URL、编码路径及目录穿越片段。
 func validateProjectTarget(target string) error {
 	if target == "" || strings.ContainsAny(target, "\\\r\n\x00") || strings.HasPrefix(target, "//") {
 		return fmt.Errorf("invalid project target")

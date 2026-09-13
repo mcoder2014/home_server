@@ -20,6 +20,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TestDatabaseLegacyLoginRequiresHTTPS 验证数据库模式的旧 RSA 登录同样要求可信 HTTPS，不能只靠客户端填写转发头。
 func TestDatabaseLegacyLoginRequiresHTTPS(t *testing.T) {
 	old := config.Global()
 	t.Cleanup(func() { config.SetGlobalConfig(old) })
@@ -42,6 +43,7 @@ func TestDatabaseLegacyLoginRequiresHTTPS(t *testing.T) {
 	}
 }
 
+// TestLegacyPasswordFailuresAreSharedWithBasic 检查旧 RSA 登录对用户名和别名累计失败及返回限流响应；末尾断言仍表达 Basic 共享预算的历史预期。
 func TestLegacyPasswordFailuresAreSharedWithBasic(t *testing.T) {
 	old := config.Global()
 	t.Cleanup(func() { config.SetGlobalConfig(old); _ = passportservice.GetMockData().LoadConf("[]") })

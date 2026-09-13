@@ -30,6 +30,7 @@ func GenToken(identity *model.UserIdentity) (string, error) {
 	return token.Token, nil
 }
 
+// CheckToken 按身份来源验证会话并带回到期时间；旧版令牌到期后同时标记数据库中的失效状态。
 func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) {
 	if accounts.DatabaseMode() {
 		user, session, err := accounts.CheckSession(ctx, token, false)

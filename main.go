@@ -24,6 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// main 初始化配置、数据库和业务服务，成功加载运行时配置后启动 HTTP 服务及后台维护。
 func main() {
 	if err := log.Init(); err != nil {
 		panic(fmt.Errorf("log init  error: %w", err))

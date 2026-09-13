@@ -67,6 +67,7 @@ func ReadSource(path string, grants Grants) (*Source, error) {
 	return ParseSource(raw, grants)
 }
 
+// ParseSource 解析旧 YAML 中的账号，校验身份字段、密码哈希及跨账号登录别名冲突，再应用显式授权并生成源文件摘要。
 func ParseSource(raw []byte, grants Grants) (*Source, error) {
 	source := &Source{Grants: grants}
 	if err := yaml.Unmarshal(raw, &source.Config); err != nil {
@@ -126,6 +127,7 @@ func ParseSource(raw []byte, grants Grants) (*Source, error) {
 	return source, nil
 }
 
+// applyGrants 校验授权用户存在、无重复且至少指定一名管理员，再为账号设置独立的管理员、藏书和 WebDAV 权限。
 func applyGrants(source *Source, known map[int64]bool) error {
 	if len(source.Grants.Admins) == 0 {
 		return errors.New("at least one explicit initial admin ID is required")

@@ -155,6 +155,7 @@ func splitSQL(input string, delimiter rune) ([]string, error) {
 	return output, nil
 }
 
+// parseDefinition 将单个列、索引或 CHECK 定义解析为可核验的结构，规范化属性并拒绝不支持或未解析的内容。
 func parseDefinition(step *Step, definition string) error {
 	definition = strings.TrimSpace(commentPattern.ReplaceAllString(definition, ""))
 	if match := checkPattern.FindStringSubmatch(definition); match != nil {

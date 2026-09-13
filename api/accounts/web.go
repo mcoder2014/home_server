@@ -13,6 +13,7 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
+// listWebProjects 处理 GET /api/admin/web-share：管理员按所有者、发布状态、可见性及审核状态分页查看全站网页。
 func listWebProjects(c *gin.Context) {
 	cursor, limit, ok := pagination(c)
 	if !ok {
@@ -32,6 +33,7 @@ func listWebProjects(c *gin.Context) {
 	respond(c, page, err)
 }
 
+// getWebProject 处理 GET /api/admin/web-share/:id：读取管理侧网页详情和版本信息，不受普通读者可见范围限制。
 func getWebProject(c *gin.Context) {
 	id, ok := positiveID(c, "id")
 	if !ok {
@@ -42,6 +44,7 @@ func getWebProject(c *gin.Context) {
 	respond(c, detail, err)
 }
 
+// getWebReleases 处理 GET /api/admin/web-share/:id/releases：为管理员列出目标网页的版本元信息，实际内容仍通过独立预览入口读取。
 func getWebReleases(c *gin.Context) {
 	id, ok := positiveID(c, "id")
 	if !ok {
@@ -56,6 +59,7 @@ func getWebReleases(c *gin.Context) {
 	respond(c, map[string]interface{}{"items": detail.Releases}, nil)
 }
 
+// changeWebProject 承接 POST /api/admin/web-share/:id/{block,delete,restore,unblock}，携带版本、原因及管理员凭据执行审核状态变更。
 func changeWebProject(c *gin.Context, action string) {
 	id, ok := positiveID(c, "id")
 	if !ok {
@@ -74,6 +78,8 @@ func changeWebProject(c *gin.Context, action string) {
 	respond(c, result, err)
 }
 
+// previewWebProject 处理 GET/HEAD /api/admin/web-share/:id/releases/:release_id/preview/*path。
+// 复核管理员并检查安全路径后输出版本文件，文档预览须先落审计；禁止缓存和 Service Worker，不提供脚本隔离。
 func previewWebProject(c *gin.Context) {
 	if c.GetHeader("Service-Worker") != "" {
 		respond(c, nil, apperrors.ErrForbidden)

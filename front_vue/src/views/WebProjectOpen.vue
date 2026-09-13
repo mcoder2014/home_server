@@ -34,6 +34,7 @@ export default {
     this.openTarget()
   },
   methods: {
+    // 校验托管目标路径和现有浏览器会话，再用 HEAD 确认资源可访问后跳转；登录失效时转到登录页。
     async openTarget() {
       const target = normalizeInternalRedirect(this.$route.query.target, this.$route.hash)
       if (!isSafeProjectTarget(target)) {

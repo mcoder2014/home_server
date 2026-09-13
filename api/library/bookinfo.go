@@ -10,7 +10,7 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
-// QueryBookInfo 从 rpc 处查询书籍
+// QueryBookInfo 处理 GET /bookinfo/query：按 ISBN 查询书目；本地缺失时由服务层查询外部服务并保存结果。
 func QueryBookInfo(c *gin.Context) {
 	isbn := c.Query("isbn")
 	if len(isbn) < 10 || len(isbn) > 13 {

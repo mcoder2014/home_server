@@ -28,6 +28,7 @@ func metadataStep() (Step, error) {
 	return steps[0], nil
 }
 
+// verifyMarkers 将已记录 DDL 的摘要与步骤定义比较，拒绝未知阶段，以及完成标记对应的结构缺失。
 func verifyMarkers(ctx context.Context, db queryer, steps []Step, schemas map[string]*TableSchema) error {
 	for _, step := range steps {
 		var checksum, phase string
@@ -216,6 +217,7 @@ func Apply(ctx context.Context, db *sql.DB, source *Source, opts Options, planHa
 	return nil
 }
 
+// applyStep 先记录 started，再执行尚未完成的增量 DDL，核验结构后标记 completed；DDL 隐式提交，失败不会回滚已生效结构。
 func applyStep(ctx context.Context, db *sql.DB, database string, step Step) error {
 	schema, err := inspectTable(ctx, db, database, step.Table)
 	if err != nil {

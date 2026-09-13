@@ -15,6 +15,7 @@ import (
 )
 
 // QueryLoginRsa 查询用于 web 加密的 rsa 秘钥
+// QueryLoginRsa 处理 GET /passport/rsa：返回旧登录协议使用的公钥，不向客户端暴露私钥。
 func QueryLoginRsa(c *gin.Context) {
 	ctx := ginfmt.RPCContext(c)
 	pubKey, _, err := passport.GetLoginRsa(ctx)
@@ -38,6 +39,8 @@ type LoginResponse struct {
 	Token string `json:"token"`
 }
 
+// Login 处理 POST /passport/login 的旧客户端登录：解码 RSA 密文、校验账号密码并返回兼容用户令牌。
+// 数据库模式要求可信 HTTPS；保持旧响应封装，不把该入口转换成依赖浏览器 Cookie 的流程。
 func Login(c *gin.Context) {
 	if accounts.DatabaseMode() && !middleware.IsHTTPS(c) {
 		ginfmt.Fail(c, myErrors.ErrForbidden)
@@ -95,6 +98,7 @@ func Login(c *gin.Context) {
 	})
 }
 
+// Logout 处理 POST /passport/logout：撤销身份中间件取得的当前用户令牌，并清除对应浏览器会话 Cookie。
 func Logout(c *gin.Context) {
 	ctx := ginfmt.RPCContext(c)
 	token := utils.GetTokenFromCtx(ctx)

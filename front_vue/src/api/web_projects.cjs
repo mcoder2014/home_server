@@ -10,6 +10,7 @@ function envelopeError(response) {
 }
 
 
+// 封装网页项目和版本接口，区分 JSON 与下载流；项目变更和发布带修订号，浏览器访问使用同源 Cookie。
 function createWebShareApi(transport, getCSRF) {
     const client = transport || axios.create({
         baseURL: '/',

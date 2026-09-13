@@ -27,6 +27,8 @@ func InitDDNSRouter() error {
 	return nil
 }
 
+// UpdateIpv4 处理 POST /ddns/ipv4：将上报的 Domain/Ipv4 写入进程内记录表，供后续查询读取，不调用公网 DNS 提供商。
+// 当前历史实现未接入账号鉴权或数据容量限制，不能把它视为受管理员权限保护的接口。
 func UpdateIpv4(c *gin.Context) {
 
 	// 解析参数
@@ -63,10 +65,12 @@ func UpdateIpv4(c *gin.Context) {
 
 }
 
+// UpdateIpv6 对应 POST /ddns/ipv6 的历史占位入口；当前函数尚未实现 IPv6 记录更新。
 func UpdateIpv6(c *gin.Context) {
 
 }
 
+// GetDomain 处理 GET /ddns：按 domain 查询进程内保存的 IPv4/IPv6 记录，缺失地址以空值返回。
 func GetDomain(c *gin.Context) {
 	// 解析参数
 	domain := c.Query("domain")
@@ -92,6 +96,7 @@ func GetDomain(c *gin.Context) {
 	c.PureJSON(http.StatusOK, resp)
 }
 
+// GetAllRecords 处理 GET /ddns/all：复制并返回当前进程保存的全部地址记录；当前没有分页或账号访问过滤。
 func GetAllRecords(c *gin.Context) {
 	// 查询所有记录
 	type Resp struct {
@@ -116,6 +121,7 @@ func GetAllRecords(c *gin.Context) {
 
 }
 
+// GetClientIpAddress 处理 GET /ddns/real_ip：返回 Gin 解析的客户端地址，供客户端发现来源 IP，不作为认证依据。
 func GetClientIpAddress(c *gin.Context) {
 	type Resp struct {
 		Ip string

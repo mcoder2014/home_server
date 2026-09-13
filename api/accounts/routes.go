@@ -22,6 +22,7 @@ func Configure(service *siteconfig.Service) {
 	configServiceLock.Unlock()
 }
 
+// requireDatabase 拒绝尚未迁入数据库账号模式的注册和账号管理请求，避免配置用户模式误用新数据模型。
 func requireDatabase(c *gin.Context) {
 	if !accountservice.DatabaseMode() {
 		ginfmt.Fail(c, apperrors.WithMessage(apperrors.ErrForbidden, "账号管理尚未启用"))
@@ -31,6 +32,8 @@ func requireDatabase(c *gin.Context) {
 	c.Next()
 }
 
+// InitAuthRouter 注册公共账号、个人中心和管理员 HTTP 接口，并为各入口组合身份、HTTPS、Origin 与 CSRF 守卫。
+// 管理动作通过固定动作名分派，不接受客户端指定任意服务方法。
 func InitAuthRouter() error {
 	user := middleware.RequireAccount(false, false)
 	limited := middleware.RequireAccount(false, true)
@@ -52,10 +55,12 @@ func InitAuthRouter() error {
 	data.AddRoute(http.MethodGet, "/api/admin/users", admin, listUsers)
 	data.AddRoute(http.MethodPost, "/api/admin/users", admin, write, createUser)
 	data.AddRoute(http.MethodGet, "/api/admin/users/:id", admin, getUser)
+	// POST 动作依次提供封禁、恢复、删除、重置密码和踢出网站会话，均交由 changeUser 执行权限及版本校验。
 	for _, action := range []string{"ban", "unban", "delete", "reset-password", "logout-all"} {
 		current := action
 		data.AddRoute(http.MethodPost, "/api/admin/users/:id/"+current, admin, write, func(c *gin.Context) { changeUser(c, current) })
 	}
+	// PUT 动作分别更新管理员身份、共享藏书权限和 WebDAV 读写权限，三种授权互不隐式继承。
 	for _, action := range []string{"role", "library-permission", "webdav-permission"} {
 		current := action
 		data.AddRoute(http.MethodPut, "/api/admin/users/:id/"+current, admin, write, func(c *gin.Context) { changeUser(c, current) })
@@ -73,6 +78,7 @@ func InitAuthRouter() error {
 	data.AddRoute(http.MethodGet, "/api/admin/web-share", admin, listWebProjects)
 	data.AddRoute(http.MethodGet, "/api/admin/web-share/:id", admin, getWebProject)
 	data.AddRoute(http.MethodGet, "/api/admin/web-share/:id/releases", admin, getWebReleases)
+	// POST 审核动作分别下架锁定、删除、恢复或解除锁定，由 changeWebProject 统一转交审核用例。
 	for _, action := range []string{"block", "delete", "restore", "unblock"} {
 		current := action
 		data.AddRoute(http.MethodPost, "/api/admin/web-share/:id/"+current, admin, write, func(c *gin.Context) { changeWebProject(c, current) })

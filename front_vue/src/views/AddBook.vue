@@ -58,6 +58,7 @@ export default {
       console.log('浏览器信息', navigator.userAgent);
       this.$router.push({ path: '/scanCodePage' });
     },
+    // 按当前预设数量、类型和书库提交 ISBN，依据藏书接口的业务结果提示添加成功或失败。
     add_book() {
       console.log('add book isbn', this.isbn)
       let param = {

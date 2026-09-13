@@ -21,6 +21,7 @@ type ProfileInput struct {
 	ContactMobile *string `json:"contact_mobile"`
 }
 
+// UpdateProfile 在认证版本和资料修订号匹配时更新显式提供的联系资料，提交后读取最新账号。
 func UpdateProfile(ctx context.Context, id, version, revision int64, input ProfileInput) (*model.UserAccount, error) {
 	if input.DisplayName == nil && input.ContactEmail == nil && input.ContactMobile == nil {
 		return nil, apperrors.ErrInvalid
@@ -29,6 +30,7 @@ func UpdateProfile(ctx context.Context, id, version, revision int64, input Profi
 	if err != nil {
 		return nil, err
 	}
+	// 锁定账号并合并未修改的字段，校验最终资料后按原修订号提交更新。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		user, e := RequireUserTx(tx, id, version, false)
 		if e != nil {
@@ -63,6 +65,7 @@ func UpdateProfile(ctx context.Context, id, version, revision int64, input Profi
 	return GetByID(ctx, id)
 }
 
+// ChangePassword 验证旧密码和新密码策略，在锁内更新密码与认证版本，并停用账号已有的应用凭据。
 func ChangePassword(ctx context.Context, id, version int64, current, password, confirmation string) error {
 	policy := config.Runtime().AccountPolicy
 	if err := ValidatePassword(password, confirmation, policy.MinPasswordLength); err != nil {
@@ -140,6 +143,7 @@ type CreatedAccount struct {
 	PasswordExpiresAt *time.Time         `json:"password_expires_at"`
 }
 
+// AdminCreate 按当前密码策略创建待改密账号，事务内复核管理员并写审计，成功后一次返回初始密码。
 func AdminCreate(ctx context.Context, actorID, version int64, input CreateInput) (*CreatedAccount, error) {
 	username, err := NormalizeUsername(input.UserName)
 	if err != nil {
@@ -246,6 +250,7 @@ func AdminChange(ctx context.Context, actorID, version, targetID, revision int64
 		return nil, err
 	}
 	var target *model.UserAccount
+	// 顺序锁定管理员和目标账号，校验凭据与修订号，再将账号变更、关联权限回收及审计一起提交。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		if _, e := dal.ReadSiteRuntimeState(tx, true); e != nil {
 			return e
@@ -299,8 +304,8 @@ func AdminChange(ctx context.Context, actorID, version, targetID, revision int64
 	return &CreatedAccount{User: target, InitialPassword: password, PasswordExpiresAt: target.PasswordExpiresAt}, nil
 }
 
-// adminTransition keeps each security side effect explicit. It runs only while
-// the global account-management lock and actor/target rows are held.
+// adminTransition 计算管理员操作对应的账号字段，并执行应用权限、邀请码和项目状态的关联变更。
+// 调用方须持有全局账号管理锁与双方账号行锁；这里阻止危险的自操作及最后一名可用管理员被移除。
 func adminTransition(tx *gorm.DB, actorID int64, target *model.UserAccount, action string, input AdminInput, passwordHash string) (map[string]interface{}, error) {
 	if target.Status == model.AccountDeleted {
 		return nil, apperrors.ErrConflict
@@ -410,6 +415,7 @@ func suspendApplicationsTx(tx *gorm.DB, id int64, revoke bool) error {
 	return tx.Table(dal.ApplicationTable).Where("owner_user_id = ? AND status <> ?", id, model.ApplicationStatusRevoked).Updates(fields).Error
 }
 
+// removeScopesTx 锁定账号下全部应用，移除匹配前缀的授权范围，仅对范围发生变化的应用增加修订号。
 func removeScopesTx(tx *gorm.DB, id int64, prefixes []string) error {
 	var applications []*model.Application
 	if err := tx.Table(dal.ApplicationTable).Clauses(clause.Locking{Strength: "UPDATE"}).Select("id", "scopes").Where("owner_user_id = ?", id).Order("id ASC").Find(&applications).Error; err != nil {

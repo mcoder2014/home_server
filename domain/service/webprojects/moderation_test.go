@@ -8,6 +8,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/model"
 )
 
+// TestRestoreUsesRecordedDeadlineAndRespectsModeration 验证恢复遵循记录的清理期限及审核封禁，删除操作固定当时的保留期。
 func TestRestoreUsesRecordedDeadlineAndRespectsModeration(t *testing.T) {
 	before := config.Global()
 	defer config.SetGlobalConfig(before)

@@ -41,7 +41,7 @@ func Init() {
 	signal.Notify(gs.sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 }
 
-// Wait until all goroutine run by `Go` finished in timeout time.
+// Wait 等待已登记任务退出等待组；收到终止信号后仍等待任务完成或被各自超时移出。
 func Wait() {
 	if gs == nil {
 		panic("Please call Init() first!")
@@ -78,6 +78,7 @@ func GoWithTimeout(timeout time.Duration, function interface{}, params ...interf
 	go gs.safeGo(timeout, function, params...)
 }
 
+// safeGo 在独立协程执行传入函数，捕获 panic，并在完成或超时后退出等待组；超时不终止实际执行。
 // 情况1: safego全都正常执行完毕，程序退出
 // 情况2: safego未执行完毕时收到kill signal，则safego队列中所有goroutine优雅关闭（等待直至执行完毕），最后退出程序
 // 情况3: 某个safego未执行完毕但是timeout，则移出safego的队列，当收到kill signal时直接被kill，不享受优雅关闭
@@ -131,6 +132,7 @@ func (gs *Service) safeGo(timeout time.Duration, f interface{}, params ...interf
 	}
 }
 
+// packParams 校验函数与实参的数量、可赋值类型，并封装成无需传参的反射调用。
 func packParams(function interface{}, params ...interface{}) (func() interface{}, error) {
 	fn := reflect.ValueOf(function)
 	if fn.Kind() != reflect.Func {

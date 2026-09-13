@@ -22,6 +22,7 @@ func ListActiveUsers(ctx context.Context) ([]*model.UserAccount, error) {
 	return users, normalizeError(err)
 }
 
+// UserDetail 组合账号资料及最近的应用、网页项目和邀请记录，应用列表仅选取管理页面需要的非密钥字段。
 func UserDetail(ctx context.Context, id int64) (map[string]interface{}, error) {
 	database, err := database(ctx)
 	if err != nil {
@@ -70,6 +71,7 @@ type UserPage struct {
 	HasMore    bool           `json:"has_more"`
 }
 
+// ListUsers 按账号游标分页，并批量汇总本页用户的应用与项目数量，多读一条判断是否有下一页。
 func ListUsers(ctx context.Context, filter dal.AccountFilter) (*UserPage, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 20
@@ -137,6 +139,7 @@ type AuditView struct {
 	After         map[string]interface{} `json:"after"`
 }
 
+// ListAudit 按目标筛选并分页读取管理员审计，批量补充操作者名称，将变更前后摘要解码为展示对象。
 func ListAudit(ctx context.Context, cursor int64, limit int, targetType string, targetID int64) (map[string]interface{}, error) {
 	if limit <= 0 {
 		limit = 20
@@ -194,6 +197,7 @@ func ListAudit(ctx context.Context, cursor int64, limit int, targetType string, 
 	return map[string]interface{}{"items": items, "next_cursor": next, "has_more": hasMore}, nil
 }
 
+// AdminRevokeInvitation 验证管理员密码后撤销指定账号的未使用邀请，并将撤销原因与审计记录一起提交。
 func AdminRevokeInvitation(ctx context.Context, actorID, version, targetID, revision, invitationID int64, input AdminInput) error {
 	verified, err := VerifyAdminPassword(ctx, actorID, input.CurrentPassword)
 	if err != nil {
@@ -206,6 +210,7 @@ func AdminRevokeInvitation(ctx context.Context, actorID, version, targetID, revi
 	if err != nil {
 		return err
 	}
+	// 顺序锁定双方账号和邀请码，复核管理员凭据、目标修订号及邀请归属后撤销并写审计。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		if _, e := dal.ReadSiteRuntimeState(tx, true); e != nil {
 			return e

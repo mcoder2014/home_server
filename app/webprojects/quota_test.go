@@ -8,6 +8,7 @@ import (
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
 )
 
+// TestUploadAdmissionReservesOnlyWebStorageDisk 用可控磁盘余量验证预留空间、动态上限、重复释放和磁盘查询失败的上传准入行为。
 func TestUploadAdmissionReservesOnlyWebStorageDisk(t *testing.T) {
 	before := config.Global()
 	defer config.SetGlobalConfig(before)
@@ -56,6 +57,7 @@ func TestUploadAdmissionReservesOnlyWebStorageDisk(t *testing.T) {
 	}
 }
 
+// TestDiskQuotaKeepsFileModeAndMissingRootCompatibility 验证文件身份模式或缺少存储根目录时保留旧准入行为，并检查实际临时目录的磁盘余量读取。
 func TestDiskQuotaKeepsFileModeAndMissingRootCompatibility(t *testing.T) {
 	before := config.Global()
 	defer config.SetGlobalConfig(before)
