@@ -89,5 +89,16 @@ func (m *MockData) GetIdentity(ctx context.Context, mobileEmailUsername string) 
 }
 
 func (m *MockData) GetByID(userID int64) (*model.UserIdentity, error) {
+	m.Lock.RLock()
+	defer m.Lock.RUnlock()
 	return m.userIDMap[userID], nil
+}
+
+func ListUsers() []*model.UserIdentity {
+	mock := GetMockData()
+	mock.Lock.RLock()
+	defer mock.Lock.RUnlock()
+	result := make([]*model.UserIdentity, len(mock.UserIdentities))
+	copy(result, mock.UserIdentities)
+	return result
 }

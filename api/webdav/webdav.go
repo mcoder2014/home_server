@@ -122,7 +122,7 @@ func Logger(req *http.Request, err error) {
 		sb.WriteString(url)
 		sb.WriteString("\n")
 		sb.WriteString("headers: ")
-		for k, v := range headers {
+		for k, v := range log.RedactedHeaders(headers) {
 			sb.WriteString("\t")
 			sb.WriteString(k)
 			sb.WriteString(": ")

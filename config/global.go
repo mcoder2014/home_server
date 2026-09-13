@@ -42,6 +42,37 @@ type Config struct {
 	WebDAV struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
+	WebProjects WebProjectsConfig `json:"web_projects" yaml:"web_projects"`
+	Auth        AuthConfig        `json:"auth" yaml:"auth"`
+}
+
+// AuthConfig controls machine credentials and the common browser session origin.
+// Application auth is opt-in; existing user-token and Basic login remain available.
+type AuthConfig struct {
+	ApplicationsEnabled      bool     `json:"applications_enabled" yaml:"applications_enabled"`
+	SiteOrigin               string   `json:"site_origin" yaml:"site_origin"`
+	TokenTTLSeconds          int      `json:"token_ttl_seconds" yaml:"token_ttl_seconds"`
+	DefaultCredentialTTLDays int      `json:"default_credential_ttl_days" yaml:"default_credential_ttl_days"`
+	MaxCredentialTTLDays     int      `json:"max_credential_ttl_days" yaml:"max_credential_ttl_days"`
+	MaxApplicationsPerUser   int      `json:"max_applications_per_user" yaml:"max_applications_per_user"`
+	TrustedProxyCIDRs        []string `json:"trusted_proxy_cidrs" yaml:"trusted_proxy_cidrs"`
+}
+
+// WebProjectsConfig controls the isolated storage and hard safety limits for hosted web projects.
+type WebProjectsConfig struct {
+	Enabled                     bool   `json:"enabled" yaml:"enabled"`
+	StorageRoot                 string `json:"storage_root" yaml:"storage_root"`
+	SiteOrigin                  string `json:"site_origin" yaml:"site_origin"`
+	MaxUploadBytes              int64  `json:"max_upload_bytes" yaml:"max_upload_bytes"`
+	MaxExpandedBytes            int64  `json:"max_expanded_bytes" yaml:"max_expanded_bytes"`
+	MaxFileBytes                int64  `json:"max_file_bytes" yaml:"max_file_bytes"`
+	MaxFileCount                int    `json:"max_file_count" yaml:"max_file_count"`
+	MaxDirectoryDepth           int    `json:"max_directory_depth" yaml:"max_directory_depth"`
+	MaxProjectBytes             int64  `json:"max_project_bytes" yaml:"max_project_bytes"`
+	MaxReleases                 int    `json:"max_releases" yaml:"max_releases"`
+	MaxConcurrentUploadsPerUser int    `json:"max_concurrent_uploads_per_user" yaml:"max_concurrent_uploads_per_user"`
+	MaxConcurrentExtracts       int    `json:"max_concurrent_extracts" yaml:"max_concurrent_extracts"`
+	DeleteRetentionDays         int    `json:"delete_retention_days" yaml:"delete_retention_days"`
 }
 
 // 全局配置
@@ -51,16 +82,22 @@ func Global() Config {
 	return globalConfig
 }
 
+// Normalize shared configuration before any router or service consumes it.
+// An unused/disabled module origin must not unexpectedly enable browser sessions.
 func SetGlobalConfig(c Config) {
+	if c.Auth.SiteOrigin == "" && c.WebProjects.Enabled {
+		c.Auth.SiteOrigin = c.WebProjects.SiteOrigin
+	}
 	globalConfig = c
 }
 
 // InitGlobalConfig 从指定配置文件中读取配置信息
 func InitGlobalConfig(filepath string) error {
-	err := utils.BindConfig(filepath, &globalConfig)
-	if err != nil {
+	var loaded Config
+	if err := utils.BindConfig(filepath, &loaded); err != nil {
 		return err
 	}
+	SetGlobalConfig(loaded)
 	logrus.Infof("InitGlobalConfig config file path: %v", filepath)
 	return nil
 }

@@ -4,9 +4,17 @@ type ErrorCode int
 
 const (
 	// 通用的
-	ErrorCodeSuccess      ErrorCode = 0 // 没有错误
-	ErrorCodeUnknownError ErrorCode = 1 // 未知错误
-	ErrorCodeParamInvalid ErrorCode = 2 // 参数不合理
+	ErrorCodeSuccess       ErrorCode = 0  // 没有错误
+	ErrorCodeUnknownError  ErrorCode = 1  // 未知错误
+	ErrorCodeParamInvalid  ErrorCode = 2  // 参数不合理
+	ErrorCodeForbidden     ErrorCode = 3  // 已认证，但没有操作权限
+	ErrorCodeNotFound      ErrorCode = 4  // 资源不存在或不可见
+	ErrorCodeConflict      ErrorCode = 5  // 并发修订或幂等冲突
+	ErrorCodeTooLarge      ErrorCode = 6  // 请求或产物超过限制
+	ErrorCodeUnsupported   ErrorCode = 7  // 不支持的媒体或操作类型
+	ErrorCodeRateLimited   ErrorCode = 8  // 频率或容量限制
+	ErrorCodeUnprocessable ErrorCode = 9  // 请求格式正确，但内容无效
+	ErrorCodeDependency    ErrorCode = 10 // 数据库、存储或其他依赖不可用
 
 	// 远程调用相关的
 	ErrorCodeRpcFailed          ErrorCode = 101 // rpc 调用失败

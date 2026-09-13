@@ -16,3 +16,33 @@ passport:
   redirect_login_path: https://example.com/login
 webdav:
   share_path: ./share
+web_projects:
+  # Keep disabled until the migration, private storage directory and same-origin proxy are ready.
+  enabled: false
+  # New files: <storage_root>/<owner_user_id>/upload/html/<project_id>/releases/<release_id>/content
+  storage_root: /var/lib/home_server/web-projects
+  site_origin: https://home.example.com
+  max_upload_bytes: 52428800
+  max_expanded_bytes: 209715200
+  max_file_bytes: 52428800
+  max_file_count: 5000
+  max_directory_depth: 16
+  max_project_bytes: 1073741824
+  max_releases: 10
+  max_concurrent_uploads_per_user: 2
+  max_concurrent_extracts: 4
+  delete_retention_days: 7
+
+auth:
+  # Enable after application tables and same-origin HTTPS proxy are installed.
+  applications_enabled: false
+  # Set the actual HTTPS origin; an enabled web_projects origin is reused when empty.
+  site_origin: ''
+  token_ttl_seconds: 900
+  default_credential_ttl_days: 90
+  max_credential_ttl_days: 365
+  max_applications_per_user: 20
+  # Trust forwarded HTTPS only from these backend-facing proxy addresses.
+  trusted_proxy_cidrs:
+    - 127.0.0.1/32
+    - ::1/128

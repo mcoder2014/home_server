@@ -1,78 +1,121 @@
-/* 全局 CSS 变量 */
 :root {
-  --primary-color: #409eff;
-  --primary-dark: #1a73e8;
-  --primary-darker: #0d47a1;
-  --bg-color: #f0f2f5;
+  --primary-color: #28756b;
+  --primary-dark: #205d56;
+  --primary-darker: #193d39;
+  --bg-color: #f5f6f4;
   --card-bg: #ffffff;
-  --text-primary: #303133;
-  --text-secondary: #606266;
-  --border-color: #e4e7ed;
-  --card-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  --header-height: 60px;
+  --text-primary: #203330;
+  --text-secondary: #687773;
+  --border-color: #e2e8e4;
+  --card-shadow: 0 4px 24px rgba(29, 53, 45, 0.035);
+  --header-height: 76px;
+  --el-color-primary: var(--primary-color);
+  --el-color-primary-light-3: #639e96;
+  --el-color-primary-light-5: #93bab5;
+  --el-color-primary-light-7: #bed6d1;
+  --el-color-primary-light-8: #d5e5df;
+  --el-color-primary-light-9: #eef5f1;
+  --el-color-primary-dark-2: var(--primary-dark);
+  --el-text-color-primary: var(--text-primary);
+  --el-text-color-regular: #4c605a;
+  --el-border-color: #d7e0db;
+  --el-border-color-light: var(--border-color);
+  --el-border-radius-base: 8px;
+  --el-font-family: inherit;
 }
 
-/* 全局 body 样式 */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--bg-color);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-color);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
 }
 
-/* 页面容器 */
+a { color: var(--primary-color); }
+
+a:focus-visible, button:focus-visible {
+  outline: 3px solid #639e96;
+  outline-offset: 4px;
+}
+
 .page-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 42px 28px 64px;
 }
 
-/* 卡片样式 */
 .card {
   background: var(--card-bg);
-  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
   box-shadow: var(--card-shadow);
-  padding: 24px;
+  padding: 28px;
 }
 
-/* 页面标题 */
 .page-title {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 650;
   color: var(--text-primary);
-  margin: 0 0 16px 0;
+  margin: 0 0 16px;
+  letter-spacing: -0.5px;
 }
 
-/* 操作栏（标题 + 按钮） */
+.page-eyebrow {
+  display: block;
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
 .action-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-/* 欢迎横幅 */
-.welcome-banner {
-  background: linear-gradient(135deg, var(--primary-dark), var(--primary-darker));
-  color: white;
-  padding: 40px 24px;
-  border-radius: 8px;
+  gap: 20px;
   margin-bottom: 24px;
 }
 
-.welcome-banner h1 {
-  margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 700;
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  background: var(--primary-darker);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: -0.7px;
 }
 
-.welcome-banner p {
-  margin: 0;
-  font-size: 16px;
-  opacity: 0.85;
+.el-button { font-weight: 500; }
+.el-button + .el-button { margin-left: 8px; }
+.el-button--primary { box-shadow: 0 2px 4px rgba(32, 93, 86, 0.08); }
+.el-input__wrapper, .el-textarea__inner { background: #fcfdfc; }
+.el-form-item__label { font-weight: 550; }
+.el-tag { border-radius: 6px; }
+.el-table { --el-table-header-bg-color: #f7f9f7; --el-table-row-hover-bg-color: #f2f7f4; }
+.el-table th.el-table__cell { color: var(--text-secondary); font-size: 12px; font-weight: 550; padding: 14px 0; }
+.el-table td.el-table__cell { padding: 16px 0; }
+.el-dialog, .el-message-box { border-radius: 14px; max-width: calc(100vw - 32px); }
+.el-upload-dragger { border-radius: 12px; background: #f8faf8; }
+
+@media (max-width: 640px) {
+  .page-container { padding: 28px 16px 44px; }
+  .card { border-radius: 12px; padding: 20px 16px; }
+  .page-title { font-size: 22px; }
+  .action-bar { gap: 16px; flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

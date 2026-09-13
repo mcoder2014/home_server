@@ -1,6 +1,9 @@
 package errors
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type Error struct {
 	Code    ErrorCode
@@ -20,7 +23,10 @@ func (e Error) String() string {
 }
 
 func (e *Error) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`{"code": %d, "message": "%s"}`, e.Code, e.String())), nil
+	return json.Marshal(struct {
+		Code    ErrorCode `json:"code"`
+		Message string    `json:"message"`
+	}{Code: e.Code, Message: PublicMessage(e.Code)})
 }
 
 func (e *Error) Unwrap() error {

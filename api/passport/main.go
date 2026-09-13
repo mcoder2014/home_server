@@ -12,6 +12,6 @@ func InitRouter() error {
 	data.AddRoute(http.MethodGet, "/passport/rsa", QueryLoginRsa)
 	// login 接口
 	data.AddRoute(http.MethodPost, "/passport/login", Login)
-	data.AddRoute(http.MethodPost, "/passport/logout", middleware.ValidateLogin(), Logout)
+	data.AddRoute(http.MethodPost, "/passport/logout", middleware.ValidateUserLogin(), Logout)
 	return nil
 }

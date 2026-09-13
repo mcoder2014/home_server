@@ -10,7 +10,6 @@ import (
 	"github.com/mcoder2014/home_server/domain/model"
 	myErrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
-	"github.com/mcoder2014/home_server/utils/log"
 )
 
 const (
@@ -40,7 +39,6 @@ func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) 
 	}
 
 	if tokenEntity.ExpireTime.After(time.Now()) {
-		log.Ctx(ctx).Infof("get tokenEntity success :%+v", *tokenEntity)
 		return GetMockData().GetByID(tokenEntity.UserID)
 	}
 

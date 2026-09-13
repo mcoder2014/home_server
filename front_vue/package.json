@@ -5,7 +5,9 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "lint": "vue-cli-service lint",
+    "test:frontend": "node --test test/*.test.cjs",
+    "test:web-projects": "node --test test/web-projects-*.test.cjs"
   },
   "dependencies": {
     "@zxing/library": "^0.19.1",

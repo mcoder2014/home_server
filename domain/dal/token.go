@@ -7,12 +7,13 @@ import (
 	"github.com/mcoder2014/home_server/domain/model"
 	myErrors "github.com/mcoder2014/home_server/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 const TableUserToken = "login_token"
 
 func CreateToken(m *model.UserToken) (int64, error) {
-	e := db.MasterDB().Table(TableUserToken).Create(m).Error
+	e := db.MasterDB().Session(&gorm.Session{Logger: logger.Discard}).Table(TableUserToken).Create(m).Error
 	if e != nil {
 		return 0, myErrors.Wrap(e, myErrors.ErrorCodeDbError)
 	}
@@ -29,7 +30,7 @@ func ExpireToken(id int64) error {
 
 func QueryByToken(token string) (*model.UserToken, error) {
 	var res model.UserToken
-	e := db.MasterDB().Table(TableUserToken).
+	e := db.MasterDB().Session(&gorm.Session{Logger: logger.Discard}).Table(TableUserToken).
 		Where("token = ?", token).
 		First(&res).Error
 	if errors.Is(e, gorm.ErrRecordNotFound) {
