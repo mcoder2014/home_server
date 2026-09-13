@@ -121,6 +121,7 @@ def load_config(path, endpoint_override):
     return config
 
 
+# 校验 CLI 动作并构造方法、路径、版本头和正文；上传只准备本地文件，不隐式发送请求或发布网页。
 def build_operation(args):
     """Validate one requested action before authentication; never publish implicitly."""
     method, path, payload, headers, body = "GET", API_PATH, {}, {}, None
