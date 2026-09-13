@@ -1,0 +1,29 @@
+# Example only: documentation IPs and example.com must be replaced in an untracked local copy.
+[Unit]
+Description=CQ Home Server frontend on 18081
+Wants=network-online.target
+After=network-online.target home_server.service
+PartOf=home_server.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=home-server
+Group=home-server
+RuntimeDirectory=home_server_frontend
+RuntimeDirectoryMode=0700
+WorkingDirectory=/opt/home_server/current
+ExecStartPre=/usr/sbin/nginx -t -c /etc/home_server/frontend-nginx.conf
+ExecStart=/usr/sbin/nginx -c /etc/home_server/frontend-nginx.conf -g "daemon off;"
+ExecReload=/bin/kill -HUP $MAINPID
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=home_server.target

@@ -39,6 +39,12 @@ npm run build
 
 标题随前端路由切换，HTML 模板提供加载前的默认标题和站点图标。托管在 `/p/{slug}/` 的用户网页保留各自的 HTML 标题，不改写上传内容。
 
+### 前后端服务管理
+
+通用部署示例和回滚说明见 [deploy/pi/README.md](deploy/pi/README.md)。前端通过独立 Nginx 服务运行在 `192.0.2.10:18081`，后端为 `18080`；TLS 网关使用 `https://home.example.com:8080` 提供同源页面与 API。
+
+`home_server.target` 统一控制前后端启动、停止和重启，也可以分别操作 `home_server.service` 与 `home_server_frontend.service`。示例使用文档地址与保留域名，实际环境配置不得提交。模板包含开机自启动、网络就绪等待、版本目录与私有配置；安装前需要完成数据库结构核对和备份。
+
 ### home_server
 
 执行 `./build.sh` 构建服务端二进制文件。构建前准备 `config/config.yaml`；不再需要客户端配置。
@@ -137,6 +143,17 @@ ZIP 根目录直接放入口文件和资源，即打包 `dist/` 的内容。平�
 管理页面使用 `/web-share`，主 API 使用 `/api/web-share`。旧 `/web-projects` 页面地址和 `/api/web-projects` API 保留兼容；写 API 直接调用相同处理逻辑，不依赖重定向。已有 `/p/{slug}/` 分享链接不变，已授权的 `web-projects:read/write` scope 值也保持不变。
 
 用户管理 API 继续使用现有 `passport` 请求头；授权应用可使用短期 Bearer Token。前端调用同源 `POST /api/auth/browser-login` 建立通用 `__Host-cq_session` Cookie，`/api/web-share/browser-login` 和旧 `/api/web-projects/browser-login` 保留为兼容别名。Cookie 只保存不透明用户 token，带 Secure、HttpOnly、SameSite=Lax 和 Path=/；不把 user_id/user_name 等声明当作认证依据。浏览器访问 `/p/` 自动携带 Cookie；Cookie 不能代替管理 API 的显式凭证，应用不能建立用户 Cookie。
+
+多个受信任入口可以同时使用。`auth.site_origin` 保留旧单值配置，`auth.site_origins` 添加额外来源，实际允许集合为两者并集：
+
+```yaml
+auth:
+  site_origin: https://home.example.com:8080
+  site_origins:
+    - https://home.internal.example.com:8080
+```
+
+每项必须是完整、精确的 HTTPS Origin（包含实际非默认端口），不能带路径、查询参数、片段、用户信息或通配符。两个域名的 DNS 和证书须分别正确配置，网关 `server_name` 同时接受两个名称。前端保持同源请求和相对跳转；浏览器在两个域名下分别登录，Cookie 仍为 host-only，不向其他子域共享。空、`null`、多值或未列入配置的 Origin 均被拒绝。
 
 登录或切换账号时，先用新 token 同步内容 Cookie，再提交浏览器本地身份。同步失败时停止切换，避免页面显示新账号却沿用旧账号的内容权限。
 
@@ -309,3 +326,7 @@ A: 本项目是家庭服务，内网只暴露了 http，外网通过一个虚拟
 ## 版权信息 MIT LICENSE
 
 本项目为个人兴趣，目的在于满足个人需求，不提供技术支持，使用本系统造成数据丢失、机器损坏等损失概不负责。
+
+### Cloudflare 集成测试配置
+
+服务端 Cloudflare RPC 集成测试默认跳过外部调用。使用专用测试区域时，通过未提交配置提供凭据，并显式设置 `HOME_SERVER_TEST_CLOUDFLARE_DOMAIN`（DNS 区域的域名，不是 zone ID）。未设置时在任何 RPC 前跳过；测试日志只记录返回数量，不输出 DNS 记录明细。客户端测试与部署说明已迁移至 `life_tools`，不在本仓库维护。

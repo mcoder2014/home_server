@@ -26,6 +26,54 @@ func TestHTTPSDoesNotTrustForwardedHeadersFromArbitraryClients(t *testing.T) {
 	require.True(t, IsHTTPS(c))
 }
 
+func TestConfigureAuthenticationAcceptsHTTPSOriginConfigurations(t *testing.T) {
+	tests := []struct {
+		name string
+		conf config.AuthConfig
+	}{
+		{name: "disabled"},
+		{name: "legacy single", conf: config.AuthConfig{SiteOrigin: "https://home.example.com"}},
+		{name: "additional origins", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com", "https://home.internal.example.com:1", "https://home.internal.example.com:65535"}}},
+		{name: "single and list", conf: config.AuthConfig{SiteOrigin: "https://home.example.com", SiteOrigins: []string{"https://home.internal.example.com"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.NoError(t, ConfigureAuthentication(tt.conf))
+		})
+	}
+}
+
+func TestConfigureAuthenticationRejectsInvalidOrigins(t *testing.T) {
+	tests := []struct {
+		name string
+		conf config.AuthConfig
+	}{
+		{name: "http single", conf: config.AuthConfig{SiteOrigin: "http://home.example.com"}},
+		{name: "single path", conf: config.AuthConfig{SiteOrigin: "https://home.example.com/login"}},
+		{name: "empty list item", conf: config.AuthConfig{SiteOrigins: []string{""}}},
+		{name: "http list item", conf: config.AuthConfig{SiteOrigins: []string{"http://home.internal.example.com"}}},
+		{name: "invalid later list item", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com", "http://home.internal.example.com"}}},
+		{name: "wildcard", conf: config.AuthConfig{SiteOrigins: []string{"https://*.example.com"}}},
+		{name: "username", conf: config.AuthConfig{SiteOrigins: []string{"https://user@home.example.com"}}},
+		{name: "password", conf: config.AuthConfig{SiteOrigins: []string{"https://user:password@home.example.com"}}},
+		{name: "missing host", conf: config.AuthConfig{SiteOrigins: []string{"https://:443"}}},
+		{name: "empty port", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com:"}}},
+		{name: "zero port", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com:0"}}},
+		{name: "port above maximum", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com:65536"}}},
+		{name: "query", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com?target=login"}}},
+		{name: "empty query", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com?"}}},
+		{name: "fragment", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com#login"}}},
+		{name: "trailing slash", conf: config.AuthConfig{SiteOrigins: []string{"https://home.example.com/"}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Error(t, ConfigureAuthentication(tt.conf))
+		})
+	}
+}
+
 func TestExplicitCredentialsNeverFallBackToUserSession(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("GET", "/", nil)

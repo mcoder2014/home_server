@@ -40,3 +40,7 @@ Write scopes automatically include the matching read scope. New applications def
 
 ### Customize configuration
 See [Configuration Reference](https://cli.vuejs.org/config/).
+
+## 环境配置与公开仓库
+
+API 默认使用当前站点同源地址 `/`。开发服务器未配置 API 代理时，需要通过 `VUE_APP_API_BASE_URL` 指定自己的后端；实际地址写入被 Git 忽略的 `.env.local`，不要硬编码进源文件。公开示例仅使用保留域名与文档地址。
