@@ -18,6 +18,7 @@ import (
 
 const maxApplicationCredentialManagementRequestBytes = 16 << 10
 
+// listApplicationCredentials 处理 GET /api/applications：按游标列出当前真实用户名下的应用凭证元信息。
 func listApplicationCredentials(c *gin.Context) {
 	cursor, err := parseOptionalApplicationCredentialCursor(c.Query("cursor"))
 	if err != nil {
@@ -37,6 +38,7 @@ func listApplicationCredentials(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
+// createApplicationCredential 处理 POST /api/applications：为本人创建带业务 scope 的应用，成功响应仅此次返回新密钥。
 func createApplicationCredential(c *gin.Context) {
 	var request applicationApp.CreateApplicationCredentialRequest
 	if err := decodeApplicationCredentialManagementJSON(c, &request); err != nil {
@@ -51,6 +53,7 @@ func createApplicationCredential(c *gin.Context) {
 	ginfmt.Success(c, http.StatusCreated, response)
 }
 
+// getApplicationCredential 处理 GET /api/applications/:id：读取本人的应用详情，不能通过资源 ID 查询其他用户凭证。
 func getApplicationCredential(c *gin.Context) {
 	applicationID, err := parsePositiveApplicationManagementInt64(c.Param("id"))
 	if err != nil {
@@ -65,6 +68,7 @@ func getApplicationCredential(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
+// updateApplicationCredential 处理 PATCH /api/applications/:id：按 If-Match 版本修改本人应用的属性、权限或启用状态。
 func updateApplicationCredential(c *gin.Context) {
 	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
 	if err != nil {
@@ -84,6 +88,7 @@ func updateApplicationCredential(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
+// rotateApplicationSecret 处理 POST /api/applications/:id/rotate：按版本轮换本人应用密钥，返回新密钥并使旧凭证版本失效。
 func rotateApplicationSecret(c *gin.Context) {
 	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
 	if err != nil {
@@ -98,6 +103,7 @@ func rotateApplicationSecret(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
+// revokeApplicationCredential 处理 DELETE /api/applications/:id：按版本永久吊销本人的应用凭证，而非删除其他用户资源。
 func revokeApplicationCredential(c *gin.Context) {
 	applicationID, revision, err := parseApplicationCredentialManagementTarget(c)
 	if err != nil {
@@ -112,6 +118,7 @@ func revokeApplicationCredential(c *gin.Context) {
 	ginfmt.Success(c, http.StatusOK, response)
 }
 
+// parseApplicationCredentialManagementTarget 共同解析凭证管理动作的资源 ID 和 If-Match 版本，任一非法就阻止后续变更。
 func parseApplicationCredentialManagementTarget(c *gin.Context) (int64, int64, error) {
 	applicationID, err := parsePositiveApplicationManagementInt64(c.Param("id"))
 	if err != nil {
@@ -124,6 +131,7 @@ func parseApplicationCredentialManagementTarget(c *gin.Context) (int64, int64, e
 	return applicationID, revision, nil
 }
 
+// applicationManagementActor 从认证中间件写入的 Gin 或请求上下文取得操作者，保留完整用户 Principal。
 func applicationManagementActor(c *gin.Context) *utils.Principal {
 	if value, ok := c.Get(utils.CtxKeyPrincipal); ok {
 		if principal, ok := value.(*utils.Principal); ok {
@@ -134,6 +142,7 @@ func applicationManagementActor(c *gin.Context) *utils.Principal {
 	return principal
 }
 
+// decodeApplicationCredentialManagementJSON 只接受有界 application/json 管理请求；拒绝未知字段、过大的正文及尾随 JSON，避免管理操作误解输入。
 func decodeApplicationCredentialManagementJSON(c *gin.Context, destination interface{}) error {
 	if c.ContentType() != "application/json" {
 		return appErrors.ErrUnsupported

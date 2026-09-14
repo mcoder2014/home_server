@@ -10,8 +10,8 @@ import (
 	"github.com/mcoder2014/home_server/utils/log"
 )
 
-// AddStorage 添加库存
-// Post
+// AddStorage 处理 POST /library/book/add：检查 ISBN 是否已有库存，再向共享藏书写入数量、存放类型与位置。
+// 接口保留既有重复库存错误语义，写权限在认证链和服务事务内复核。
 func AddStorage(c *gin.Context) {
 	type Request struct {
 		Isbn     string            `json:"isbn"`
@@ -51,7 +51,7 @@ func AddStorage(c *gin.Context) {
 	ginfmt.FormatWithData(c, nil)
 }
 
-// QueryStorage 查询库存信息
+// QueryStorage 处理 GET /library/book/query：按 ISBN 查询共享库存，参数为空或库存缺失时返回对应业务错误。
 func QueryStorage(c *gin.Context) {
 	isbn := c.Query("isbn")
 	if isbn == "" {
@@ -72,6 +72,7 @@ func QueryStorage(c *gin.Context) {
 	ginfmt.FormatWithData(c, s)
 }
 
+// AddAddress 处理 POST /library/address/add：创建共享藏书的存放地址，返回新地址 ID；写权限由认证链及服务层复核。
 func AddAddress(c *gin.Context) {
 	type Request struct {
 		Address   string `json:"address"`
@@ -103,6 +104,7 @@ func AddAddress(c *gin.Context) {
 	ginfmt.FormatWithData(c, resp)
 }
 
+// GetTotalBookStorage 处理 GET /library/book/total：按 offset/limit 读取共享库存，并附带总记录数；统计失败保留现有日志与响应语义。
 func GetTotalBookStorage(c *gin.Context) {
 
 	type Response struct {

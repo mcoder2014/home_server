@@ -9,6 +9,7 @@ import (
 	"github.com/mcoder2014/home_server/config"
 )
 
+// Init 读取测试配置路径，初始化协程管理和真实数据库连接；配置或数据库初始化失败时返回错误。
 func Init() error {
 	configPath := "config/config.yaml"
 

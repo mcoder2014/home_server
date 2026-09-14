@@ -7,6 +7,7 @@ import (
 
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	apperrors "github.com/mcoder2014/home_server/errors"
 )
@@ -23,6 +24,13 @@ func GetBrowserSession(ctx context.Context, token string) (*BrowserSession, erro
 	if token == "" {
 		return nil, apperrors.ErrUnauthorized
 	}
+	if accounts.DatabaseMode() {
+		user, session, err := accounts.CheckSession(ctx, token, false)
+		if err != nil {
+			return nil, err
+		}
+		return &BrowserSession{UserID: strconv.FormatInt(user.ID, 10), UserName: user.Username, ExpireTime: session.ExpireTime}, nil
+	}
 	row, err := dal.QueryByToken(token)
 	if err != nil {
 		return nil, apperrors.ErrDependency
@@ -30,7 +38,7 @@ func GetBrowserSession(ctx context.Context, token string) (*BrowserSession, erro
 	if row == nil || row.IsExpired != model.UserTokenNotExpired || !row.ExpireTime.After(time.Now()) {
 		return nil, apperrors.ErrUnauthorized
 	}
-	user, err := passport.GetMockData().GetByID(row.UserID)
+	user, err := passport.GetByID(ctx, row.UserID)
 	if err != nil || user == nil || user.ID <= 0 {
 		return nil, apperrors.ErrUnauthorized
 	}

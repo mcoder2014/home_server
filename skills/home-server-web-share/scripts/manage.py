@@ -49,6 +49,7 @@ def positive_id(value):
     return value
 
 
+# 定义网页管理子命令及所需 ID、修订号、请求幂等键和可见范围参数，支持仅输出离线计划。
 def parse_args(argv=None):
     parser = Parser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path(os.environ.get(CONFIG_ENV, "~/.config/cq-home-server/web-share.json")))
@@ -86,6 +87,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+# 读取私有配置并拒绝未知字段，规范内外网 HTTPS origin、超时与 endpoint，按配置文件目录解析相对凭证/CA 路径。
 def load_config(path, endpoint_override):
     path = path.expanduser().absolute()
     try:
@@ -119,6 +121,7 @@ def load_config(path, endpoint_override):
     return config
 
 
+# 校验 CLI 动作并构造方法、路径、版本头和正文；上传只准备本地文件，不隐式发送请求或发布网页。
 def build_operation(args):
     """Validate one requested action before authentication; never publish implicitly."""
     method, path, payload, headers, body = "GET", API_PATH, {}, {}, None
@@ -190,6 +193,7 @@ def probe_reason(error):
     return "connection_failed"
 
 
+# 仅通过未认证的 /ping 探测选择入口；自动模式按内网、外网顺序尝试，权限拒绝立即停止，不重放业务请求。
 def select_endpoint(config, *, probe=False):
     selected = config["endpoint"]
     if selected != "auto" and not probe:
@@ -221,6 +225,7 @@ def select_endpoint(config, *, probe=False):
     raise EndpointUnavailable(failures)
 
 
+# 执行离线计划或选定入口上的单次认证调用，统一脱敏 JSON 输出；写入结果未知时提示人工核对，不自动重试。
 def main(argv=None):
     api_client = None
     sensitive = ()

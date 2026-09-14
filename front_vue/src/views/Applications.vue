@@ -115,7 +115,7 @@
           <el-form-item label="权限范围" prop="scopes">
             <el-checkbox-group v-model="form.scopes" class="scope-options" @change="normalizeSelectedScopes">
               <el-checkbox
-                v-for="scope in scopeOptions"
+                v-for="scope in availableScopeOptions"
                 :key="scope.name"
                 :label="scope.name"
                 :disabled="scope.action === 'read' && writeSelected(scope.resource)"
@@ -127,8 +127,9 @@
             </el-checkbox-group>
           </el-form-item>
           <el-alert title="写入权限会自动包含同一服务的读取权限。" type="warning" :closable="false" class="scope-note" />
+          <p class="muted">每人最多保留 {{ maxApplications }} 个未吊销应用；有效期最长 {{ maxCredentialTTLDays }} 天。</p>
           <el-form-item :label="editingApplication ? '重新设置有效期（可选）' : '有效期'" prop="expiresInDays">
-            <el-input-number v-model="form.expiresInDays" :min="1" :max="365" controls-position="right" />
+            <el-input-number v-model="form.expiresInDays" :min="1" :max="maxCredentialTTLDays" controls-position="right" />
             <span class="field-suffix">天{{ editingApplication ? '；留空则保持原到期时间' : '' }}</span>
           </el-form-item>
         </el-form>
@@ -181,6 +182,7 @@ const {
 export default {
   name: 'ApplicationsPage',
   components: {MyHeader, Key, Plus, Refresh},
+  // 初始化凭证列表、分页和编辑弹窗状态，并提供权限选项、有效期表单及一次性密钥展示所需的数据。
   data() {
     return {
       loading: false,
@@ -211,6 +213,20 @@ export default {
       ],
     }
   },
+  computed: {
+    defaultCredentialTTLDays() { return this.$store.state.userInfo?.application_policy?.default_credential_ttl_days || 90 },
+    maxCredentialTTLDays() { return this.$store.state.userInfo?.application_policy?.max_credential_ttl_days || 365 },
+    maxApplications() { return this.$store.state.userInfo?.application_policy?.max_applications_per_user || 20 },
+    availableScopeOptions() {
+      const user = this.$store.state.userInfo
+      return this.scopeOptions.filter(option => {
+        if (this.form.scopes.includes(option.name)) return true
+        if (option.resource === 'library') return user?.library_enabled && user?.capabilities?.library !== false
+        if (option.resource === 'webdav') return user?.webdav_permission !== 'none' && user?.capabilities?.webdav !== false && (option.action === 'read' || user?.webdav_permission === 'write')
+        return true
+      })
+    },
+  },
   created() {
     if (!this.requireLogin()) {
       this.loadApplications(true)
@@ -221,7 +237,7 @@ export default {
   },
   methods: {
     requireLogin() {
-      if (localStorage.getItem('token')) {
+      if (this.$store.state.userInfo) {
         return false
       }
       this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
@@ -250,7 +266,7 @@ export default {
     },
     openCreate() {
       this.editingApplication = null
-      this.form = {name: '', description: '', scopes: ['web-projects:read'], expiresInDays: 90}
+      this.form = {name: '', description: '', scopes: ['web-projects:read'], expiresInDays: this.defaultCredentialTTLDays}
       this.rules.expiresInDays[0].required = true
       this.formDialogVisible = true
     },
@@ -271,6 +287,7 @@ export default {
     writeSelected(resource) {
       return this.form.scopes.includes(`${resource}:write`)
     },
+    // 校验表单并规范权限集合；编辑时使用当前修订号，新建时展示仅本次返回的密钥并刷新列表。
     async saveApplication() {
       try {
         await this.$refs.applicationForm.validate()
@@ -413,8 +430,7 @@ export default {
     },
     handleError(error) {
       if (handleIdentityFailure(error, () => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user_name')
+        this.$store.commit('REMOVE_INFO')
       }, () => {
         this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
       })) {

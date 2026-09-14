@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMigrateLegacyStorageDryRunDoesNotChangeFilesOrDatabase 验证预览模式只生成迁移计划，不创建目标目录、恢复日志或修改存储键。
 func TestMigrateLegacyStorageDryRunDoesNotChangeFilesOrDatabase(t *testing.T) {
 	root := t.TempDir()
 	conf := config.WebProjectsConfig{StorageRoot: root}
@@ -35,6 +36,7 @@ func TestMigrateLegacyStorageDryRunDoesNotChangeFilesOrDatabase(t *testing.T) {
 	require.Equal(t, "projects/101/releases/201/content", release.StorageKey)
 }
 
+// TestMigrateLegacyStorageAppliesRenameAndStorageKeyCAS 核对旧目录移动到所有者目录、引用按旧键更新，并在完成后移除恢复日志。
 func TestMigrateLegacyStorageAppliesRenameAndStorageKeyCAS(t *testing.T) {
 	root := t.TempDir()
 	conf := config.WebProjectsConfig{StorageRoot: root}
@@ -85,6 +87,7 @@ func TestMigrateLegacyStorageRejectsOwnerMismatchBeforeChangingFiles(t *testing.
 	require.NoDirExists(t, filepath.Join(root, "71"))
 }
 
+// TestMigrateLegacyStorageRejectsTargetCollisionAndSymlink 验证目标冲突、版本内部链接和目标祖先链接均在文件或数据库变更前被拒绝。
 func TestMigrateLegacyStorageRejectsTargetCollisionAndSymlink(t *testing.T) {
 	t.Run("target collision", func(t *testing.T) {
 		root := t.TempDir()
@@ -143,8 +146,10 @@ func TestMigrateLegacyStorageRejectsTargetCollisionAndSymlink(t *testing.T) {
 	})
 }
 
+// TestMigrateLegacyStorageResumesAfterUncertainDatabaseResult 分别模拟数据库已提交和未提交却返回错误，核对重试能保留文件并完成恢复。
 func TestMigrateLegacyStorageResumesAfterUncertainDatabaseResult(t *testing.T) {
 	for _, committed := range []bool{false, true} {
+		// 第一次迁移在目录移动后返回未知结果，第二次依据数据库状态继续，避免重复更新已提交的引用。
 		t.Run(fmt.Sprintf("database_committed_%t", committed), func(t *testing.T) {
 			root := t.TempDir()
 			conf := config.WebProjectsConfig{StorageRoot: root}
@@ -185,6 +190,7 @@ func TestMigrateLegacyStorageResumesAfterUncertainDatabaseResult(t *testing.T) {
 	}
 }
 
+// storageMigrationQueriesForTest 注入仅匹配指定版本与项目的内存查询，并将引用更新结果交由各场景控制。
 func storageMigrationQueriesForTest(
 	t *testing.T,
 	release *model.WebProjectRelease,

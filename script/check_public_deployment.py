@@ -19,6 +19,7 @@ def is_example_address(value):
     return address.is_loopback or address.is_unspecified or any(address in network for network in DOCUMENT_NETS)
 
 
+# 逐行检查公开部署示例中的地址、个人目录、凭证和服务账号，返回带文件位置的违规项；只读取文件。
 def check_file(path):
     errors = []
     for number, line in enumerate(path.read_text().splitlines(), 1):

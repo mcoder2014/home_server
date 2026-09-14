@@ -1,25 +1,13 @@
-import router from "./router";
+import router from './router'
+import store from './store'
+const {routeDecision} = require('@/utils/accounts_behavior.cjs')
 
-// 用来控制是否在前端拦截无权限的页面
-const isEnable = false
-
-router.beforeEach(async (to, from) => {
-
-    if (!isEnable) {
-        return
+router.beforeEach(async to => {
+    try {
+        // Protected navigation refreshes the real identity, including permissions revoked in another tab.
+        if (to.meta.requireAuth || !store.state.sessionLoaded) await store.dispatch('refreshSession')
+    } catch (error) {
+        if (to.meta.requireAuth) return {path: '/unavailable'}
     }
-
-    const token = localStorage.getItem("token")
-    let isAuthenticated = token != null;
-    // console.log("token:" + token + "to:" + to + "from:" + from)
-
-    if (to.matched.some(record => record.meta.requireAuth)) {
-        if (
-            // 检查用户是否已登录
-            !isAuthenticated && to.name !== 'Login'
-        ) {
-            // 将用户重定向到登录页面
-            return {name: 'Login'}
-        }
-    }
+    return routeDecision(to, store.state.userInfo) || true
 })

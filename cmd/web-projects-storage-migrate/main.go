@@ -16,6 +16,7 @@ type commandOutput struct {
 	Error  string                              `json:"error,omitempty"`
 }
 
+// main 校验项目及版本 ID 后调用历史存储迁移；默认预演，显式指定 apply 时执行迁移并输出 JSON 结果。
 func main() {
 	configPath := flag.String("conf", "/etc/home_server/conf.yaml", "home_server config file")
 	projectID := flag.Int64("project-id", 0, "legacy web project id")

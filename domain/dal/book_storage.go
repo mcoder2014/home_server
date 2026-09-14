@@ -13,10 +13,14 @@ const (
 	BookStorageTable = "book_storage"
 )
 
-func InsertBookStorage(info *model.DBBookStorage) error {
+func InsertBookStorage(info *model.DBBookStorage, transactions ...*gorm.DB) error {
 	info.CreateTime = time.Now()
 	info.UpdateTime = time.Now()
-	return db.MasterDB().Table(BookStorageTable).Create(info).Debug().Error
+	database := db.MasterDB()
+	if len(transactions) > 0 {
+		database = transactions[0]
+	}
+	return database.Table(BookStorageTable).Create(info).Debug().Error
 }
 
 func UpdateBookStorage(dto *model.UpdateBookStorageDto) error {

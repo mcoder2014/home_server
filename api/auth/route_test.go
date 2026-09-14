@@ -22,6 +22,7 @@ func TestBrowserOriginAllowsLegacyAndAdditionalConfiguredOrigins(t *testing.T) {
 	}
 }
 
+// TestBrowserOriginRequiresOneExactConfiguredOrigin 验证 Cookie 转换仅接受一个精确配置的 Origin，拒绝缺失、重复及相似域名。
 func TestBrowserOriginRequiresOneExactConfiguredOrigin(t *testing.T) {
 	conf := config.AuthConfig{
 		SiteOrigin:  "https://home.example.com",

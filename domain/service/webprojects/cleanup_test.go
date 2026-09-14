@@ -38,6 +38,7 @@ func TestRemoveRetiredReleasesDeletesDirectoryThenDatabaseRow(t *testing.T) {
 	require.Empty(t, queryCleanupReleaseStatus(t, database, release.ID))
 }
 
+// TestRemoveRetiredReleasesRejectsSymlinkAncestorAndRetries 验证祖先符号链接阻止删除并保留数据库状态，修正目录后可以重试清理。
 func TestRemoveRetiredReleasesRejectsSymlinkAncestorAndRetries(t *testing.T) {
 	database := requireCleanupTestDB(t)
 	conf := cleanupStorageConfig(t)
@@ -95,6 +96,7 @@ func TestRemoveRetiredReleasesTreatsMissingDirectoryAsCleaned(t *testing.T) {
 	require.Empty(t, queryCleanupReleaseStatus(t, database, release.ID))
 }
 
+// TestCleanupExpiredProjectsOnlyRemovesExpiredDeletedProjects 验证仅清理已过保留期的删除项目，并通过修订号阻止旧快照恢复。
 func TestCleanupExpiredProjectsOnlyRemovesExpiredDeletedProjects(t *testing.T) {
 	database := requireCleanupTestDB(t)
 	conf := cleanupStorageConfig(t)
@@ -210,6 +212,7 @@ func queryCleanupReleaseStatus(t *testing.T, database *gorm.DB, releaseID int64)
 	return status
 }
 
+// TestRetiredReleaseCleanupChecksOwnerForCanonicalStorage 确认发布所有权不一致时保留文件和记录，修复元数据后才允许删除。
 func TestRetiredReleaseCleanupChecksOwnerForCanonicalStorage(t *testing.T) {
 	database := requireCleanupTestDB(t)
 	conf := cleanupStorageConfig(t)

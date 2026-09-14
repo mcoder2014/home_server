@@ -43,6 +43,7 @@ func getBookInfoByRpc(ctx context.Context, isbn string) (*model.BookInfo, error)
 	return info, nil
 }
 
+// BatchQueryBookInfo 先批量读取本地书目，再并发补查缺失 ISBN；单个远端查询失败仅记录日志，返回已查到的结果。
 func BatchQueryBookInfo(ctx context.Context, isbnList []string) (map[string]*model.BookInfo, error) {
 	bookinfoList, e := dal.BatchQueryBookInfoByIsbn(isbnList)
 	if e != nil {

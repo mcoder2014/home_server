@@ -91,6 +91,7 @@ func StoreUpload(conf *config.WebProjectsConfig, ownerUserID, projectID, release
 	return artifact, nil
 }
 
+// storeHTML 将单个 HTML 流限量写入暂存目录的 index.html，同时计算内容摘要并返回实际字节数。
 func storeHTML(conf *config.WebProjectsConfig, stagingDir string, src io.Reader) (*Artifact, error) {
 	target := filepath.Join(stagingDir, "content", "index.html")
 	file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -113,6 +114,8 @@ func storeHTML(conf *config.WebProjectsConfig, stagingDir string, src io.Reader)
 	return &Artifact{EntryFile: "index.html", SHA256: hex.EncodeToString(hash.Sum(nil)), FileCount: 1, TotalBytes: written}, nil
 }
 
+// storeZIP 将上传压缩包暂存并解压到 content，返回归档摘要、入口文件和展开后的数量与大小。
+// 解压时限制路径、类型、层级和容量，拒绝符号链接、重复路径与保留文件；成功后移除暂存压缩包。
 func storeZIP(conf *config.WebProjectsConfig, stagingDir, entryFile string, src io.Reader) (*Artifact, error) {
 	archivePath := filepath.Join(stagingDir, "upload.zip")
 	archive, err := os.OpenFile(archivePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
@@ -203,6 +206,7 @@ func storeZIP(conf *config.WebProjectsConfig, stagingDir, entryFile string, src 
 	return &Artifact{EntryFile: entryFile, SHA256: hex.EncodeToString(hash.Sum(nil)), FileCount: fileCount, TotalBytes: total}, nil
 }
 
+// extractZipFile 将已通过路径检查的归档文件写入独占创建的目标文件，并核对实际解压大小与声明值。
 func extractZipFile(file *zip.File, contentRoot, cleanName string, maxFileBytes int64) error {
 	target := filepath.Join(contentRoot, filepath.FromSlash(cleanName))
 	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {

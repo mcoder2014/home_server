@@ -205,6 +205,7 @@ class Validator:
         require(spoof.status == 403, f"untrusted XFP spoof returned HTTP {spoof.status}")
         return "Basic/form accepted; mixed/query rejected; untrusted XFP rejected"
 
+    # 用测试身份创建应用和项目，校验读写 scope、所有者隔离与边界值；会向受测藏书和 WebDAV 写入验收夹具。
     def scopes_resources_and_owner(self) -> str:
         assert self.primary
         primary_token, _, _ = self.issue(self.primary, self.primary_secret)
@@ -252,6 +253,7 @@ class Validator:
             archive.writestr("assets/app.js", "window.QA_APP_AUTH=true")
         return output.getvalue()
 
+    # 按脚本的兼容契约验收应用上传/发布、浏览器 Cookie 切换和混合身份拒绝，并执行项目删除、恢复。
     def project_upload_cookie_and_identity(self) -> str:
         assert self.primary and self.primary_project
         token, _, _ = self.issue(self.primary, self.primary_secret)
@@ -285,6 +287,7 @@ class Validator:
         self.primary_project = restored
         return "upload/publish, canonical+legacy cookie, switch, user-only and archive/restore verified"
 
+    # 验收停用、启用、轮换、权限变更及永久吊销对旧凭证的影响，并通过并发签发和实际等待检查 Token 失效。
     def lifecycle_and_expiry(self) -> str:
         app, secret = self.create_app("owner", "qa-lifecycle-20260912", ["web-projects:write"])
         old_token, _, _ = self.issue(app, secret)
@@ -344,7 +347,9 @@ class Validator:
         self.check("credential log redaction", self.log_redaction)
         return 0 if all(item["result"] == "pass" for item in self.results) else 1
 
+    # 运行指定角色的并发应用额度验收，将成功创建的应用 ID 和成功/失败结果留给调用方核对。
     def run_quota(self, role: str, attempts: int, expected_success: int) -> int:
+        # 并发创建验收应用，要求成功数符合指定额度且其余请求均为 429，并记录新应用 ID。
         def verify() -> str:
             def create(index: int):
                 response = self.request("POST", "/api/applications", role=role, payload={
@@ -371,6 +376,7 @@ class Validator:
         self.check("concurrent application quota", verify)
         return 0 if self.results[0]["result"] == "pass" else 1
 
+    # 用同一个应用修订号并发更新，要求一项提交、一项返回 409，同时记录验收应用 ID。
     def run_revision(self, role: str) -> int:
         def verify() -> str:
             application, secret = self.create_app(role, "qa-revision-race", ["web-projects:read"])
@@ -394,6 +400,7 @@ class Validator:
         self.check("concurrent application revision", verify)
         return 0 if self.results[0]["result"] == "pass" else 1
 
+    # 验收吊销是终态：旧 Token 和旧 Secret 不能继续认证，且已吊销应用不能再次启用。
     def run_terminal(self, role: str) -> int:
         def verify() -> str:
             application, secret = self.create_app(role, "qa-terminal-lifecycle", ["web-projects:read"])
@@ -430,7 +437,9 @@ class Validator:
         self.check("prepare credential expiry", verify)
         return 0 if self.results[0]["result"] == "pass" else 1
 
+    # 运行旧用户认证头的网页生命周期验收，并把最终项目与检查结果交给报告输出。
     def run_legacy_user_web(self, role: str) -> int:
+        # 以旧用户认证头创建、上传、发布、删除和恢复测试项目，核对跨用户 404 与恢复后项目 ID 不变。
         def verify() -> str:
             suffix = str(time.time_ns())
             project = self.envelope(self.request("POST", "/api/web-projects", role=role, payload={
@@ -472,6 +481,7 @@ class Validator:
         return 0 if self.results[0]["result"] == "pass" else 1
 
 
+# 选择应用凭证验收模式，读取受限认证输入后运行检查，写入 0600 结果文件并输出通过/失败计数。
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)

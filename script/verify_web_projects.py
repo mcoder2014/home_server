@@ -49,6 +49,7 @@ class HttpClient:
         self.origin = f"{parsed.scheme}://{parsed.netloc}"
         self.timeout = timeout
 
+    # 向指定受测 origin 发送一次相对路径请求并保留重复响应头；本验收客户端的 HTTPS 分支关闭证书校验，连接结束后关闭句柄。
     def request(
         self,
         method: str,
@@ -165,6 +166,7 @@ class WebProjectsAPI:
         self.projects[updated["id"]] = updated
         return updated
 
+    # 把验收文件及入口名封装成带随机幂等键的 multipart 上传，按调用方指定的成功或失败状态解析响应。
     def upload(
         self,
         project: dict[str, Any],
@@ -347,6 +349,7 @@ class Runner:
         require(detail["id"] == project["id"], "detail returned a different project")
         return "unauthenticated=401, non-owner hidden, owner envelope valid"
 
+    # 创建四类可见范围的页面并用不同测试 Cookie 访问，校验匿名导航、资源鉴权及移除成员后的即时拒绝。
     def access_modes(self) -> str:
         assert self.api is not None
         owner_cookie, _ = self.api.browser_cookie("owner")
@@ -376,6 +379,7 @@ class Runner:
         require(self.api.content(members["url"], cookie=member_cookie).status == 404, "revoked member still reads")
         return "owner/members/authenticated/public enforced; revoked member denied immediately"
 
+    # 验收 slug 修改、旧修订号冲突以及删除/恢复流程，确认旧地址失效且恢复项目仍处于下线状态。
     def lifecycle(self) -> str:
         assert self.api is not None
         project, _ = self.api.create_and_publish("public", label="lifecycle")
@@ -415,6 +419,7 @@ class Runner:
         require(self.api.content(restored["url"]).status == 404, "restored disabled project is readable")
         return "slug switch atomic; stale If-Match=409; delete hidden; restore disabled"
 
+    # 上传并切换两个可识别版本，再回退首版；同时核对静态资源的安全响应头、HEAD、Range 与 ETag 条件请求。
     def release_rollback(self) -> str:
         assert self.api is not None
         first_marker = "release-one-" + secrets.token_hex(4)
@@ -444,6 +449,7 @@ class Runner:
         require(unchanged.status == 304 and not unchanged.body, "If-None-Match semantics changed")
         return "second release served; rollback restored first; HEAD/Range/304 verified"
 
+    # 对照合法资源路径，验证 ZIP 和多种编码 URL 穿越均被拒绝，且拒绝响应不泄露配置正文。
     def traversal(self) -> str:
         assert self.api is not None
         project, _ = self.api.create_and_publish("public", label="traversal")
@@ -539,6 +545,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+# 按基线或完整模式运行网页验收，完整模式结束时尝试清理夹具，写报告并输出摘要及报告 SHA256。
 def main() -> int:
     args = parse_args()
     client = HttpClient(args.base_url, args.timeout)

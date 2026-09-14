@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWebProjectEnumsKeepDatabaseIntegersAndJSONStringValues 固定关键枚举的数据库整数和 JSON 字符串兼容关系。
 func TestWebProjectEnumsKeepDatabaseIntegersAndJSONStringValues(t *testing.T) {
 	tests := []struct {
 		name        string

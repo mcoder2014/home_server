@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	myErrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
 )
@@ -18,6 +19,9 @@ const (
 )
 
 func GenToken(identity *model.UserIdentity) (string, error) {
+	if accounts.DatabaseMode() {
+		return accounts.IssueVerifiedSession(context.Background(), identity.ID, identity.AuthVersion)
+	}
 	token := BuildUserToken(identity.ID, TokenExpireTime)
 	_, err := dal.CreateToken(token)
 	if err != nil {
@@ -26,7 +30,20 @@ func GenToken(identity *model.UserIdentity) (string, error) {
 	return token.Token, nil
 }
 
+// CheckToken 按身份来源验证会话并带回到期时间；旧版令牌到期后同时标记数据库中的失效状态。
 func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) {
+	if accounts.DatabaseMode() {
+		user, session, err := accounts.CheckSession(ctx, token, false)
+		if err != nil {
+			return nil, err
+		}
+		identity := accounts.UserIdentity(user)
+		if identity == nil || session == nil {
+			return nil, myErrors.ErrUnauthorized
+		}
+		identity.SessionExpiry = session.ExpireTime
+		return identity, nil
+	}
 	tokenEntity, err := dal.QueryByToken(token)
 	if err != nil {
 		return nil, err
@@ -39,7 +56,13 @@ func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) 
 	}
 
 	if tokenEntity.ExpireTime.After(time.Now()) {
-		return GetMockData().GetByID(tokenEntity.UserID)
+		identity, err := GetByID(ctx, tokenEntity.UserID)
+		if err != nil || identity == nil {
+			return identity, err
+		}
+		copy := *identity
+		copy.SessionExpiry = tokenEntity.ExpireTime
+		return &copy, nil
 	}
 
 	// 设置过期
@@ -48,6 +71,9 @@ func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) 
 }
 
 func DeleteToken(ctx context.Context, token string) error {
+	if accounts.DatabaseMode() {
+		return accounts.Logout(ctx, token)
+	}
 	tokenEntity, err := dal.QueryByToken(token)
 	if err != nil {
 		return err

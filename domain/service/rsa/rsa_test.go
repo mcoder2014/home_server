@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestDecrypt 使用固定私钥和 Base64 密文样例，核对 PKCS1 解密得到预期密码文本。
 func TestDecrypt(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
 	"gorm.io/gorm"
@@ -19,13 +20,29 @@ const (
 var projectColumns = []string{"id", "owner_user_id", "name", "description", "slug", "access_mode", "status", "current_release_id", "revision", "client_request_id", "deleted_at", "create_time", "update_time"}
 var releaseColumns = []string{"id", "project_id", "uploaded_by", "storage_key", "status", "entry_file", "sha256", "file_count", "total_bytes", "idempotency_key", "extra", "create_time", "update_time"}
 
+// WebProjectColumns preserves the legacy schema until database identity mode
+// has been explicitly enabled after migration.
+func WebProjectColumns() []string {
+	columns := append([]string(nil), projectColumns...)
+	if config.Global().IdentitySource == "database" {
+		columns = append(columns, "moderation_status", "moderation_reason", "moderated_by", "moderated_at", "purge_after")
+	}
+	return columns
+}
+
 func CreateWebProject(tx *gorm.DB, project *model.WebProject) error {
-	return tx.Table(WebProjectTable).Create(project).Error
+	query := tx.Table(WebProjectTable)
+	if config.Global().IdentitySource != "database" {
+		query = query.Omit("moderation_status", "moderation_reason", "moderated_by", "moderated_at", "purge_after")
+	} else if project.ModerationStatus == "" {
+		project.ModerationStatus = "normal"
+	}
+	return query.Create(project).Error
 }
 
 func LockOwnedWebProject(tx *gorm.DB, ownerUserID, projectID int64) (*model.WebProject, error) {
 	var project model.WebProject
-	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ? AND id = ?", ownerUserID, projectID).Take(&project).Error
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Table(WebProjectTable).Select(WebProjectColumns()).Where("owner_user_id = ? AND id = ?", ownerUserID, projectID).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -35,7 +52,7 @@ func LockOwnedWebProject(tx *gorm.DB, ownerUserID, projectID int64) (*model.WebP
 func QueryOwnedWebProject(ownerUserID, projectID int64, tx ...*gorm.DB) (*model.WebProject, error) {
 	database := selectDB(tx)
 	var project model.WebProject
-	err := database.Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ? AND id = ?", ownerUserID, projectID).Take(&project).Error
+	err := database.Table(WebProjectTable).Select(WebProjectColumns()).Where("owner_user_id = ? AND id = ?", ownerUserID, projectID).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -44,7 +61,7 @@ func QueryOwnedWebProject(ownerUserID, projectID int64, tx ...*gorm.DB) (*model.
 
 func QueryWebProjectBySlug(slug string) (*model.WebProject, error) {
 	var project model.WebProject
-	err := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("slug = ?", slug).Take(&project).Error
+	err := db.MasterDB().Table(WebProjectTable).Select(WebProjectColumns()).Where("slug = ?", slug).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -53,7 +70,7 @@ func QueryWebProjectBySlug(slug string) (*model.WebProject, error) {
 
 func QueryWebProjectByID(projectID int64) (*model.WebProject, error) {
 	var project model.WebProject
-	err := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("id = ?", projectID).Take(&project).Error
+	err := db.MasterDB().Table(WebProjectTable).Select(WebProjectColumns()).Where("id = ?", projectID).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -62,7 +79,7 @@ func QueryWebProjectByID(projectID int64) (*model.WebProject, error) {
 
 func QueryWebProjectByRequestID(ownerUserID int64, requestID string) (*model.WebProject, error) {
 	var project model.WebProject
-	err := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ? AND client_request_id = ?", ownerUserID, requestID).Take(&project).Error
+	err := db.MasterDB().Table(WebProjectTable).Select(WebProjectColumns()).Where("owner_user_id = ? AND client_request_id = ?", ownerUserID, requestID).Take(&project).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -70,7 +87,7 @@ func QueryWebProjectByRequestID(ownerUserID int64, requestID string) (*model.Web
 }
 
 func ListOwnedWebProjects(ownerUserID, cursor int64, limit int, status model.WebProjectStatus) ([]*model.WebProject, error) {
-	query := db.MasterDB().Table(WebProjectTable).Select(projectColumns).Where("owner_user_id = ?", ownerUserID)
+	query := db.MasterDB().Table(WebProjectTable).Select(WebProjectColumns()).Where("owner_user_id = ?", ownerUserID)
 	if cursor > 0 {
 		query = query.Where("id < ?", cursor)
 	}

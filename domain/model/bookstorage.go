@@ -71,6 +71,7 @@ type UpdateBookStorageDto struct {
 	LibraryId *int64
 }
 
+// ToFields 仅收集调用方显式传入的库存字段，保留零值更新语义，并在有改动时更新修改时间。
 func (d *UpdateBookStorageDto) ToFields() map[string]interface{} {
 	res := map[string]interface{}{}
 	if d.Status != nil {
@@ -147,6 +148,7 @@ type BookStorage struct {
 	DalModel
 }
 
+// GetBookStorage 合并书目信息、库位和库存记录；关联 ID、数量与状态以库存记录为准。
 func GetBookStorage(info *BookInfo, storage *DBBookStorage, address *BookAddress) *BookStorage {
 	s := &BookStorage{}
 	if info != nil {

@@ -18,6 +18,7 @@ type commandOutput struct {
 	Error  string                          `json:"error,omitempty"`
 }
 
+// main 初始化配置和数据库，按目录最小存留时间执行网页存储审计，并输出 JSON 报告和退出码。
 func main() {
 	configPath := flag.String("conf", "/etc/home_server/conf.yaml", "home_server config file")
 	minAge := flag.Duration("min-age", time.Hour, "ignore release directories newer than this duration")

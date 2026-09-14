@@ -18,6 +18,7 @@ import (
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	repository "github.com/mcoder2014/home_server/domain/repository/applications"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	appErrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
@@ -120,12 +121,17 @@ func NewService(repo Repository, options Options) *Service {
 	return service
 }
 
-func (s *Service) Create(ctx context.Context, ownerUserID int64, input CreateInput) (*model.Application, string, error) {
+// Create 校验应用信息和所有者权限，生成 AK/SK 并按数量配额保存应用；SK 仅持久化摘要，明文随创建结果返回。
+func (s *Service) Create(ctx context.Context, ownerUserID int64, input CreateInput, authVersions ...int64) (*model.Application, string, error) {
 	if ownerUserID <= 0 {
 		return nil, "", appErrors.ErrUnauthorized
 	}
-	name, description, scopes, ttl, err := s.validateCreate(input)
+	options := s.runtimeOptions()
+	name, description, scopes, ttl, err := s.validateCreate(input, options)
 	if err != nil {
+		return nil, "", err
+	}
+	if _, err := accounts.CheckApplicationOwner(ctx, ownerUserID, scopes); err != nil {
 		return nil, "", err
 	}
 	accessKey, err := s.generateCredential("ak_cq_", 16)
@@ -143,7 +149,10 @@ func (s *Service) Create(ctx context.Context, ownerUserID int64, input CreateInp
 		SecretDigest: digest[:], Scopes: scopes, Status: model.ApplicationStatusEnabled,
 		Revision: 1, SecretVersion: 1, ExpiresAt: now.Add(ttl), CreateTime: now, UpdateTime: now,
 	}
-	if err := s.repository.Create(ctx, application, s.options.MaxApplicationsPerUser); err != nil {
+	if len(authVersions) > 0 {
+		application.ActorAuthVersion = authVersions[0]
+	}
+	if err := s.repository.Create(ctx, application, options.MaxApplicationsPerUser); err != nil {
 		return nil, "", normalizeRepositoryError(err)
 	}
 	logApplicationChange(ownerUserID, application.ID, "create")
@@ -185,7 +194,8 @@ func (s *Service) Get(ctx context.Context, ownerUserID, applicationID int64) (*m
 	return application, nil
 }
 
-func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revision int64, input UpdateInput) (*model.Application, error) {
+// Update 校验所有者、修订号与修改后的授权范围，再保存应用资料及新修订号，使旧令牌快照失效。
+func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revision int64, input UpdateInput, authVersions ...int64) (*model.Application, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
 		return nil, err
@@ -196,8 +206,14 @@ func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revisi
 	if revision <= 0 || application.Revision != revision {
 		return nil, appErrors.ErrConflict
 	}
-	if err := s.applyUpdate(application, input); err != nil {
+	if err := s.applyUpdate(application, input, s.runtimeOptions()); err != nil {
 		return nil, err
+	}
+	if _, err := accounts.CheckApplicationOwner(ctx, ownerUserID, application.Scopes); err != nil {
+		return nil, err
+	}
+	if len(authVersions) > 0 {
+		application.ActorAuthVersion = authVersions[0]
 	}
 	application.Revision++
 	application.UpdateTime = s.now().UTC()
@@ -212,7 +228,8 @@ func (s *Service) Update(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, nil
 }
 
-func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revision int64) (*model.Application, string, error) {
+// Rotate 按预期修订号更换应用 SK 摘要并增加密钥版本，成功后返回新 SK 明文，旧密钥和令牌随之失效。
+func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revision int64, authVersions ...int64) (*model.Application, string, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
 		return nil, "", err
@@ -225,6 +242,9 @@ func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revisi
 		return nil, "", fmt.Errorf("generate secret key: %w", appErrors.ErrDependency)
 	}
 	digest := sha256.Sum256([]byte(secretKey))
+	if len(authVersions) > 0 {
+		application.ActorAuthVersion = authVersions[0]
+	}
 	application.SecretDigest = digest[:]
 	application.SecretVersion++
 	application.Revision++
@@ -240,13 +260,17 @@ func (s *Service) Rotate(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, secretKey, nil
 }
 
-func (s *Service) Revoke(ctx context.Context, ownerUserID, applicationID, revision int64) (*model.Application, error) {
+// Revoke 按所有者和修订号永久撤销应用，释放活跃名额，并增加修订号使已有令牌失效。
+func (s *Service) Revoke(ctx context.Context, ownerUserID, applicationID, revision int64, authVersions ...int64) (*model.Application, error) {
 	application, err := s.Get(ctx, ownerUserID, applicationID)
 	if err != nil {
 		return nil, err
 	}
 	if application.Status == model.ApplicationStatusRevoked || revision <= 0 || application.Revision != revision {
 		return nil, appErrors.ErrConflict
+	}
+	if len(authVersions) > 0 {
+		application.ActorAuthVersion = authVersions[0]
 	}
 	application.Status = model.ApplicationStatusRevoked
 	application.ActiveSlot = nil
@@ -263,6 +287,7 @@ func (s *Service) Revoke(ctx context.Context, ownerUserID, applicationID, revisi
 	return application, nil
 }
 
+// IssueToken 验证 AK/SK、应用状态和所有者权限，保存带授权快照的短期令牌摘要，并尝试清理过期令牌。
 func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (*IssuedToken, error) {
 	if !validCredential(accessKey, "ak_cq_", 16) || !validCredential(secretKey, "sk_cq_", 32) {
 		return nil, appErrors.ErrUnauthorized
@@ -278,6 +303,10 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 	if subtle.ConstantTimeCompare(application.SecretDigest, digest[:]) != 1 || !s.applicationCanAuthenticate(ctx, application) {
 		return nil, appErrors.ErrUnauthorized
 	}
+	if _, err := s.authenticationOwner(ctx, application); err != nil {
+		return nil, err
+	}
+	options := s.runtimeOptions()
 	rawToken, err := s.generateCredential("at_cq_", 32)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", appErrors.ErrDependency)
@@ -287,7 +316,7 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 	token := &model.ApplicationAccessToken{
 		ApplicationID: application.ID, TokenDigest: tokenDigest[:], SecretVersion: application.SecretVersion,
 		ApplicationRevision: application.Revision, ScopeSnapshot: append([]string(nil), application.Scopes...),
-		ExpiredAt: now.Add(s.options.TokenTTL), CreateTime: now,
+		ExpiredAt: now.Add(options.TokenTTL), CreateTime: now,
 	}
 	if err := s.repository.StoreIssuedToken(ctx, application, token, now); err != nil {
 		if errors.Is(err, appErrors.ErrUnauthorized) {
@@ -296,9 +325,10 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 		return nil, normalizeRepositoryError(err)
 	}
 	_ = s.repository.CleanupExpiredTokens(ctx, now, cleanupBatchLimit)
-	return &IssuedToken{AccessToken: rawToken, ExpiresIn: int(s.options.TokenTTL / time.Second), Scopes: append([]string(nil), application.Scopes...)}, nil
+	return &IssuedToken{AccessToken: rawToken, ExpiresIn: int(options.TokenTTL / time.Second), Scopes: append([]string(nil), application.Scopes...)}, nil
 }
 
+// AuthenticateToken 校验令牌有效期及应用的密钥版本、修订号和授权范围，构造保留原快照的应用身份。
 func (s *Service) AuthenticateToken(ctx context.Context, rawToken string) (*utils.Principal, error) {
 	if !validCredential(rawToken, "at_cq_", 32) {
 		return nil, appErrors.ErrUnauthorized
@@ -318,10 +348,15 @@ func (s *Service) AuthenticateToken(ctx context.Context, rawToken string) (*util
 	if application == nil || token.SecretVersion != application.SecretVersion || token.ApplicationRevision != application.Revision || !sameScopes(token.ScopeSnapshot, application.Scopes) || !s.applicationCanAuthenticate(ctx, application) {
 		return nil, appErrors.ErrUnauthorized
 	}
-	return &utils.Principal{Kind: "application", UserID: application.OwnerUserID, ApplicationID: application.ID, Scopes: append([]string(nil), token.ScopeSnapshot...)}, nil
+	version, err := s.authenticationOwner(ctx, application)
+	if err != nil {
+		return nil, err
+	}
+	return &utils.Principal{Kind: "application", UserID: application.OwnerUserID, ApplicationID: application.ID, ApplicationRevision: token.ApplicationRevision, SecretVersion: token.SecretVersion, TokenExpiresAt: token.ExpiredAt, Scopes: append([]string(nil), token.ScopeSnapshot...), AuthVersion: version}, nil
 }
 
-func (s *Service) validateCreate(input CreateInput) (string, string, []string, time.Duration, error) {
+// validateCreate 规范化应用文本与授权范围，按给定配置快照或当前配置确定并限制凭据有效期。
+func (s *Service) validateCreate(input CreateInput, snapshots ...Options) (string, string, []string, time.Duration, error) {
 	name, description, err := validateText(input.Name, input.Description)
 	if err != nil {
 		return "", "", nil, 0, err
@@ -330,21 +365,30 @@ func (s *Service) validateCreate(input CreateInput) (string, string, []string, t
 	if err != nil {
 		return "", "", nil, 0, err
 	}
-	ttl := s.options.DefaultCredentialTTL
+	options := s.runtimeOptions()
+	if len(snapshots) > 0 {
+		options = snapshots[0]
+	}
+	ttl := options.DefaultCredentialTTL
 	if input.ExpiresInDays != nil {
-		maxDays := int(s.options.MaxCredentialTTL / (24 * time.Hour))
+		maxDays := int(options.MaxCredentialTTL / (24 * time.Hour))
 		if *input.ExpiresInDays < 1 || *input.ExpiresInDays > maxDays {
 			return "", "", nil, 0, appErrors.ErrInvalid
 		}
 		ttl = time.Duration(*input.ExpiresInDays) * 24 * time.Hour
 	}
-	if ttl <= 0 || ttl > s.options.MaxCredentialTTL {
+	if ttl <= 0 || ttl > options.MaxCredentialTTL {
 		return "", "", nil, 0, appErrors.ErrInvalid
 	}
 	return name, description, scopes, ttl, nil
 }
 
-func (s *Service) applyUpdate(application *model.Application, input UpdateInput) error {
+// applyUpdate 将显式更新项应用到内存中的应用记录，校验文本、范围、有效期及启停状态，不执行持久化。
+func (s *Service) applyUpdate(application *model.Application, input UpdateInput, snapshots ...Options) error {
+	options := s.runtimeOptions()
+	if len(snapshots) > 0 {
+		options = snapshots[0]
+	}
 	if input.Name == nil && input.Description == nil && input.Scopes == nil && input.ExpiresInDays == nil && input.Status == nil {
 		return appErrors.ErrInvalid
 	}
@@ -367,7 +411,7 @@ func (s *Service) applyUpdate(application *model.Application, input UpdateInput)
 		}
 	}
 	if input.ExpiresInDays != nil {
-		maxDays := int(s.options.MaxCredentialTTL / (24 * time.Hour))
+		maxDays := int(options.MaxCredentialTTL / (24 * time.Hour))
 		if *input.ExpiresInDays < 1 || *input.ExpiresInDays > maxDays {
 			return appErrors.ErrInvalid
 		}
@@ -389,7 +433,40 @@ func (s *Service) applyUpdate(application *model.Application, input UpdateInput)
 
 func (s *Service) applicationCanAuthenticate(ctx context.Context, application *model.Application) bool {
 	now := s.now().UTC()
-	return application.Status == model.ApplicationStatusEnabled && application.ExpiresAt.After(now) && s.userExists(ctx, application.OwnerUserID)
+	return application.Status == model.ApplicationStatusEnabled && application.ExpiresAt.After(now) && (accounts.DatabaseMode() || s.userExists(ctx, application.OwnerUserID))
+}
+
+func (s *Service) runtimeOptions() Options {
+	options := s.options
+	if config.Global().ConfigSource == "database" {
+		current := config.Runtime().Auth
+		options.TokenTTL = time.Duration(current.TokenTTLSeconds) * time.Second
+		options.DefaultCredentialTTL = time.Duration(current.DefaultCredentialTTLDays) * 24 * time.Hour
+		options.MaxCredentialTTL = time.Duration(current.MaxCredentialTTLDays) * 24 * time.Hour
+		options.MaxApplicationsPerUser = current.MaxApplicationsPerUser
+	}
+	return options
+}
+
+func (s *Service) authenticationOwner(ctx context.Context, application *model.Application) (int64, error) {
+	if !accounts.DatabaseMode() {
+		return 0, nil
+	}
+	enabled, err := accounts.ModuleEnabled(ctx, "auth")
+	if err != nil {
+		return 0, err
+	}
+	if !enabled {
+		return 0, appErrors.ErrUnauthorized
+	}
+	user, err := accounts.CheckApplicationOwner(ctx, application.OwnerUserID, application.Scopes)
+	if err != nil {
+		if errors.Is(err, appErrors.ErrForbidden) || errors.Is(err, appErrors.ErrUnauthorized) {
+			return 0, appErrors.ErrUnauthorized
+		}
+		return 0, err
+	}
+	return user.AuthVersion, nil
 }
 
 func (s *Service) generateCredential(prefix string, byteCount int) (string, error) {
@@ -417,6 +494,7 @@ func validateText(name, description string) (string, string, error) {
 	return name, description, nil
 }
 
+// normalizeScopes 拒绝未知范围、去重并按固定顺序输出，写权限自动补齐读权限；新建时可使用默认网页读权限。
 func normalizeScopes(scopes []string, useDefault bool) ([]string, error) {
 	if scopes == nil && useDefault {
 		return []string{ScopeWebProjectsRead}, nil
@@ -463,6 +541,10 @@ func normalizeRepositoryError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var apiError *appErrors.APIError
+	if errors.As(err, &apiError) {
+		return err
+	}
 	if errors.Is(err, appErrors.ErrRateLimited) || errors.Is(err, appErrors.ErrConflict) {
 		return err
 	}
@@ -481,6 +563,7 @@ var (
 	defaultLock    sync.RWMutex
 )
 
+// Init 填充应用凭据的默认有效期和数量上限，拒绝越界配置后替换默认应用服务实例。
 func Init(conf config.AuthConfig) error {
 	if conf.TokenTTLSeconds < 0 || conf.DefaultCredentialTTLDays < 0 || conf.MaxCredentialTTLDays < 0 || conf.MaxApplicationsPerUser < 0 {
 		return fmt.Errorf("invalid auth application limits")

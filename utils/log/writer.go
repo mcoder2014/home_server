@@ -13,6 +13,7 @@ type MyLogWriter struct {
 	ToStd bool
 }
 
+// Write 按配置先写标准输出，再交给滚动文件写入器；标准输出写入失败时立即返回错误。
 func (l *MyLogWriter) Write(p []byte) (n int, err error) {
 	if l == nil {
 		panic(fmt.Errorf("MyLogWriter is not initialized"))

@@ -29,7 +29,7 @@
                 <span class="project-icon"><el-icon :size="19"><Monitor /></el-icon></span>
                 <div class="project-text">
                   <router-link :to="`/web-share/${scope.row.id}`" class="project-name">{{ scope.row.name }}</router-link>
-                  <div class="project-path">{{ scope.row.url }}</div>
+                  <div class="project-path">{{ scope.row.url }}</div><small v-if="scope.row.moderation_status && scope.row.moderation_status !== 'normal'" class="moderation-note">管理员已{{ scope.row.moderation_status === 'deleted' ? '删除' : '下架' }}：{{ scope.row.moderation_reason }}</small>
                 </div>
               </div>
             </template>
@@ -46,7 +46,7 @@
           <el-table-column fixed="right" label="操作" width="165" align="right">
             <template #default="scope">
               <el-button size="small" @click="viewProject(scope.row)">管理</el-button>
-              <el-button v-if="scope.row.status === 'enabled'" size="small" type="primary" plain @click="openProject(scope.row)">打开</el-button>
+              <el-button v-if="scope.row.status === 'enabled' && (!scope.row.moderation_status || scope.row.moderation_status === 'normal')" size="small" type="primary" plain @click="openProject(scope.row)">打开</el-button>
             </template>
           </el-table-column>
           <template #empty>
@@ -62,13 +62,13 @@
               <span class="project-icon"><el-icon :size="19"><Monitor /></el-icon></span>
               <div class="project-text">
                 <router-link :to="`/web-share/${project.id}`" class="project-name">{{ project.name }}</router-link>
-                <div class="project-path">{{ project.url }}</div>
+                <div class="project-path">{{ project.url }}</div><small v-if="project.moderation_status && project.moderation_status !== 'normal'" class="moderation-note">管理员已{{ project.moderation_status === 'deleted' ? '删除' : '下架' }}：{{ project.moderation_reason }}</small>
               </div>
             </div>
             <div class="mobile-project-meta"><span>{{ accessModeText[project.access_mode] || project.access_mode }}</span><el-tag :type="statusTagType(project.status)">{{ statusText[project.status] || project.status }}</el-tag></div>
             <div class="mobile-project-actions">
               <el-button size="small" @click="viewProject(project)">管理</el-button>
-              <el-button v-if="project.status === 'enabled'" size="small" type="primary" plain @click="openProject(project)">打开</el-button>
+              <el-button v-if="project.status === 'enabled' && (!project.moderation_status || project.moderation_status === 'normal')" size="small" type="primary" plain @click="openProject(project)">打开</el-button>
             </div>
           </article>
           <el-empty v-if="!loading && projects.length === 0" :description="statusFilter === 'deleted' ? '回收站是空的' : '还没有托管网页，点击上方新建'" :image-size="80" />
@@ -90,6 +90,7 @@ const {webShareApi} = require('@/api/web_projects.cjs')
 export default {
   name: 'WebShareList',
   components: {MyHeader, Monitor, Plus, Refresh},
+  // 初始化托管列表的分页和筛选状态，并为不同可见范围、项目状态提供展示文案。
   data() {
     return {
       loading: false,
@@ -119,7 +120,7 @@ export default {
   },
   methods: {
     requireLogin() {
-      if (localStorage.getItem('token')) {
+      if (this.$store.state.userInfo) {
         return false
       }
       this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
@@ -128,6 +129,7 @@ export default {
     statusTagType(status) {
       return {enabled: 'success', disabled: 'warning', deleted: 'danger'}[status] || 'info'
     },
+    // 确认登录后按游标加载本人托管项目，区分刷新与追加，并按删除筛选条件更新分页状态。
     async loadProjects(reset) {
       if (this.requireLogin()) {
         return
@@ -158,7 +160,7 @@ export default {
     },
     async openProject(project) {
       try {
-        await webShareApi.createBrowserLogin()
+        await webShareApi.checkBrowserSession()
         window.location.assign(project.url)
       } catch (error) {
         this.handleError(error)
@@ -166,7 +168,7 @@ export default {
     },
     handleError(error) {
       if (error.status === 401) {
-        localStorage.removeItem('token')
+        this.$store.commit('REMOVE_INFO')
         this.requireLogin()
         return
       }
@@ -177,6 +179,7 @@ export default {
 </script>
 
 <style scoped>
+.moderation-note {color:#a35539;font-size:12px;}
 .project-list-actions { align-items: center; margin-bottom: 28px; }
 .project-list-actions .page-title { font-size: 30px; margin-bottom: 10px; }
 .page-desc { margin: 0; color: var(--text-secondary); font-size: 14px; }

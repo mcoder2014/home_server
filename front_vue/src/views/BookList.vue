@@ -13,7 +13,7 @@
         </div>
 
         <!-- 图书表格 -->
-        <el-table :data="tableData" style="width: 100%" stripe>
+        <el-table :data="tableData" style="width: 100%" stripe empty-text="暂无图书">
           <el-table-column fixed prop="title" label="书名" min-width="120" />
           <el-table-column prop="img" label="封面" width="90">
             <template #default="scope">
@@ -80,7 +80,7 @@
 
 <script>
 import MyHeader from "@/components/MyHeader";
-import axios from "axios";
+import axios from "@/axios";
 import {handleError} from "@/utils/handle_http_error";
 import { Plus } from '@element-plus/icons-vue'
 import bookFallback from '@/assets/book-fallback.svg'
@@ -106,11 +106,8 @@ export default {
       this.getBookStorages(offset, this.pageSize)
     },
     updateTable(books) {
-      console.log(books)
-      if (books.length === 0) {
-        alert("无更多图书")
-      }
-      this.tableData = books.map((book) => ({
+      const rows = Array.isArray(books) ? books : []
+      this.tableData = rows.map((book) => ({
         title: book.title,
         author: book.author,
         number: book.quantity,
@@ -123,22 +120,15 @@ export default {
       }))
     },
     getBookStorages(offset, limit) {
-      console.log("current token:" + localStorage.getItem('token'))
-      let url = this.$store.state.global.baseUrl + "/"
       let param = { offset, limit }
 
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-        headers: {'passport': localStorage.getItem('token')}
-      });
+      const apiBase = axios
 
       let updateTable = this.updateTable
       let refThis = this
 
       apiBase.get("/library/book/total", {params: param}).then(function (response) {
-        console.log(response);
-        handleError(response)
+        handleError(response.data)
         if (response.data.code === 0) {
           updateTable(response.data.data.book_storages)
           refThis.totalCount = response.data.data.count

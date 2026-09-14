@@ -41,6 +41,7 @@ func DryRun() Option {
 	}
 }
 
+// newDryRunDB 创建只生成 SQL 的 GORM 实例，使用单数表名、显式查询字段和标准输出日志。
 func newDryRunDB() *gorm.DB {
 	db, err := gorm.Open(driver.New(driver.Config{
 		DriverName:                driverName,

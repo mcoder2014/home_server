@@ -97,6 +97,7 @@ class ValidationTest(unittest.TestCase):
 
 
 class RequestTest(unittest.TestCase):
+    # 使用 FakeTransport 核对先以 Basic 换 Token、再以 Bearer 调业务路径的顺序和请求内容，不发网络请求。
     def test_client_exchanges_basic_credentials_then_calls_same_origin_with_bearer(self):
         transport = FakeTransport([
             client.Response(200, {"content-type": "application/json"}, json.dumps({
@@ -143,6 +144,7 @@ class RequestTest(unittest.TestCase):
         self.assertEqual(connection.requests[0][1], "/api/web-projects")
         self.assertTrue(connection.closed)
 
+    # 构造会回显认证材料的失败响应，验证最终 ClientError 不泄露 AK/SK、Token 或 Basic/Bearer 片段。
     def test_failures_do_not_include_credentials_or_access_tokens(self):
         access_key = "ak_cq_do-not-print"
         secret_key = "sk_cq_do-not-print"
@@ -201,6 +203,7 @@ class RequestTest(unittest.TestCase):
         self.assertNotIn("at_cq_do-not-print", rendered)
         self.assertIn('"id": "12"', rendered)
 
+    # 用临时 ZIP 和 FakeTransport 验证 multipart 字段、If-Match 及文件字节，并确认只换一次 Token、发送一次业务请求。
     def test_multipart_upload_and_if_match_are_sent_once(self):
         with tempfile.TemporaryDirectory() as directory:
             upload = Path(directory) / "site.zip"

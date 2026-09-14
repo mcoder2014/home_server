@@ -14,8 +14,12 @@ const (
 	BookAddressTable = "book_address"
 )
 
-func InsertBookAddress(m *model.BookAddress) (int64, error) {
-	e := db.MasterDB().Table(BookAddressTable).Create(m).Error
+func InsertBookAddress(m *model.BookAddress, transactions ...*gorm.DB) (int64, error) {
+	database := db.MasterDB()
+	if len(transactions) > 0 {
+		database = transactions[0]
+	}
+	e := database.Table(BookAddressTable).Create(m).Error
 	if e != nil {
 		return 0, myErrors.Wrap(e, myErrors.ErrorCodeDbError)
 	}

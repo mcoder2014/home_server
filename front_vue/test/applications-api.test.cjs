@@ -14,7 +14,8 @@ function createTransport(responseData = {code: 0, message: 'success', data: {ok:
     }
 }
 
-test('application management requests use the user passport without owner or secret fields', async () => {
+// 用记录请求的 transport 验证列表/创建携带 CSRF，且创建载荷不接受调用方指定 owner 或 secret；不发送网络请求。
+test('application management requests use the browser CSRF header without owner or secret fields', async () => {
     const transport = createTransport()
     const api = createApplicationsApi(transport, () => 'user-token')
 
@@ -30,7 +31,7 @@ test('application management requests use the user passport without owner or sec
         method: 'get',
         url: '/api/applications',
         params: {cursor: 'next', limit: 20},
-        headers: {passport: 'user-token'},
+        headers: {'X-CSRF-Token': 'user-token'},
     })
     assert.deepEqual(transport.calls[1], {
         method: 'post',
@@ -41,7 +42,7 @@ test('application management requests use the user passport without owner or sec
             scopes: ['web-projects:read'],
             expires_in_days: 90,
         },
-        headers: {passport: 'user-token'},
+        headers: {'X-CSRF-Token': 'user-token'},
     })
     assert.equal('owner_id' in transport.calls[1].data, false)
     assert.equal('secret_key' in transport.calls[1].data, false)

@@ -8,10 +8,13 @@ import (
 	"github.com/mcoder2014/home_server/errors"
 
 	"github.com/mcoder2014/home_server/domain/dal"
+	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
+	"gorm.io/gorm"
 )
 
-// QueryStorageByIsbn 根据 isbn 查询库存
+// QueryStorageByIsbn 根据 ISBN 查库存，再补充书目信息和库位；不存在库存时不继续查询关联信息。
 func QueryStorageByIsbn(ctx context.Context, isbn string) (*model.BookStorage, error) {
 	s, e := dal.QueryBookStorageByIsbn(isbn)
 	if e != nil || s == nil {
@@ -32,6 +35,7 @@ func QueryStorageByIsbn(ctx context.Context, isbn string) (*model.BookStorage, e
 	return bookStorage, nil
 }
 
+// AddStorageByIsbn 取得书目信息后新增库存；数据库身份模式下在写入事务内重新验证图书写权限。
 func AddStorageByIsbn(ctx context.Context, isbn string, quantity int, t model.StorageType, libId int64) error {
 	info, e := QueryBookInfoByIsbn(ctx, isbn)
 	if e != nil || info == nil {
@@ -47,7 +51,17 @@ func AddStorageByIsbn(ctx context.Context, isbn string, quantity int, t model.St
 		Type:      t,
 		Quantity:  quantity,
 	}
-	e = dal.InsertBookStorage(&s)
+	if accounts.DatabaseMode() {
+		principal, _ := ctx.Value(utils.CtxKeyPrincipal).(*utils.Principal)
+		e = db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := accounts.RequireLibraryWriteTx(tx, principal); err != nil {
+				return err
+			}
+			return dal.InsertBookStorage(&s, tx)
+		})
+	} else {
+		e = dal.InsertBookStorage(&s)
+	}
 	return e
 }
 
@@ -56,10 +70,23 @@ func UpdateStorage(ctx context.Context, dto *model.UpdateBookStorageDto) error {
 }
 
 func AddAddress(ctx context.Context, address *model.BookAddress) (int64, error) {
+	if accounts.DatabaseMode() {
+		principal, _ := ctx.Value(utils.CtxKeyPrincipal).(*utils.Principal)
+		var id int64
+		err := db.MasterDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := accounts.RequireLibraryWriteTx(tx, principal); err != nil {
+				return err
+			}
+			var err error
+			id, err = dal.InsertBookAddress(address, tx)
+			return err
+		})
+		return id, err
+	}
 	return dal.InsertBookAddress(address)
 }
 
-// GetTotalStorage 分页查询全部图书
+// GetTotalStorage 分页读取库存，批量补全书目和库位，并过滤关联信息不完整的记录。
 func GetTotalStorage(ctx context.Context, offset int, limit int) ([]*model.BookStorage, error) {
 
 	// 查询库存

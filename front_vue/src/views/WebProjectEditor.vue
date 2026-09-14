@@ -17,6 +17,7 @@
         <h1>{{ isCreate ? '新建网页托管' : project.name || '托管设置' }}</h1>
         <p>{{ isCreate ? '为网页设置名称、地址和可见范围。' : '管理托管网页的访问范围、内容与发布版本。' }}</p>
       </div>
+<el-alert v-if="project.moderation_status && project.moderation_status !== 'normal'" :title="project.moderation_status === 'deleted' ? '管理员已删除此网页' : '管理员已下架此网页'" :description="project.moderation_reason || '请联系管理员了解处置原因'" type="warning" :closable="false" class="form-message" />
       <el-row :gutter="24">
         <el-col :xs="24" :lg="isCreate ? 24 : 14">
           <section class="card editor-section">
@@ -71,7 +72,7 @@
                 <template v-if="!isCreate">
                   <el-button v-if="project.status === 'enabled'" :loading="mutating" @click="disableProject">下线</el-button>
                   <el-button v-if="project.status !== 'deleted'" type="danger" plain :loading="mutating" @click="deleteProject">删除</el-button>
-                  <el-button v-else type="primary" plain :loading="mutating" @click="restoreProject">恢复托管</el-button>
+                  <el-button v-else type="primary" plain :disabled="project.moderation_status && project.moderation_status !== 'normal'" :loading="mutating" @click="restoreProject">恢复托管</el-button>
                 </template>
               </div>
             </el-form>
@@ -107,7 +108,7 @@
               <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
               <div class="el-upload__text">拖入 HTML 或 ZIP，或<em>点击选择</em></div>
               <template #tip>
-                <div class="el-upload__tip">上传包最大 50 MiB；ZIP 默认入口为 index.html。</div>
+                <div class="el-upload__tip">上传体积按站点当前配置校验；ZIP 默认入口为 index.html。</div>
               </template>
             </el-upload>
             <el-form-item label="ZIP 入口文件（可选）" class="entry-file-field">
@@ -194,6 +195,7 @@ const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projec
 export default {
   name: 'WebShareEditor',
   components: {MyHeader, ArrowLeft, Refresh, UploadFilled},
+  // 初始化托管设置、成员选择、版本分页和上传状态，保留草稿表单与服务端项目状态的分别表示。
   data() {
     return {
       saving: false,
@@ -248,12 +250,12 @@ export default {
     project(project) {
       // 仅让当前详情更新标题，离开页面后的异步响应不能覆盖其他页面。
       if (this.$route.name === 'WebShareDetail' && String(project.id) === this.$route.params.id) {
-        document.title = `CQ Home Server · ${project.name}`
+        document.title = `${this.$store.state.site.title} · ${project.name}`
       }
     },
   },
   async created() {
-    if (!localStorage.getItem('token')) {
+    if (!this.$store.state.userInfo) {
       this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
       return
     }
@@ -316,6 +318,7 @@ export default {
         member_user_ids: this.form.access_mode === 'members' ? this.form.member_user_ids : [],
       }
     },
+    // 校验并提交托管设置；新建成功后转到编辑地址并加载版本，更新时用服务端返回值刷新项目和修订号。
     async saveProject() {
       try {
         await this.$refs.projectForm.validate()
@@ -350,6 +353,7 @@ export default {
     handleFileExceed() {
       ElMessage.warning('一次只能选择一个 HTML 或 ZIP 文件')
     },
+    // 上传选定文件，并仅在明确选择 publishNow 时发布该版本；流程成功后清空选择并刷新版本列表。
     async uploadRelease(publishNow) {
       if (!this.uploadFile) {
         return
@@ -444,7 +448,7 @@ export default {
     },
     async openProject() {
       try {
-        await webShareApi.createBrowserLogin()
+        await webShareApi.checkBrowserSession()
         window.location.assign(this.project.url)
       } catch (error) {
         this.handleError(error)
@@ -483,7 +487,7 @@ export default {
     },
     handleError(error) {
       if (error.status === 401) {
-        localStorage.removeItem('token')
+        this.$store.commit('REMOVE_INFO')
         this.$router.replace({path: '/login', query: {redirect: this.$route.fullPath}})
         return
       }

@@ -8,6 +8,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"gorm.io/gorm"
 )
 
@@ -47,12 +48,26 @@ func (repository *Repository) ListDeletingReleases(limit int) ([]*model.WebProje
 // before the lock or observes the incremented revision after commit.
 func (repository *Repository) PrepareExpiredProjectCleanup(projectID int64, cutoff time.Time, limit int) ([]*model.WebProjectRelease, error) {
 	var releases []*model.WebProjectRelease
+	// 锁内复核清理开关和删除保留期，将一页版本标记为删除中，并同时清空当前发布指针。
 	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
+		if accounts.DatabaseMode() {
+			enabled, err := accounts.EnabledTx(tx, "web_projects", "cleanup_enabled", true)
+			if err != nil {
+				return err
+			}
+			if !enabled {
+				return nil
+			}
+		}
 		project, err := dal.LockWebProjectByID(tx, projectID)
 		if err != nil {
 			return err
 		}
-		if project == nil || project.Status != model.WebProjectStatusDeleted || project.DeletedAt == nil || !project.DeletedAt.Before(cutoff) {
+		expired := project != nil && project.DeletedAt != nil && project.DeletedAt.Before(cutoff)
+		if project != nil && project.PurgeAfter != nil {
+			expired = !project.PurgeAfter.After(time.Now())
+		}
+		if project == nil || project.Status != model.WebProjectStatusDeleted || project.DeletedAt == nil || !expired {
 			return nil
 		}
 		releases, err = dal.ListWebProjectReleasesForCleanup(tx, projectID, limit)

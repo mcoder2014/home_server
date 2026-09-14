@@ -1,4 +1,5 @@
 const axios = require('axios')
+const {browserHeaders, requestError} = require('./browser_client.cjs')
 
 function envelopeError(response) {
     const body = response && response.data ? response.data : {}
@@ -8,22 +9,15 @@ function envelopeError(response) {
     return error
 }
 
-function requestError(error) {
-    if (error && error.response) {
-        return envelopeError(error.response)
-    }
-    return error instanceof Error ? error : new Error('请求失败')
-}
 
-function createApplicationsApi(transport, getToken) {
+// 封装同源应用凭证管理请求；更新、轮换和吊销携带 If-Match，失败统一转为页面可处理的错误。
+function createApplicationsApi(transport, getCSRF) {
     const client = transport || axios.create({
         baseURL: '/',
         withCredentials: true,
     })
-    const tokenProvider = getToken || (() => localStorage.getItem('token') || '')
-
     function headers(extra) {
-        return Object.assign({passport: tokenProvider()}, extra || {})
+        return browserHeaders(extra, getCSRF)
     }
 
     async function request(config) {
@@ -34,7 +28,7 @@ function createApplicationsApi(transport, getToken) {
             }
             return response.data.data
         } catch (error) {
-            throw requestError(error)
+            throw requestError(error, config.headers && config.headers['X-CSRF-Token'] || '')
         }
     }
 

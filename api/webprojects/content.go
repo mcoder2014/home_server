@@ -24,6 +24,10 @@ import (
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
+// serveProjectContent resolves the live project/owner state and reader identity
+// before opening a validated published file. Public visibility bypasses reader
+// login only; owner bans, moderation, module policy and path checks still apply.
+// serveProjectContent 处理 GET/HEAD /p/:slug 及其资源路径，只输出通过发布状态、可见性和安全路径检查的文件。
 func serveProjectContent(c *gin.Context) {
 	project, release, err := application.Default.GetPublishedProject(c.Param("slug"))
 	if err != nil {
@@ -79,7 +83,7 @@ func serveProjectContent(c *gin.Context) {
 		c.Redirect(http.StatusPermanentRedirect, target)
 		return
 	}
-	conf := config.Global().WebProjects
+	conf := config.Runtime().WebProjects
 	contentRoot, err := service.ReleaseContentRoot(&conf, release)
 	if err != nil {
 		ginfmt.Fail(c, err)
@@ -118,6 +122,7 @@ func serveProjectContent(c *gin.Context) {
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
 }
 
+// downloadRelease 处理 GET /api/web-share/:id/releases/:release_id/download 及兼容入口：确认本人版本归属后生成下载包。
 func downloadRelease(c *gin.Context) {
 	projectID, err := service.ParsePositiveID(c.Param("id"))
 	if err != nil {
@@ -134,10 +139,11 @@ func downloadRelease(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	conf := config.Global().WebProjects
+	conf := config.Runtime().WebProjects
 	serveReleaseDownload(c, &conf, release)
 }
 
+// serveReleaseDownload 先在用户暂存目录生成并校验完整版本 ZIP，再以附件响应客户端；结束时清理临时包，避免返回半成品。
 func serveReleaseDownload(c *gin.Context, conf *config.WebProjectsConfig, release *model.WebProjectRelease) {
 	if conf == nil || release == nil {
 		ginfmt.Fail(c, service.ErrDependency)
@@ -208,6 +214,7 @@ func writeReleaseArchive(destination io.Writer, contentRoot string, release *mod
 	zw := zip.NewWriter(destination)
 	fileCount := 0
 	var totalBytes int64
+	// 逐项拒绝符号链接及特殊文件，把常规文件写入 ZIP，同时累计文件数和实际字节数。
 	err = filepath.Walk(contentRoot, func(filePath string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -270,6 +277,7 @@ func writeReleaseArchive(destination io.Writer, contentRoot string, release *mod
 	return nil
 }
 
+// contentFailureStatus 把内容路径和文件状态转换为对外错误：普通资源缺失返回404，入口或存储故障返回503。
 func contentFailureStatus(err error, isEntry, isRegular bool) int {
 	if errors.Is(err, service.ErrInvalid) {
 		return http.StatusNotFound
@@ -292,6 +300,7 @@ func contentFailureStatus(err error, isEntry, isRegular bool) int {
 	return 0
 }
 
+// failContentFile 以统一业务错误输出内容文件访问失败，区分资源不存在与存储依赖异常。
 func failContentFile(c *gin.Context, status int) {
 	if status == http.StatusNotFound {
 		ginfmt.Fail(c, service.ErrNotFound)

@@ -2,6 +2,7 @@
   <div>
     <MyHeader />
     <main class="page-container home-page">
+<el-alert v-if="$store.state.site.notice" :title="$store.state.site.notice" type="info" :closable="false" class="form-message" />
       <section class="welcome-banner">
         <div class="welcome-copy">
           <span class="page-eyebrow">你的家庭工作台</span>
@@ -28,13 +29,13 @@
           <p>托管 HTML 文档和静态网页。<br>上传、发布，选择谁可以访问。</p>
           <span class="service-link">管理托管内容 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
-        <router-link class="service-card" to="/book/list">
+        <router-link v-if="libraryAvailable" class="service-card" to="/book/list">
           <div class="service-top"><span class="service-icon books-icon"><el-icon :size="25"><Reading /></el-icon></span><span class="service-label">LIBRARY</span></div>
           <h3>家庭藏书</h3>
           <p>整理纸质书与电子书，<br>让每一本好书都有迹可寻。</p>
           <span class="service-link">查看图书 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
-        <router-link class="service-card" to="/book/add">
+        <router-link v-if="libraryAvailable" class="service-card" to="/book/add">
           <div class="service-top"><span class="service-icon add-icon"><el-icon :size="25"><Plus /></el-icon></span><span class="service-label">QUICK ADD</span></div>
           <h3>录入图书</h3>
           <p>输入 ISBN 或扫描条码，<br>把新发现加入你的书架。</p>
@@ -47,7 +48,7 @@
           <span class="service-link">管理凭证 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
       </div>
-      <footer class="home-footer"><span>CQ Home Server</span><span>留给生活的一点数字空间</span></footer>
+      <footer class="home-footer"><span>{{ $store.state.site.title }}</span><span>留给生活的一点数字空间</span></footer>
     </main>
   </div>
 </template>
@@ -59,9 +60,11 @@ import {ArrowRight, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
 export default {
   name: 'MyIndex',
   components: {MyHeader, Monitor, Plus, Reading, Key, ArrowRight},
+  created() { this.$store.dispatch('loadBootstrap').catch(() => {}) },
   computed: {
+    libraryAvailable() { return this.$store.state.userInfo?.library_enabled && this.$store.state.userInfo?.capabilities?.library !== false },
     username() {
-      return localStorage.getItem('user_name') || '访客'
+      return this.$store.state.userInfo?.display_name || this.$store.state.userInfo?.user_name || '访客'
     },
   },
 }

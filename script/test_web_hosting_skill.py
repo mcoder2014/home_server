@@ -74,15 +74,19 @@ class LocalHTTPSServer(ThreadingHTTPServer):
 class RecordingHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
+    # 处理本地 HTTPS 夹具的 GET 请求，交由统一记录器保存调用并生成测试响应。
     def do_GET(self):
         self._handle()
 
+    # 处理本地 HTTPS 夹具的 POST 请求，让测试核对 Token 交换和业务写入的原始请求。
     def do_POST(self):
         self._handle()
 
+    # 处理本地 HTTPS 夹具的 PATCH 请求，复用请求记录与场景响应逻辑。
     def do_PATCH(self):
         self._handle()
 
+    # 记录本地 HTTPS 测试请求，再按场景生成状态、头部和延迟响应；忽略客户端超时断连造成的回写错误。
     def _handle(self):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
@@ -141,6 +145,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
         cls.certificate_directory.cleanup()
 
     @classmethod
+    # 在临时目录生成短期测试 CA 和 localhost/127.0.0.1 服务证书，供真实 HTTPS 夹具使用，不读取部署证书。
     def _generate_certificates(cls):
         ca_key = cls.certificate_root / "ca.key"
         request = cls.certificate_root / "server.csr"
@@ -182,6 +187,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
     def tearDown(self):
         self.fixture_directory.cleanup()
 
+    # 为单个用例生成私有配置和可选合成凭证，复制测试 CA，并把相对路径限定在当前临时夹具目录。
     def write_config(
         self,
         internal_url,
@@ -257,6 +263,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
         self.assertTrue(payload)
         return payload
 
+    # 从无关工作目录运行 CLI 并访问本地 HTTPS 夹具，逐项核对命令路由、认证、multipart、幂等键、修订号和可见范围载荷。
     def test_commands_use_real_https_from_an_unrelated_working_directory(self):
         def responder(request):
             parsed = urllib.parse.urlsplit(request["path"])
@@ -379,6 +386,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
             self.assert_json_error(completed)
             self.assertEqual([(call["method"], call["path"]) for call in server.calls], [("GET", "/ping")])
 
+    # 模拟自动选中内网后的业务 401，验证不切外网、不重试，并确保错误输出剔除回显的认证材料。
     def test_401_after_auto_selection_does_not_switch_origin_or_retry(self):
         def internal_responder(request):
             if request["path"] == "/ping":
@@ -444,6 +452,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
             )
             self.assert_success(completed, "internal", server.origin, {"message": "pong"})
 
+    # 分别模拟发布冲突和写请求超时，确认 CLI 均只发送一次业务写入，避免结果未知时自动重放。
     def test_write_conflict_and_timeout_are_each_sent_once(self):
         conflict_business_calls = []
 
@@ -496,6 +505,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
         self.assertNotIn(ACCESS_KEY, completed.stderr)
         self.assertNotIn(SECRET_KEY, completed.stderr)
 
+    # 以未监听地址执行 dry-run，验证离线操作摘要不会泄露上传正文或环境中的合成凭证。
     def test_dry_run_is_offline_and_does_not_render_file_contents_or_secrets(self):
         unused_port = self._unused_port()
         config = self.write_config(
@@ -527,6 +537,7 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
         self.assertNotIn(ACCESS_KEY, rendered)
         self.assertNotIn(SECRET_KEY, rendered)
 
+    # 验证成员列表与显式清空参数必须互斥且只用于 members 可见范围，合法清空计划输出空成员集合。
     def test_member_arguments_require_an_explicit_unambiguous_choice(self):
         config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)
         invalid_arguments = [

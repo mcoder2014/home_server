@@ -12,6 +12,7 @@ func TestMain(t *testing.M) {
 	t.Run()
 }
 
+// TestGetBookInfoByISBN 调用实际 ISBN 服务，核对有效与无效 ISBN 的错误和图书返回情况。
 func TestGetBookInfoByISBN(t *testing.T) {
 
 	ctx := context.Background()

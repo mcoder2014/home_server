@@ -1,3 +1,9 @@
+# Existing installations keep file identities until the reviewed accounts
+# migration succeeds. Database mode requires both sources to be database.
+identity_source: config
+config_source: file
+# Verified hard ceiling of every proxy upload path; 50 MiB in this example.
+upload_hard_limit_bytes: 52428800
 server:
   # http server 的服务端口
   port: 8080

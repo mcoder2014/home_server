@@ -5,7 +5,7 @@ import "golang.org/x/crypto/bcrypt"
 // HashAndSalt 加密密码
 func HashAndSalt(pwdStr string) (pwdHash string, err error) {
 	pwd := []byte(pwdStr)
-	hash, err := bcrypt.GenerateFromPassword(pwd, bcrypt.MinCost)
+	hash, err := bcrypt.GenerateFromPassword(pwd, bcrypt.DefaultCost)
 	if err != nil {
 		return
 	}

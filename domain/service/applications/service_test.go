@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCreateGeneratesOpaqueCredentialsAndStoresOnlyDigest 用固定时间和随机源核对凭据格式、默认范围与有效期，以及 SK 摘要存储。
 func TestCreateGeneratesOpaqueCredentialsAndStoresOnlyDigest(t *testing.T) {
 	now := time.Date(2026, 9, 12, 10, 0, 0, 0, time.UTC)
 	repo := newMemoryRepository()
@@ -53,6 +54,7 @@ func TestOwnerIsolationAndRevisionProtection(t *testing.T) {
 	require.Equal(t, now, repo.applications[application.ID].UpdateTime)
 }
 
+// TestIssueAndAuthenticateTokenRejectsExpiredRevokedAndStaleVersions 核对正常令牌身份，并验证修订变更、撤销或凭据过期会拒绝认证。
 func TestIssueAndAuthenticateTokenRejectsExpiredRevokedAndStaleVersions(t *testing.T) {
 	service, repo, now := testService()
 	application, secret, err := service.Create(context.Background(), 101, CreateInput{Name: "reader", Scopes: []string{ScopeWebProjectsWrite}})
@@ -108,6 +110,7 @@ func TestRotateImmediatelyInvalidatesOldSecretAndToken(t *testing.T) {
 	require.ErrorIs(t, err, appErrors.ErrUnauthorized)
 }
 
+// TestExpiredTokenAndDisableEnableCycleCannotReviveToken 确认到期令牌被拒绝，应用停用再启用也不能复活旧令牌。
 func TestExpiredTokenAndDisableEnableCycleCannotReviveToken(t *testing.T) {
 	service, repo, now := testService()
 	application, secret, err := service.Create(context.Background(), 101, CreateInput{Name: "lifecycle"})
@@ -337,4 +340,17 @@ func (r *incrementReader) Read(buffer []byte) (int, error) {
 		buffer[index] = r.next
 	}
 	return len(buffer), nil
+}
+
+func TestAuthenticateTokenCarriesOriginalWriteAuthorizationSnapshot(t *testing.T) {
+	service, _, now := testService()
+	application, secret, err := service.Create(context.Background(), 101, CreateInput{Name: "snapshot", Scopes: []string{ScopeWebProjectsWrite}})
+	require.NoError(t, err)
+	token, err := service.IssueToken(context.Background(), application.AccessKey, secret)
+	require.NoError(t, err)
+	principal, err := service.AuthenticateToken(context.Background(), token.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, application.Revision, principal.ApplicationRevision)
+	require.Equal(t, application.SecretVersion, principal.SecretVersion)
+	require.Equal(t, now.Add(15*time.Minute), principal.TokenExpiresAt)
 }

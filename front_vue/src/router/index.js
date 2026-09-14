@@ -12,6 +12,19 @@ import WebShareList from '@/views/WebProjectList'
 import WebShareOpen from '@/views/WebProjectOpen'
 
 const routes = [
+    {path: '/register', name: 'Register', component: () => import('@/views/Register.vue'), meta: {title: '受邀注册'}},
+    {path: '/account', name: 'Account', component: () => import('@/views/Account.vue'), meta: {title: '个人中心', requireAuth: true}},
+    {path: '/account/security', name: 'AccountSecurity', component: () => import('@/views/Account.vue'), meta: {title: '账户安全', requireAuth: true}},
+    {path: '/invitations', name: 'Invitations', component: () => import('@/views/Invitations.vue'), meta: {title: '邀请朋友', requireAuth: true}},
+    {path: '/forbidden', name: 'Forbidden', component: () => import('@/views/AccessState.vue'), meta: {title: '功能未开通'}},
+    {path: '/unavailable', name: 'Unavailable', component: () => import('@/views/AccessState.vue'), meta: {title: '服务暂不可用'}},
+    {path: '/admin', component: () => import('@/views/AdminLayout.vue'), meta: {requireAuth: true, admin: true}, children: [
+        {path: '', redirect: '/admin/users'},
+        {path: 'users', component: () => import('@/views/AdminUsers.vue'), meta: {title: '用户管理'}},
+        {path: 'web-share', component: () => import('@/views/AdminProjects.vue'), meta: {title: '网页审核'}},
+        {path: 'config', component: () => import('@/views/AdminConfig.vue'), meta: {title: '站点设置'}},
+        {path: 'audit-logs', component: () => import('@/views/AdminAudit.vue'), meta: {title: '操作记录'}},
+    ]},
     {
         path: '/',
         name: 'Index',
@@ -36,7 +49,8 @@ const routes = [
         component: BookInfo,
         meta: {
             title: '图书详情',
-            requireAuth: false
+            library: true,
+            requireAuth: true
         }
     },
     {
@@ -45,6 +59,7 @@ const routes = [
         component: BookList,
         meta: {
             title: '图书列表',
+            library: true,
             requireAuth: true
         }
     },
@@ -54,6 +69,7 @@ const routes = [
         component: AddBook,
         meta: {
             title: '录入图书',
+            library: true,
             requireAuth: true
         }
     },
@@ -63,7 +79,8 @@ const routes = [
         component: ScanCodePage,
         meta: {
             title: '扫码录入',
-            requireAuth: false
+            library: true,
+            requireAuth: true
         }
     },
     {
@@ -72,6 +89,7 @@ const routes = [
         component: Applications,
         meta: {
             title: '应用凭证',
+            capability: 'applications',
             requireAuth: true
         }
     },
@@ -82,6 +100,7 @@ const routes = [
         component: WebShareList,
         meta: {
             title: '网页托管',
+            capability: 'web_projects',
             requireAuth: true
         }
     },
@@ -92,6 +111,7 @@ const routes = [
         component: WebShareEditor,
         meta: {
             title: '新建网页托管',
+            capability: 'web_projects',
             requireAuth: true
         }
     },
@@ -102,7 +122,8 @@ const routes = [
         component: WebShareOpen,
         meta: {
             title: '打开托管网页',
-            requireAuth: false
+            capability: 'web_projects',
+            requireAuth: true
         }
     },
     {
@@ -112,6 +133,7 @@ const routes = [
         component: WebShareEditor,
         meta: {
             title: '托管设置',
+            capability: 'web_projects',
             requireAuth: true
         }
     }
@@ -122,12 +144,6 @@ const router = createRouter({
     history: createWebHistory(),
     base: '/',
     routes: routes,
-})
-
-router.afterEach((to, from, failure) => {
-    if (!failure) {
-        document.title = `CQ Home Server · ${to.meta.title || '首页'}`
-    }
 })
 
 export default router

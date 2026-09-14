@@ -1,92 +1,51 @@
 <template>
-  <header class="app-header">
-    <div class="header-inner">
-      <router-link class="header-logo" to="/" aria-label="CQ Home Server 首页">
-        <span class="brand-mark" aria-hidden="true">CQ</span>
-        <span class="logo-text">CQ Home Server</span>
-      </router-link>
-
-      <nav class="header-nav" aria-label="主导航">
-        <router-link to="/" :class="{active: $route.path === '/'}">首页</router-link>
-        <router-link to="/web-share" :class="{active: $route.path.startsWith('/web-share') || $route.path.startsWith('/web-projects')}">
-          <el-icon><Monitor /></el-icon>网页托管
-        </router-link>
-        <router-link to="/book/list" :class="{active: $route.path.startsWith('/book/')}">
-          <el-icon><Reading /></el-icon>图书管理
-        </router-link>
-        <router-link to="/applications" :class="{active: $route.path === '/applications'}">
-          <el-icon><Key /></el-icon>应用凭证
-        </router-link>
-      </nav>
-
-      <!-- 右侧用户信息 -->
-      <div class="header-user">
-        <template v-if="hasLogin">
-          <span class="user-avatar" aria-hidden="true">{{ user.username.slice(0, 1).toUpperCase() }}</span>
-          <span class="username" :title="user.username">{{ user.username }}</span>
-          <el-button plain size="small" @click="logout">退出</el-button>
-        </template>
-        <template v-else>
-          <el-button type="primary" plain size="small" @click="$router.push('/login')">登录</el-button>
-        </template>
-      </div>
+  <header class="app-header"><div class="header-inner">
+    <router-link class="header-logo" to="/" aria-label="网站首页"><span class="brand-mark" aria-hidden="true">CQ</span><span class="logo-text">{{ $store.state.site.title }}</span></router-link>
+    <nav class="header-nav" aria-label="主导航" v-if="!user?.must_change_password">
+      <router-link to="/" :class="{active: $route.path === '/'}">首页</router-link>
+      <router-link to="/web-share" :class="{active: /^\/(web-share|web-projects)/.test($route.path)}">网页托管</router-link>
+      <router-link v-if="user?.library_enabled && user?.capabilities?.library !== false" to="/book/list" :class="{active: $route.path.startsWith('/book/')}">家庭藏书</router-link>
+      <router-link to="/applications" :class="{active: $route.path === '/applications'}">应用凭证</router-link>
+      <router-link v-if="user?.role === 'admin'" to="/admin/users" :class="{active: $route.path.startsWith('/admin')}">管理中心</router-link>
+    </nav>
+    <div class="header-user">
+      <template v-if="user">
+        <el-dropdown trigger="click" @command="navigate"><button class="account-trigger"><span class="user-avatar">{{ displayName.slice(0, 1).toUpperCase() }}</span><span class="username">{{ displayName }}</span><span aria-hidden="true">⌄</span></button>
+          <template #dropdown><el-dropdown-menu><el-dropdown-item command="/account/security" v-if="user.must_change_password">修改初始密码</el-dropdown-item><template v-else><el-dropdown-item command="/account">个人中心</el-dropdown-item><el-dropdown-item command="/invitations">邀请朋友</el-dropdown-item></template></el-dropdown-menu></template>
+        </el-dropdown>
+        <el-button plain size="small" :loading="loggingOut" @click="logout">退出</el-button>
+      </template>
+      <el-button v-else type="primary" plain size="small" @click="$router.push('/login')">登录</el-button>
     </div>
-  </header>
+  </div></header>
 </template>
-
-
 <script>
-import axios from "axios";
-import {Key, Monitor, Reading} from '@element-plus/icons-vue'
-
+const {accountsApi} = require('@/api/accounts.cjs')
 export default {
-  name: "MyHeader",
-  components: {Key, Monitor, Reading},
-  data() {
-    return {
-      user: {
-        username: '请先登录'
-      },
-      hasLogin: false
-    }
+  name: 'MyHeader',
+  data() { return {loggingOut: false} },
+  computed: {
+    user() { return this.$store.state.userInfo },
+    displayName() { return this.user?.display_name || this.user?.user_name || '用户' },
   },
   methods: {
-    logout() {
-      let url = this.$store.state.global.baseUrl + "/"
-      let apiBase = axios.create({
-        baseURL: url,
-        withCredentials: false,
-        headers: {'passport': localStorage.getItem('token')}
-      });
-
-      let curRouter = this.$router
-
-      apiBase.post("/passport/logout").then((response) => {
-        if (response.data.code !== 0) {
-          alert("退出失败，请稍后重试")
-          return
-        }
-
-        // 服务端确认 token 失效后再清理本地身份，保持内容 Cookie 与界面状态一致。
-        localStorage.removeItem('token')
-        localStorage.removeItem('user_name')
-        this.hasLogin = false
-        curRouter.push({ path: '/' });
-      }).catch(function (err) {
-        alert("error " + err)
-      })
-    }
+    navigate(path) { this.$router.push(path) },
+    async logout() {
+      this.loggingOut = true
+      try {
+        await accountsApi.logout()
+        this.$store.commit('REMOVE_INFO')
+        await this.$router.push('/')
+      } catch (error) {
+        if (error.status === 401) { this.$store.commit('REMOVE_INFO'); await this.$router.push('/login') }
+        else this.$message.error(error.message || '退出失败，请稍后重试')
+      } finally { this.loggingOut = false }
+    },
   },
-  created() {
-    if (localStorage.getItem('token') !== null && localStorage.getItem('token') !== '') {
-      this.hasLogin = true
-      this.user.username = localStorage.getItem('user_name') || '用户'
-    }
-  }
 }
 </script>
-
 <style scoped>
+.account-trigger {display:flex;align-items:center;gap:8px;border:0;background:none;cursor:pointer;padding:4px;color:var(--text-secondary)}
 .app-header {
   position: sticky;
   top: 0;
@@ -101,7 +60,7 @@ export default {
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 28px;
-  gap: 32px;
+  gap: 20px;
 }
 .header-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
 .logo-text { font-size: 16px; font-weight: 700; color: var(--text-primary); white-space: nowrap; letter-spacing: -0.4px; }
@@ -114,7 +73,7 @@ export default {
 .username { font-size: 13px; color: var(--text-secondary); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 820px) {
   .header-inner { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 14px 20px 10px; }
-  .header-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-row: 2; grid-column: 1 / -1; margin-top: 12px; width: 100%; }
+  .header-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); grid-row: 2; grid-column: 1 / -1; margin-top: 12px; width: 100%; }
   .header-nav a { min-width: 0; padding-left: 6px; padding-right: 6px; }
   .header-user { grid-column: 2; grid-row: 1; }
 }

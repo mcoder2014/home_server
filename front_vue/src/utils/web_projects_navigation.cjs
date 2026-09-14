@@ -3,6 +3,7 @@
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
 const PROJECT_PATH = /^\/p\/[a-z0-9][a-z0-9-]{1,254}[a-z0-9](?:\/|$)/
 
+// 只接受本站绝对路径，拒绝外部 origin、协议相对路径及解码后的控制符/反斜杠；非法输入返回 null。
 function parseInternalPath(value) {
     if (typeof value !== 'string' || value.length === 0 || value.startsWith('//')) {
         return null
@@ -33,12 +34,14 @@ function isSafeProjectTarget(value) {
     return parsed !== null && PROJECT_PATH.test(parsed.pathname)
 }
 
+// 把登录回跳限制在已知业务页面和托管内容路径，按需保留页面锚点；无法确认安全的目标回到首页。
 function normalizeInternalRedirect(value, inheritedHash = '') {
     const parsed = parseInternalPath(value)
     if (parsed === null) {
         return '/'
     }
     if (!PROJECT_PATH.test(parsed.pathname)
+        && !['/account', '/account/security', '/invitations', '/book/list', '/book/add', '/book/info', '/scanCodePage', '/admin/users', '/admin/web-share', '/admin/config', '/admin/audit-logs'].includes(parsed.pathname)
         && parsed.pathname !== '/applications'
         && parsed.pathname !== '/web-share'
         && !parsed.pathname.startsWith('/web-share/')

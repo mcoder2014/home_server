@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestAuditStorageVerifiesOwnerForLegacyAndCanonicalDirectories 验证新旧目录均按数据库所有权核对，错误所有者目录只进入报告且不被修改。
 func TestAuditStorageVerifiesOwnerForLegacyAndCanonicalDirectories(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
@@ -55,6 +56,7 @@ func TestAuditStorageVerifiesOwnerForLegacyAndCanonicalDirectories(t *testing.T)
 	}
 }
 
+// TestAuditStorageReportsReferenceAndOwnershipFailures 分别构造缺失引用、项目错配、所有者错配和存储键错配，核对候选原因。
 func TestAuditStorageReportsReferenceAndOwnershipFailures(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
@@ -86,6 +88,7 @@ func TestAuditStorageReportsReferenceAndOwnershipFailures(t *testing.T) {
 	require.Equal(t, "71", report.Candidates[3].OwnerID)
 }
 
+// TestAuditStorageSkipsRecentAbnormalAndSymlinkDirectories 验证近期目录、异常目录名和符号链接被分别跳过并计数。
 func TestAuditStorageSkipsRecentAbnormalAndSymlinkDirectories(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
@@ -115,6 +118,7 @@ func TestAuditStorageSkipsRecentAbnormalAndSymlinkDirectories(t *testing.T) {
 	require.DirExists(t, symlinkTarget)
 }
 
+// TestAuditStorageDoesNotFollowOwnerUploadSymlink 确认所有者 upload 符号链接不会导致重复扫描或跨所有者读取。
 func TestAuditStorageDoesNotFollowOwnerUploadSymlink(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()
@@ -157,6 +161,7 @@ func TestAuditStorageStopsOnDatabaseErrorWithoutDeleting(t *testing.T) {
 	require.DirExists(t, releasePath)
 }
 
+// TestAuditStorageBatchesReleaseAndProjectQueries 用超出单批上限的目录验证版本和项目引用各拆成两批查询。
 func TestAuditStorageBatchesReleaseAndProjectQueries(t *testing.T) {
 	root := t.TempDir()
 	now := time.Now()

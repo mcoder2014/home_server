@@ -9,6 +9,7 @@ import (
 	myErrors "github.com/mcoder2014/home_server/errors"
 )
 
+// GenKey 生成 1024 位 RSA 密钥对，分别以 PKIX 公钥和 PKCS1 私钥的 PEM 格式返回。
 func GenKey() (pubKey, prvKey []byte, err error) {
 	// 生成私钥文件
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)

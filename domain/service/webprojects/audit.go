@@ -90,6 +90,7 @@ func AuditStorage(conf *config.WebProjectsConfig, minAge time.Duration) (*Storag
 	})
 }
 
+// auditStorageAt 按给定时钟扫描达到最小年龄的发布目录，核对数据库引用与所有权并生成排序后的只读审计报告。
 func auditStorageAt(conf *config.WebProjectsConfig, minAge time.Duration, now time.Time, queries auditReferenceQueries) (*StorageAuditReport, error) {
 	if conf == nil || !filepath.IsAbs(conf.StorageRoot) || minAge < 0 || queries.queryReleases == nil || queries.queryProjects == nil {
 		return nil, ErrInvalid
@@ -151,6 +152,7 @@ func resolveAuditStorageRoot(storageRoot string) (string, error) {
 	return root, nil
 }
 
+// loadAuditReferences 将目录中的版本 ID 去重后分批查版本，再按真实项目 ID 分批查所有权，任一查询失败即停止审计。
 func loadAuditReferences(directories []auditReleaseDirectory, queries auditReferenceQueries, stats *AuditStats) (*auditReferences, error) {
 	releaseIDs := make([]int64, 0, len(directories))
 	seenReleaseIDs := make(map[int64]struct{}, len(directories))
@@ -215,6 +217,7 @@ func loadAuditReferences(directories []auditReleaseDirectory, queries auditRefer
 	return &auditReferences{releases: releases, projects: projects}, nil
 }
 
+// inspectAuditReference 逐项核对目录、发布记录与项目的归属和存储键，返回首个不一致原因或已确认引用标记。
 func inspectAuditReference(directory auditReleaseDirectory, references *auditReferences) (AuditCandidate, bool) {
 	candidate := AuditCandidate{
 		ProjectID:           strconv.FormatInt(directory.projectID, 10),
@@ -305,6 +308,7 @@ func scanAuditReleaseDirectories(root string, minAge time.Duration, now time.Tim
 	return directories, nil
 }
 
+// auditDirectoryEntries 仅枚举真实目录，将符号链接与异常条目计入跳过统计；路径不存在时直接跳过。
 func auditDirectoryEntries(path string, stats *AuditStats) ([]os.DirEntry, bool) {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -330,6 +334,7 @@ func auditDirectoryEntries(path string, stats *AuditStats) ([]os.DirEntry, bool)
 	return entries, true
 }
 
+// scanAuditProjects 遍历项目和版本目录，排除异常、符号链接与近期目录，再按新旧布局生成待核对的存储键。
 func scanAuditProjects(root, projectsRoot string, ownerID int64, projectEntries []os.DirEntry, minAge time.Duration, now time.Time, stats *AuditStats) []auditReleaseDirectory {
 	directories := make([]auditReleaseDirectory, 0)
 	for _, projectEntry := range projectEntries {
@@ -393,6 +398,7 @@ func scanAuditProjects(root, projectsRoot string, ownerID int64, projectEntries 
 	return directories
 }
 
+// auditReleasePath 检查版本目录和 content 是否为真实目录，并遍历元数据排除含符号链接或读取异常的版本。
 func auditReleasePath(releasePath string, releaseEntry os.DirEntry, stats *AuditStats) bool {
 	releaseInfo, err := releaseEntry.Info()
 	if err == nil && releaseInfo.Mode()&os.ModeSymlink != 0 {

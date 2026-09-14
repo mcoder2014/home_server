@@ -34,6 +34,7 @@ type MockData struct {
 	userIDMap   map[int64]*model.UserIdentity
 }
 
+// LoadConf 解析配置中的用户列表，在写锁下替换身份集合并重建手机号、邮箱、用户名和 ID 查询表。
 func (m *MockData) LoadConf(conf string) error {
 
 	if len(conf) == 0 {

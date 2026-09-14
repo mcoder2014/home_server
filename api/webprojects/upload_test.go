@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestReceiveMultipartUploadCleansTemporaryFileOnFailure 构造无效上传请求，验证解析失败不会把请求暂存文件遗留到用户目录。
 func TestReceiveMultipartUploadCleansTemporaryFileOnFailure(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	root := t.TempDir()
@@ -40,6 +41,7 @@ func TestReceiveMultipartUploadCleansTemporaryFileOnFailure(t *testing.T) {
 	require.Empty(t, matches)
 }
 
+// TestReceiveMultipartUploadUsesAuthenticatedOwner 验证上传暂存路径来自已认证用户身份，而非客户端提交的资源所有者。
 func TestReceiveMultipartUploadUsesAuthenticatedOwner(t *testing.T) {
 	root := t.TempDir()
 	conf := config.WebProjectsConfig{StorageRoot: root, MaxUploadBytes: 1024}

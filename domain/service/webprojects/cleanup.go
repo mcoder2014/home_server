@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mcoder2014/home_server/config"
+	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
 	repository "github.com/mcoder2014/home_server/domain/repository/webprojects"
+	"github.com/mcoder2014/home_server/domain/service/accounts"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,6 +31,15 @@ func RemoveRetiredReleases(conf *config.WebProjectsConfig, releases []*model.Web
 	store := repository.New()
 	var result error
 	for _, candidate := range releases {
+		if accounts.DatabaseMode() {
+			enabled, err := refreshCleanupConfig(conf)
+			if err != nil {
+				return errors.Join(result, err)
+			}
+			if !enabled {
+				return result
+			}
+		}
 		if candidate == nil || candidate.ProjectID <= 0 || candidate.ID <= 0 {
 			result = errors.Join(result, fmt.Errorf("%w: invalid retired release identity", ErrInvalid))
 			continue
@@ -70,10 +82,21 @@ func CleanupExpiredProjects(conf *config.WebProjectsConfig) error {
 	if conf == nil || conf.DeleteRetentionDays <= 0 || conf.StorageRoot == "" {
 		return ErrInvalid
 	}
-	if !conf.Enabled {
+	enabled, err := refreshCleanupConfig(conf)
+	if err != nil {
+		return err
+	}
+	if !enabled {
 		return nil
 	}
-	cutoff := time.Now().Add(-time.Duration(conf.DeleteRetentionDays) * 24 * time.Hour)
+	retention := conf.DeleteRetentionDays
+	if accounts.DatabaseMode() {
+		retention = config.Global().WebProjects.DeleteRetentionDays
+		if retention <= 0 {
+			retention = 7
+		}
+	}
+	cutoff := time.Now().Add(-time.Duration(retention) * 24 * time.Hour)
 	store := repository.New()
 	var result error
 	processedReleaseIDs := make(map[int64]struct{})
@@ -81,6 +104,15 @@ func CleanupExpiredProjects(conf *config.WebProjectsConfig) error {
 	var afterID int64
 	preparedProjects := 0
 	for preparedProjects < expiredProjectBatchSize {
+		if accounts.DatabaseMode() {
+			enabled, err := refreshCleanupConfig(conf)
+			if err != nil {
+				return errors.Join(result, err)
+			}
+			if !enabled {
+				return result
+			}
+		}
 		projects, err := store.ListExpiredProjects(cutoff, afterDeletedAt, afterID, expiredProjectBatchSize)
 		if err != nil {
 			result = errors.Join(result, fmt.Errorf("%w: list expired projects: %v", ErrDependency, err))
@@ -168,20 +200,38 @@ func SelectReleasesForPruning(releases []*model.WebProjectRelease, currentReleas
 	return retired, nil
 }
 
+var maintenanceOnce sync.Once
+
 func StartMaintenance(conf config.WebProjectsConfig) {
-	if !conf.Enabled {
-		return
-	}
-	go func() {
-		if err := CleanupExpiredProjects(&conf); err != nil {
-			logrus.WithError(err).Error("web project maintenance cleanup failed")
-		}
-		ticker := time.NewTicker(maintenanceCleanupInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			if err := CleanupExpiredProjects(&conf); err != nil {
-				logrus.WithError(err).Error("web project maintenance cleanup failed")
+	maintenanceOnce.Do(func() {
+		go func() {
+			for {
+				current := config.Runtime().WebProjects
+				if current.StorageRoot == "" && !accounts.DatabaseMode() {
+					current = conf
+				}
+				if err := CleanupExpiredProjects(&current); err != nil {
+					logrus.WithError(err).Error("web project maintenance cleanup failed")
+				}
+				timer := time.NewTimer(maintenanceCleanupInterval)
+				<-timer.C
 			}
-		}
-	}()
+		}()
+	})
+}
+
+func refreshCleanupConfig(conf *config.WebProjectsConfig) (bool, error) {
+	if !accounts.DatabaseMode() {
+		return conf.Enabled, nil
+	}
+	enabled, err := accounts.EnabledTx(db.MasterDB(), "web_projects", "cleanup_enabled", false)
+	if err != nil {
+		return false, ErrDependency
+	}
+	snapshot := config.Runtime().WebProjects
+	if snapshot.StorageRoot == "" || snapshot.DeleteRetentionDays <= 0 {
+		return false, ErrDependency
+	}
+	*conf = snapshot
+	return enabled, nil
 }

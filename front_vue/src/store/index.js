@@ -1,54 +1,70 @@
 import {createStore} from 'vuex'
-import '../global'
-import {config} from "@/global";
+import {config} from '@/global'
+const {accountsApi} = require('@/api/accounts.cjs')
+const {configureBrowserSession} = require('@/api/browser_client.cjs')
+
+// Remove browser credentials from the former login flow; identity is restored from the HttpOnly cookie.
+for (const key of ['token', 'user_name']) localStorage.removeItem(key)
+sessionStorage.removeItem('userInfo')
+let pendingSession = null
+let pendingSessionEpoch = -1
 
 const store = createStore({
     state: {
-        global: {
-            // 后端服务域名前缀
-            baseUrl: config.serverUrl
-        },
-
-        // 用户登录 token
-        token: '',
-        // 用户信息
-        userInfo: JSON.parse(sessionStorage.getItem("userInfo")),
-        // 扫码所得图书编码
+        global: {baseUrl: config.serverUrl},
+        userInfo: null,
+        sessionLoaded: false,
+        sessionEpoch: 0,
+        site: {title: 'CQ Home Server', notice: ''},
+        registration: {enabled: false, monthly_limit: 3, ttl_days: 7},
         isbn: '',
-
     },
     mutations: {
-        // set
-        SET_TOKEN: (state, token) => {
-            state.token = token
-            localStorage.setItem("token", token)
+        SET_USERINFO(state, user) {
+            state.sessionEpoch++
+            state.userInfo = user || null
+            state.sessionLoaded = true
         },
-        SET_USERINFO: (state, userInfo) => {
-            state.userInfo = userInfo
-            sessionStorage.setItem("userInfo", JSON.stringify(userInfo))
-        },
-        SET_ISBN: (state, isbn) => {
+        SET_ISBN(state, isbn) {
             state.isbn = isbn
-            localStorage.setItem("isbn", isbn)
+            localStorage.setItem('isbn', isbn)
         },
-        REMOVE_INFO: (state) => {
-            state.token = ''
-            state.userInfo = {}
+        SET_BOOTSTRAP(state, value) {
+            state.site = value.site || state.site
+            state.registration = value.registration || state.registration
+        },
+        REMOVE_INFO(state) {
+            state.sessionEpoch++
+            state.userInfo = null
+            state.sessionLoaded = true
             state.isbn = ''
-            localStorage.setItem("token", '')
-            sessionStorage.setItem("userInfo", JSON.stringify(''))
-        }
-
+        },
     },
-    getters: {
-        // get
-        getUser: state => {
-            return state.userInfo
-        }
-
+    getters: {getUser: state => state.userInfo},
+    actions: {
+        async refreshSession({commit, state}) {
+            if (!pendingSession || pendingSessionEpoch !== state.sessionEpoch) {
+                const epoch = state.sessionEpoch
+                const request = accountsApi.me().then(user => {
+                    if (epoch === state.sessionEpoch) commit('SET_USERINFO', user)
+                    return state.userInfo
+                }).catch(error => {
+                    if (epoch !== state.sessionEpoch) return state.userInfo
+                    commit('REMOVE_INFO')
+                    if (error.status === 401) return null
+                    throw error
+                }).finally(() => { if (pendingSession === request) pendingSession = null })
+                pendingSession = request
+                pendingSessionEpoch = epoch
+            }
+            return pendingSession
+        },
+        async loadBootstrap({commit}) {
+            const value = await accountsApi.bootstrap()
+            commit('SET_BOOTSTRAP', value)
+            return value
+        },
     },
-    actions: {},
-    modules: {}
 })
-
+configureBrowserSession(() => store.state.userInfo && store.state.userInfo.csrf_token || '', () => { store.commit('REMOVE_INFO'); window.dispatchEvent(new Event('account-session-expired')) })
 export default store

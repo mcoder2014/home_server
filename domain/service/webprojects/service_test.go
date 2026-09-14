@@ -47,6 +47,7 @@ func TestInitEnabledAppliesLimitsAndCreatesPrivateRoots(t *testing.T) {
 	require.Equal(t, os.FileMode(0700), info.Mode().Perm())
 }
 
+// TestCanReadProject 对照公开、已登录、所有者和指定成员模式，验证不同身份的网页读取权限。
 func TestCanReadProject(t *testing.T) {
 	tests := []struct {
 		name     string
