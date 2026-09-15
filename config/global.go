@@ -7,9 +7,12 @@ import (
 )
 
 type Config struct {
-	IdentitySource       string `json:"identity_source" yaml:"identity_source"`
-	ConfigSource         string `json:"config_source" yaml:"config_source"`
-	UploadHardLimitBytes int64  `json:"upload_hard_limit_bytes" yaml:"upload_hard_limit_bytes"`
+	Redis                RedisConfig     `json:"-" yaml:"redis"`
+	Cache                CacheConfig     `json:"-" yaml:"cache"`
+	Analytics            AnalyticsConfig `json:"-" yaml:"analytics"`
+	IdentitySource       string          `json:"identity_source" yaml:"identity_source"`
+	ConfigSource         string          `json:"config_source" yaml:"config_source"`
+	UploadHardLimitBytes int64           `json:"upload_hard_limit_bytes" yaml:"upload_hard_limit_bytes"`
 	// 服务相关配置
 	Server struct {
 		// http 服务端口号
@@ -92,6 +95,9 @@ func Global() Config {
 	globalConfigLock.RLock()
 	defer globalConfigLock.RUnlock()
 	result := globalConfig
+	if result.Cache.Namespaces != nil {
+		result.Cache.Namespaces = append([]string{}, result.Cache.Namespaces...)
+	}
 	result.Auth.SiteOrigins = append([]string(nil), result.Auth.SiteOrigins...)
 	result.Auth.TrustedProxyCIDRs = append([]string(nil), result.Auth.TrustedProxyCIDRs...)
 	return result
@@ -100,6 +106,9 @@ func Global() Config {
 // Normalize shared configuration before any router or service consumes it.
 // An unused/disabled module origin must not unexpectedly enable browser sessions.
 func SetGlobalConfig(c Config) {
+	if c.Cache.Namespaces != nil {
+		c.Cache.Namespaces = append([]string{}, c.Cache.Namespaces...)
+	}
 	if c.Auth.SiteOrigin == "" && c.WebProjects.Enabled {
 		c.Auth.SiteOrigin = c.WebProjects.SiteOrigin
 	}
@@ -117,6 +126,9 @@ func SetGlobalConfig(c Config) {
 func InitGlobalConfig(filepath string) error {
 	var loaded Config
 	if err := utils.BindConfig(filepath, &loaded); err != nil {
+		return err
+	}
+	if err := NormalizeInfrastructure(&loaded); err != nil {
 		return err
 	}
 	SetGlobalConfig(loaded)

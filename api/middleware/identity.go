@@ -102,6 +102,7 @@ func RequireHTTPS() gin.HandlerFunc {
 // conflicting headers never fall back to a user session. Application identity
 // is separate, but existing resource ownership uses its fixed owner UserID.
 func ResolveIdentity(c *gin.Context, scope string, allowSession, userOnly bool) (*utils.Principal, error) {
+	EnableReadSnapshot(c)
 	passportToken := c.GetHeader(HeaderKey)
 	authorization := c.GetHeader("Authorization")
 	if len(c.Request.Header.Values(HeaderKey)) > 1 || len(c.Request.Header.Values("Authorization")) > 1 || (passportToken != "" && authorization != "") {

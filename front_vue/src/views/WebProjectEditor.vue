@@ -180,6 +180,7 @@
           </section>
         </el-col>
       </el-row>
+      <WebProjectStats v-if="!isCreate && project.id && project.id === $route.params.id" :key="project.id" :project-id="project.id" />
     </main>
   </div>
 </template>
@@ -188,13 +189,14 @@
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {ArrowLeft, Refresh, UploadFilled} from '@element-plus/icons-vue'
 import MyHeader from '@/components/MyHeader'
+import WebProjectStats from '@/components/WebProjectStats.vue'
 
 const {webShareApi} = require('@/api/web_projects.cjs')
 const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projects_behavior.cjs')
 
 export default {
   name: 'WebShareEditor',
-  components: {MyHeader, ArrowLeft, Refresh, UploadFilled},
+  components: {MyHeader, WebProjectStats, ArrowLeft, Refresh, UploadFilled},
   // 初始化托管设置、成员选择、版本分页和上传状态，保留草稿表单与服务端项目状态的分别表示。
   data() {
     return {

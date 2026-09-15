@@ -250,6 +250,7 @@ func newHTTPFixture(t *testing.T, initialApplications ...bool) *httpFixture {
 	})
 	gormDB := db.MasterDB()
 	t.Cleanup(func() { accounts.Configure(nil); connection, _ := gormDB.DB(); connection.Close(); sqlDB.Close() })
+	configureFixtureReadCache(fixture)
 	return fixture
 }
 

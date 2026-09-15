@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api/middleware"
+	"github.com/mcoder2014/home_server/app/acceleration"
 	application "github.com/mcoder2014/home_server/app/webprojects"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
@@ -29,7 +31,7 @@ import (
 // login only; owner bans, moderation, module policy and path checks still apply.
 // serveProjectContent 处理 GET/HEAD /p/:slug 及其资源路径，只输出通过发布状态、可见性和安全路径检查的文件。
 func serveProjectContent(c *gin.Context) {
-	project, release, err := application.Default.GetPublishedProject(c.Param("slug"))
+	project, release, err := application.Default.GetPublishedProject(c.Param("slug"), ginfmt.RPCContext(c))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
@@ -115,11 +117,21 @@ func serveProjectContent(c *gin.Context) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	// Issue the independent visitor cookie only after access and file checks.
+	// Record after ServeContent so redirects/errors/Range responses are excluded.
+	runtime := acceleration.Current.Load()
+	visitor := ""
+	if runtime != nil && runtime.Analytics != nil && middleware.IsHTTPS(c) && isAnalyticsDocument(c.Request, requested, http.StatusOK) {
+		visitor, _ = analyticsVisitor(c)
+	}
 	c.Header("Content-Type", contentType)
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("ETag", `"`+strconv.FormatInt(release.ID, 10)+`-`+strconv.FormatInt(info.Size(), 10)+`-`+strconv.FormatInt(info.ModTime().UnixNano(), 10)+`"`)
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+	if visitor != "" && isAnalyticsDocument(c.Request, requested, c.Writer.Status()) {
+		runtime.Analytics.Record(project.ID, runtime.VisitorHash(project.ID, visitor), time.Now())
+	}
 }
 
 // downloadRelease 处理 GET /api/web-share/:id/releases/:release_id/download 及兼容入口：确认本人版本归属后生成下载包。

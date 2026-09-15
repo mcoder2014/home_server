@@ -40,6 +40,9 @@ func FormatWithError(c *gin.Context, err error) {
 
 func RPCContext(ginCtx *gin.Context) context.Context {
 	ctx := context.Background()
+	if ginCtx.Request != nil {
+		ctx = ginCtx.Request.Context()
+	}
 	if ginCtx.Keys != nil {
 		for key, val := range ginCtx.Keys {
 			ctx = context.WithValue(ctx, key, val)

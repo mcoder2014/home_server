@@ -54,7 +54,27 @@ func GetByID(ctx context.Context, id int64) (*model.UserAccount, error) {
 	if err != nil {
 		return nil, err
 	}
+	snapshot, _ := ctx.Value(readSnapshotKey{}).(*requestReadSnapshot)
+	if snapshot != nil {
+		snapshot.Lock()
+		defer snapshot.Unlock()
+		if cached, found := snapshot.users[id]; found {
+			if cached == nil {
+				return nil, nil
+			}
+			copy := *cached
+			return &copy, nil
+		}
+	}
 	user, err := dal.QueryAccount(database, id, false)
+	if err == nil && snapshot != nil {
+		if user == nil {
+			snapshot.users[id] = nil
+		} else {
+			copy := *user
+			snapshot.users[id] = &copy
+		}
+	}
 	return user, normalizeError(err)
 }
 
@@ -226,7 +246,7 @@ func CheckSession(ctx context.Context, token string, allowPasswordChange bool) (
 	if session == nil || session.IsExpired != 0 || !session.ExpireTime.After(time.Now()) {
 		return nil, nil, apperrors.ErrUnauthorized
 	}
-	user, err := dal.QueryAccount(database, session.UserID, false)
+	user, err := GetByID(ctx, session.UserID)
 	if err != nil {
 		return nil, nil, normalizeError(err)
 	}
@@ -300,5 +320,21 @@ func ModuleEnabled(ctx context.Context, namespace string) (bool, error) {
 	if db.MasterDB() == nil && config.Global().ConfigSource == "database" {
 		return false, apperrors.ErrDependency
 	}
-	return EnabledTx(db.MasterDB(), namespace, key, false)
+	snapshot, _ := ctx.Value(readSnapshotKey{}).(*requestReadSnapshot)
+	if snapshot != nil {
+		snapshot.Lock()
+		defer snapshot.Unlock()
+		if enabled, found := snapshot.modules[namespace]; found {
+			return enabled, nil
+		}
+	}
+	database := db.MasterDB()
+	if database != nil {
+		database = database.WithContext(ctx)
+	}
+	enabled, err := EnabledTx(database, namespace, key, false)
+	if err == nil && snapshot != nil {
+		snapshot.modules[namespace] = enabled
+	}
+	return enabled, err
 }

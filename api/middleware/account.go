@@ -108,6 +108,7 @@ func BrowserWrite() gin.HandlerFunc {
 func RequireAccount(admin, allowPasswordChange bool) gin.HandlerFunc {
 	// 逐请求验证用户会话与当前管理员角色，并将受限改密会话限定在允许的接口内。
 	return func(c *gin.Context) {
+		EnableReadSnapshot(c)
 		if !IsHTTPS(c) {
 			ginfmt.Fail(c, apperrors.ErrForbidden)
 			c.Abort()

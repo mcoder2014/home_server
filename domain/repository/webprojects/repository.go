@@ -1,6 +1,7 @@
 package webprojects
 
 import (
+	"context"
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
@@ -164,12 +165,16 @@ func (repository *Repository) FindRelease(projectID, releaseID int64) (*model.We
 
 // FindPublished resolves project and current release with two primary-key reads.
 // A concurrent publish can only expose an old or new complete release row.
-func (repository *Repository) FindPublished(slug string) (*model.WebProject, *model.WebProjectRelease, error) {
+func (repository *Repository) FindPublished(slug string, contexts ...context.Context) (*model.WebProject, *model.WebProjectRelease, error) {
+	ctx := context.Background()
+	if len(contexts) > 0 && contexts[0] != nil {
+		ctx = contexts[0]
+	}
 	project, err := dal.QueryWebProjectBySlug(slug)
 	if err != nil || project == nil || project.CurrentReleaseID == nil {
 		return project, nil, err
 	}
-	release, err := dal.QueryWebProjectRelease(project.ID, *project.CurrentReleaseID)
+	release, err := dal.QueryPublishedWebProjectRelease(ctx, project.ID, *project.CurrentReleaseID, project.OwnerUserID)
 	return project, release, err
 }
 
@@ -186,20 +191,33 @@ func (repository *Repository) FindProjectOwnerReferences(projectIDs []int64) ([]
 }
 
 func (repository *Repository) CompareAndSwapReleaseStorageKey(releaseID, projectID, uploadedBy int64, oldStorageKey, newStorageKey string) (bool, error) {
-	return dal.CompareAndSwapWebProjectReleaseStorageKey(releaseID, projectID, uploadedBy, oldStorageKey, newStorageKey)
+	updated, err := dal.CompareAndSwapWebProjectReleaseStorageKey(releaseID, projectID, uploadedBy, oldStorageKey, newStorageKey)
+	if err == nil && updated {
+		dal.InvalidateWebReleaseCache(context.Background(), projectID, releaseID)
+	}
+	return updated, err
 }
 
 // Transaction exposes only web-project persistence operations. App services can
 // keep locks around rule evaluation without importing GORM or calling DAL.
 func (repository *Repository) Transaction(run func(*Transaction) error) error {
-	return db.MasterDB().Transaction(func(tx *gorm.DB) error {
-		return run(&Transaction{database: tx})
+	transaction := &Transaction{}
+	err := db.MasterDB().Transaction(func(tx *gorm.DB) error {
+		transaction.database = tx
+		return run(transaction)
 	})
+	if err == nil {
+		for _, release := range transaction.invalidatedReleases {
+			dal.InvalidateWebReleaseCache(context.Background(), release[0], release[1])
+		}
+	}
+	return err
 }
 
 type Transaction struct {
-	database   *gorm.DB
-	principals []*utils.Principal
+	database            *gorm.DB
+	principals          []*utils.Principal
+	invalidatedReleases [][2]int64
 }
 
 func (tx *Transaction) LockOwnedProject(ownerUserID, projectID int64, principals ...*utils.Principal) (*model.WebProject, error) {
@@ -226,7 +244,13 @@ func (tx *Transaction) MarkReleasesDeleting(projectID int64, releaseIDs []int64)
 	if err := checkWriteExpiry(tx.principals); err != nil {
 		return 0, err
 	}
-	return dal.MarkWebProjectReleasesDeleting(tx.database, projectID, releaseIDs, true)
+	count, err := dal.MarkWebProjectReleasesDeleting(tx.database, projectID, releaseIDs, true)
+	if err == nil && count > 0 {
+		for _, releaseID := range releaseIDs {
+			tx.invalidatedReleases = append(tx.invalidatedReleases, [2]int64{projectID, releaseID})
+		}
+	}
+	return count, err
 }
 
 func (tx *Transaction) CreateRelease(release *model.WebProjectRelease) error {
