@@ -107,8 +107,7 @@ func (r *Repository) StoreIssuedToken(ctx context.Context, application *model.Ap
 }
 
 func (r *Repository) GetTokenByDigest(ctx context.Context, digest []byte) (*model.ApplicationAccessToken, error) {
-	database := db.MasterDB().WithContext(ctx)
-	token, err := dal.QueryApplicationTokenByDigest(database, digest)
+	token, err := dal.QueryCachedApplicationTokenByDigest(ctx, digest)
 	return token, err
 }
 

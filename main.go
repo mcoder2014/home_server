@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mcoder2014/home_server/api/accounts"
+	"github.com/mcoder2014/home_server/app/acceleration"
 	"github.com/mcoder2014/home_server/app/siteconfig"
 	"github.com/mcoder2014/home_server/domain/service"
 	"github.com/mcoder2014/home_server/domain/service/webprojects"
@@ -63,6 +64,9 @@ func main() {
 		panic(fmt.Errorf("runtime configuration unavailable: %w", err))
 	}
 	accounts.Configure(runtimeService)
+	if _, err := acceleration.Initialize(config.Global(), db.MasterDB()); err != nil {
+		panic(fmt.Errorf("Redis/analytics initialization: %w", err))
+	}
 	r := route.InitRoute()
 	runtimeService.Start(context.Background())
 	webprojects.StartMaintenance(config.Runtime().WebProjects)
@@ -102,6 +106,13 @@ func exitHandle(exitChan chan os.Signal) {
 		select {
 		case sig := <-exitChan:
 			logrus.Infof("Get Signal: %v from sys, stop program", sig)
+			if runtime := acceleration.Current.Load(); runtime != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				if err := runtime.Close(ctx); err != nil {
+					logrus.WithError(err).Warn("analytics shutdown incomplete")
+				}
+				cancel()
+			}
 			time.Sleep(1 * time.Second)
 			os.Exit(1) //如果ctrl+c 关不掉程序，使用os.Exit强行关掉
 		}

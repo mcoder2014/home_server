@@ -54,3 +54,30 @@ auth:
   trusted_proxy_cidrs:
     - 127.0.0.1/32
     - ::1/128
+
+# Optional, disposable read caches. Redis unavailability falls back to MySQL.
+# Do not expose Redis on the public network or place credentials in this example.
+redis:
+  enabled: false
+  address: '127.0.0.1:6379'
+  db: 0
+  username: ''
+  password_file: ''
+  key_prefix: 'hs:prod'
+  dial_timeout_ms: 200
+  command_timeout_ms: 20
+  pool_size: 8
+cache:
+  enabled: false
+  namespaces: [book, book_address, web_release, app_token]
+analytics:
+  # Requires the additive stats migration and a private HMAC key. Redis scripts
+  # are never used; evicted working data is restored from the latest SQL snapshot.
+  # Read docs/redis-cache-analytics.md before enabling. No startup DDL is run.
+  enabled: false
+  timezone: 'Asia/Shanghai'
+  retention_days: 90
+  hot_days: 3
+  flush_interval_seconds: 60
+  queue_size: 4096
+  visitor_hmac_key_file: ''
