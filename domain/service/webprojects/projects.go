@@ -42,6 +42,7 @@ var (
 )
 
 type ProjectView struct {
+	ContainerMode    string     `json:"container_mode"`
 	ID               string     `json:"id"`
 	ModerationStatus string     `json:"moderation_status"`
 	ModerationReason string     `json:"moderation_reason"`
@@ -60,6 +61,7 @@ type ProjectView struct {
 }
 
 type CreateProjectInput struct {
+	ContainerMode   string   `json:"container_mode"`
 	Name            string   `json:"name"`
 	Description     string   `json:"description"`
 	Slug            string   `json:"slug"`
@@ -69,6 +71,7 @@ type CreateProjectInput struct {
 }
 
 type UpdateProjectInput struct {
+	ContainerMode *string   `json:"container_mode"`
 	Name          *string   `json:"name"`
 	Description   *string   `json:"description"`
 	Slug          *string   `json:"slug"`

@@ -17,7 +17,7 @@ const (
 	WebProjectReleaseTable = "web_project_release"
 )
 
-var projectColumns = []string{"id", "owner_user_id", "name", "description", "slug", "access_mode", "status", "current_release_id", "revision", "client_request_id", "deleted_at", "create_time", "update_time"}
+var projectColumns = []string{"container_mode", "id", "owner_user_id", "name", "description", "slug", "access_mode", "status", "current_release_id", "revision", "client_request_id", "deleted_at", "create_time", "update_time"}
 var releaseColumns = []string{"id", "project_id", "uploaded_by", "storage_key", "status", "entry_file", "sha256", "file_count", "total_bytes", "idempotency_key", "extra", "create_time", "update_time"}
 
 // WebProjectColumns preserves the legacy schema until database identity mode

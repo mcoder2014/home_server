@@ -34,7 +34,7 @@ func TestReadCacheRepositoryChanges(t *testing.T) {
 	var actual string
 	require.NoError(t, database.Raw("SELECT DATABASE()").Scan(&actual).Error)
 	require.Equal(t, parsed.DBName, actual)
-	require.NoError(t, database.Exec("CREATE TABLE IF NOT EXISTS web_project (id BIGINT PRIMARY KEY,owner_user_id BIGINT,name VARCHAR(256),description TEXT,slug VARCHAR(256),access_mode TINYINT,status TINYINT,current_release_id BIGINT,revision BIGINT,client_request_id VARCHAR(256),deleted_at DATETIME(6),create_time DATETIME(6),update_time DATETIME(6),UNIQUE KEY uk_slug(slug))").Error)
+	require.NoError(t, database.Exec("CREATE TABLE IF NOT EXISTS web_project (id BIGINT PRIMARY KEY,container_mode VARCHAR(16) NOT NULL DEFAULT 'raw',owner_user_id BIGINT,name VARCHAR(256),description TEXT,slug VARCHAR(256),access_mode TINYINT,status TINYINT,current_release_id BIGINT,revision BIGINT,client_request_id VARCHAR(256),deleted_at DATETIME(6),create_time DATETIME(6),update_time DATETIME(6),UNIQUE KEY uk_slug(slug))").Error)
 	require.NoError(t, database.Exec("CREATE TABLE IF NOT EXISTS web_project_release (id BIGINT PRIMARY KEY,project_id BIGINT,uploaded_by BIGINT,storage_key VARCHAR(512),status TINYINT,entry_file VARCHAR(2048),sha256 VARCHAR(64),file_count INT,total_bytes BIGINT,idempotency_key VARCHAR(256),extra TEXT,create_time DATETIME(6),update_time DATETIME(6),KEY idx_project(project_id,id))").Error)
 	require.Equal(t, "127.0.0.1:16389", os.Getenv("HOME_SERVER_TEST_REDIS_ADDR"))
 	raw := redis.NewClient(&redis.Options{Addr: "127.0.0.1:16389", MaxRetries: -1, ContextTimeoutEnabled: true})

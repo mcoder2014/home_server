@@ -204,6 +204,8 @@ export default {
       },
       statusText: {enabled: '已启用', disabled: '已停用', revoked: '已永久吊销'},
       scopeOptions: [
+        {name: 'web-comments:read', resource: 'web-comments', action: 'read', label: '网页评论 · 读取', description: '读取可见网页的评论与历史'},
+        {name: 'web-comments:write', resource: 'web-comments', action: 'write', label: '网页评论 · 写入', description: '创建、回复、解决和重开评论'},
         {name: 'web-projects:read', resource: 'web-projects', action: 'read', label: '网页托管 · 读取', description: '查看托管内容与版本'},
         {name: 'web-projects:write', resource: 'web-projects', action: 'write', label: '网页托管 · 写入', description: '可发布、修改和删除托管内容'},
         {name: 'library:read', resource: 'library', action: 'read', label: '家庭藏书 · 读取', description: '查看图书信息'},

@@ -7,7 +7,6 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,7 +21,6 @@ import (
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
-	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
@@ -33,7 +31,11 @@ import (
 func serveProjectContent(c *gin.Context) {
 	project, release, err := application.Default.GetPublishedProject(c.Param("slug"), ginfmt.RPCContext(c))
 	if err != nil {
-		ginfmt.Fail(c, err)
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrForbidden) {
+			contentNotFound(c)
+		} else {
+			ginfmt.Fail(c, err)
+		}
 		return
 	}
 	userID := int64(0)
@@ -43,20 +45,11 @@ func serveProjectContent(c *gin.Context) {
 		if loginErr == nil {
 			userID = principal.UserID
 		} else {
-			if !errors.Is(loginErr, service.ErrUnauthorized) || explicitCredentials {
+			if errors.Is(loginErr, service.ErrDependency) {
 				ginfmt.Fail(c, loginErr)
-				return
+			} else {
+				contentNotFound(c)
 			}
-			utils.ClearBrowserSession(c)
-			if isDocumentNavigation(c.Request.Method, c.Request.URL.Path, c.GetHeader("Accept")) {
-				target := c.Request.URL.RequestURI()
-				if validateProjectTarget(target) == nil {
-					c.Header("Cache-Control", "no-store")
-					c.Redirect(http.StatusFound, "/web-share/open?target="+url.QueryEscape(target))
-					return
-				}
-			}
-			ginfmt.Fail(c, service.ErrUnauthorized)
 			return
 		}
 	}
@@ -69,7 +62,7 @@ func serveProjectContent(c *gin.Context) {
 		}
 	}
 	if !service.CanReadProject(project.AccessMode, project.OwnerUserID, userID, isMember) {
-		ginfmt.Fail(c, service.ErrNotFound)
+		contentNotFound(c)
 		return
 	}
 	if c.GetHeader("Service-Worker") != "" {
@@ -128,7 +121,14 @@ func serveProjectContent(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("ETag", `"`+strconv.FormatInt(release.ID, 10)+`-`+strconv.FormatInt(info.Size(), 10)+`-`+strconv.FormatInt(info.ModTime().UnixNano(), 10)+`"`)
-	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+	if project.ContainerMode == "enhanced" && (strings.EqualFold(filepath.Ext(requested), ".html") || strings.EqualFold(filepath.Ext(requested), ".htm")) {
+		if err := serveEnhancedHTML(c, file, info, project, release); err != nil {
+			ginfmt.Fail(c, service.ErrDependency)
+			return
+		}
+	} else {
+		http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
+	}
 	if visitor != "" && isAnalyticsDocument(c.Request, requested, c.Writer.Status()) {
 		runtime.Analytics.Record(project.ID, runtime.VisitorHash(project.ID, visitor), time.Now())
 	}

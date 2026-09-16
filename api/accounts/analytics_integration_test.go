@@ -87,6 +87,10 @@ func TestHTTPAnalyticsCountsOnlyDocumentsAndKeepsRevocation(t *testing.T) {
 	member := f.login(f.member, integrationPassword)
 	project, _ := f.privatePage(member)
 	id := project["id"].(string)
+	// Enhanced HTML is generated per response and deliberately ignores a stale
+	// conditional validator. Keep this analytics case on raw delivery because it
+	// explicitly verifies the existing 304 accounting path.
+	project = requireSuccess(t, f.request("PATCH", "/api/web-share/"+id, member, map[string]interface{}{"container_mode": "raw"}, map[string]string{"If-Match": strconv.FormatInt(number(project["revision"]), 10)}))
 	numericID, _ := strconv.ParseInt(id, 10, 64)
 	ddl, err := migrations.SQL.ReadFile("20260914_web_project_stats.sql")
 	if err != nil {

@@ -53,6 +53,13 @@ func New(repository *repository.Repository) *Application {
 // the project and members in one transaction. A repeated request returns only an
 // exactly matching aggregate; a reused key with different input is a conflict.
 func (application *Application) CreateProject(ownerUserID int64, input service.CreateProjectInput, principals ...*utils.Principal) (*service.ProjectView, error) {
+	containerModeProvided := input.ContainerMode != ""
+	if input.ContainerMode == "" {
+		input.ContainerMode = "enhanced"
+	}
+	if input.ContainerMode != "raw" && input.ContainerMode != "enhanced" {
+		return nil, service.ErrInvalid
+	}
 	input.Name = strings.TrimSpace(input.Name)
 	memberIDs, err := service.ValidateProjectInput(input.Name, input.Description, input.Slug, input.AccessMode, input.MemberUserIDs, true)
 	if err != nil {
@@ -71,7 +78,7 @@ func (application *Application) CreateProject(ownerUserID int64, input service.C
 		}
 		if existing != nil {
 			view := projectView(existing)
-			if existing.Project.Name != input.Name || existing.Project.Description != input.Description || existing.Project.Slug != input.Slug || existing.Project.AccessMode.String() != input.AccessMode || !service.SameMemberIDs(view.MemberUserIDs, input.MemberUserIDs) {
+			if (containerModeProvided && existing.Project.ContainerMode != input.ContainerMode) || existing.Project.Name != input.Name || existing.Project.Description != input.Description || existing.Project.Slug != input.Slug || existing.Project.AccessMode.String() != input.AccessMode || !service.SameMemberIDs(view.MemberUserIDs, input.MemberUserIDs) {
 				return nil, service.ErrConflict
 			}
 			return view, nil
@@ -83,7 +90,7 @@ func (application *Application) CreateProject(ownerUserID int64, input service.C
 	}
 	accessMode, _ := model.ParseWebProjectAccess(input.AccessMode)
 	now := time.Now()
-	project := &model.WebProject{ID: projectID, OwnerUserID: ownerUserID, Name: input.Name, Description: input.Description, Slug: input.Slug, AccessMode: accessMode, Status: service.ProjectStatusDraft, Revision: 1, CreateTime: now, UpdateTime: now}
+	project := &model.WebProject{ContainerMode: input.ContainerMode, ID: projectID, OwnerUserID: ownerUserID, Name: input.Name, Description: input.Description, Slug: input.Slug, AccessMode: accessMode, Status: service.ProjectStatusDraft, Revision: 1, CreateTime: now, UpdateTime: now}
 	if input.ClientRequestID != "" {
 		project.ClientRequestID = &input.ClientRequestID
 	}
@@ -181,6 +188,12 @@ func (application *Application) UpdateProject(ownerUserID, projectID, revision i
 	}
 	accessMode, _ := model.ParseWebProjectAccess(mode)
 	fields := map[string]interface{}{"name": name, "description": description, "slug": slug, "access_mode": accessMode, "revision": gorm.Expr("revision + 1"), "update_time": time.Now()}
+	if input.ContainerMode != nil {
+		if *input.ContainerMode != "raw" && *input.ContainerMode != "enhanced" {
+			return nil, service.ErrInvalid
+		}
+		fields["container_mode"] = *input.ContainerMode
+	}
 	updated, err := application.repository.Update(ownerUserID, projectID, revision, fields, memberIDs, principals...)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -539,7 +552,7 @@ func (application *Application) EligibleUsers() ([]service.EligibleUser, error) 
 
 func projectView(aggregate *repository.ProjectAggregate) *service.ProjectView {
 	project := aggregate.Project
-	view := &service.ProjectView{ModerationStatus: project.ModerationStatus, ModerationReason: project.ModerationReason, PurgeAfter: project.PurgeAfter, ID: strconv.FormatInt(project.ID, 10), Name: project.Name, Description: project.Description, Slug: project.Slug, AccessMode: project.AccessMode.String(), Status: project.Status.String(), Revision: project.Revision, MemberUserIDs: int64sToStrings(aggregate.MemberIDs), URL: "/p/" + project.Slug + "/", CreateTime: project.CreateTime, UpdateTime: project.UpdateTime}
+	view := &service.ProjectView{ContainerMode: project.ContainerMode, ModerationStatus: project.ModerationStatus, ModerationReason: project.ModerationReason, PurgeAfter: project.PurgeAfter, ID: strconv.FormatInt(project.ID, 10), Name: project.Name, Description: project.Description, Slug: project.Slug, AccessMode: project.AccessMode.String(), Status: project.Status.String(), Revision: project.Revision, MemberUserIDs: int64sToStrings(aggregate.MemberIDs), URL: "/p/" + project.Slug + "/", CreateTime: project.CreateTime, UpdateTime: project.UpdateTime}
 	if project.CurrentReleaseID != nil {
 		view.CurrentReleaseID = strconv.FormatInt(*project.CurrentReleaseID, 10)
 	}

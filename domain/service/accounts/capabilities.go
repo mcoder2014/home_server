@@ -69,9 +69,6 @@ func LockApplicationOwnerTx(tx *gorm.DB, id int64, scopes []string, requireEnabl
 // It locks the application and compares the originally authenticated snapshot,
 // so rotate, revoke and disable-enable cannot revive an in-flight write.
 func RequireApplicationSnapshotTx(tx *gorm.DB, principal *utils.Principal, scope string) error {
-	if !DatabaseMode() {
-		return nil
-	}
 	if principal == nil || principal.Kind != "application" || principal.UserID <= 0 || principal.ApplicationID <= 0 || principal.ApplicationRevision <= 0 || principal.SecretVersion <= 0 {
 		return apperrors.ErrUnauthorized
 	}

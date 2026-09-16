@@ -45,6 +45,13 @@
                   <el-radio label="public">所有人可见</el-radio>
                 </el-radio-group>
               </el-form-item>
+              <el-form-item label="页面容器" prop="container_mode">
+                <el-radio-group v-model="form.container_mode" class="access-options">
+                  <el-radio-button label="enhanced">增强容器</el-radio-button>
+                  <el-radio-button label="raw">原始页面</el-radio-button>
+                </el-radio-group>
+                <div class="field-help">增强容器提供固定菜单和评论；兼容性异常时可切回原始页面，已有评论不会删除。</div>
+              </el-form-item>
               <el-alert
                 v-if="form.access_mode === 'public'"
                 title="任何人都能访问托管内容中的 HTML、脚本、图片和附件。"
@@ -210,6 +217,7 @@ export default {
         description: '',
         slug: '',
         access_mode: 'owner',
+        container_mode: 'enhanced',
         member_user_ids: [],
       },
       rules: {
@@ -277,6 +285,7 @@ export default {
         description: project.description || '',
         slug: project.slug,
         access_mode: project.access_mode,
+        container_mode: project.container_mode || 'raw',
         member_user_ids: project.member_user_ids || [],
       }
     },
@@ -317,6 +326,7 @@ export default {
         description: this.form.description.trim(),
         slug: this.form.slug.trim(),
         access_mode: this.form.access_mode,
+        container_mode: this.form.container_mode,
         member_user_ids: this.form.access_mode === 'members' ? this.form.member_user_ids : [],
       }
     },

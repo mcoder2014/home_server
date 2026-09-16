@@ -72,6 +72,11 @@ func CSRFToken(token string) string {
 	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
+func ScopedCSRFToken(token, scope string) string {
+	digest := sha256.Sum256([]byte("home-server-csrf-v1:" + scope + ":" + token))
+	return base64.RawURLEncoding.EncodeToString(digest[:])
+}
+
 func BrowserOriginAllowed(request *http.Request) bool {
 	origins := request.Header.Values("Origin")
 	if len(origins) != 1 || origins[0] == "" {
@@ -87,6 +92,17 @@ func BrowserOriginAllowed(request *http.Request) bool {
 }
 
 func BrowserWrite() gin.HandlerFunc {
+	return browserWrite("")
+}
+
+// BrowserScopedWrite accepts the existing browser CSRF token for compatibility
+// or a token that can authorize only this endpoint family. Hosted pages receive
+// the scoped form so they never learn the account-wide write token.
+func BrowserScopedWrite(scope string) gin.HandlerFunc {
+	return browserWrite(scope)
+}
+
+func browserWrite(scope string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !IsHTTPS(c) || !BrowserOriginAllowed(c.Request) {
 			ginfmt.Fail(c, apperrors.ErrForbidden)
@@ -94,7 +110,12 @@ func BrowserWrite() gin.HandlerFunc {
 			return
 		}
 		token := c.GetString(utils.CtxKeyLoginToken)
-		if token != "" && (len(c.Request.Header.Values("X-CSRF-Token")) != 1 || subtle.ConstantTimeCompare([]byte(c.GetHeader("X-CSRF-Token")), []byte(CSRFToken(token))) != 1) {
+		provided := c.GetHeader("X-CSRF-Token")
+		valid := subtle.ConstantTimeCompare([]byte(provided), []byte(CSRFToken(token))) == 1
+		if scope != "" {
+			valid = valid || subtle.ConstantTimeCompare([]byte(provided), []byte(ScopedCSRFToken(token, scope))) == 1
+		}
+		if token != "" && (len(c.Request.Header.Values("X-CSRF-Token")) != 1 || !valid) {
 			ginfmt.Fail(c, apperrors.WithMessage(apperrors.ErrForbidden, "请刷新页面后重试"))
 			c.Abort()
 			return
@@ -174,7 +195,7 @@ func AuthorizeCapability(ctx context.Context, principal *utils.Principal, scope 
 		module = "library"
 	} else if strings.HasPrefix(scope, "webdav:") {
 		module = "webdav"
-	} else if strings.HasPrefix(scope, "web-projects:") {
+	} else if strings.HasPrefix(scope, "web-projects:") || strings.HasPrefix(scope, "web-comments:") {
 		module = "web_projects"
 	}
 	if module == "" {

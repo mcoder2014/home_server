@@ -537,6 +537,145 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
         self.assertNotIn(ACCESS_KEY, rendered)
         self.assertNotIn(SECRET_KEY, rendered)
 
+    def test_comment_create_dry_run_validates_files_without_rendering_body(self):
+        config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)
+        body = self.fixture_root / "comment.txt"
+        marker = "private-comment-body-marker"
+        body.write_text(marker, encoding="utf-8")
+        anchor = self.fixture_root / "anchor.json"
+        anchor.write_text(json.dumps({
+            "kind": "text",
+            "target_id": "intro-section",
+            "exact": "需要核对的原文",
+            "page_id": "guide-page",
+        }), encoding="utf-8")
+
+        completed = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "--dry-run",
+            "comment-create", "12",
+            "--page", "index.html",
+            "--anchor-file", str(anchor),
+            "--body-file", str(body),
+            "--release", "31",
+            "--request-id", "comment-create-1",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)["result"]
+        self.assertEqual(result["method"], "POST")
+        self.assertEqual(result["path"], "/api/web-share/12/comment-threads")
+        self.assertEqual(result["request_id"], "comment-create-1")
+        self.assertEqual(result["anchor_kind"], "text")
+        self.assertEqual(result["body_characters"], len(marker))
+        self.assertNotIn(marker, completed.stdout)
+
+        anchor.write_text(json.dumps({"kind": "module", "target_id": "bad_ID"}), encoding="utf-8")
+        rejected = self.run_cli(
+            config,
+            "--endpoint", "internal",
+            "--dry-run",
+            "comment-create", "12",
+            "--page", "index.html",
+            "--anchor-file", str(anchor),
+            "--body-file", str(body),
+            "--release", "31",
+            "--request-id", "comment-create-2",
+        )
+        self.assert_json_error(rejected)
+
+    def test_comment_reads_all_pages_and_write_is_read_back_by_request_id(self):
+        thread = {
+            "id": "90", "project_id": "12", "release_id": "31", "page_key": "path:index.html",
+            "page_path": "index.html", "anchor": {"kind": "page"}, "status": "open", "revision": 2,
+        }
+
+        def responder(request):
+            parsed = urllib.parse.urlsplit(request["path"])
+            query = urllib.parse.parse_qs(parsed.query)
+            if parsed.path == "/api/auth/token":
+                return token_response()
+            self.assertEqual(request["headers"].get("authorization"), f"Bearer {ACCESS_TOKEN}")
+            if request["method"] == "GET" and parsed.path == "/api/web-share/12/comment-threads":
+                if query.get("cursor") == ["90"]:
+                    return success({"items": [dict(thread, id="80")], "has_more": False, "next_cursor": ""})
+                return success({"items": [thread], "has_more": True, "next_cursor": "90"})
+            if request["method"] == "GET" and parsed.path == "/api/web-share/12/comment-threads/90":
+                return success(thread)
+            if request["method"] == "GET" and parsed.path == "/api/web-share/12/comment-threads/90/events":
+                if query.get("request_id") == ["reply-1"]:
+                    self.assertNotIn("after_seq", query)
+                    return success({
+                        "items": [{"sequence": 2, "kind": "reply", "body": "reply body", "request_id": "reply-1"}],
+                        "has_more": False, "next_cursor": "", "next_seq": "",
+                    })
+                if query.get("after_seq") == ["1"]:
+                    return success({
+                        "items": [{"sequence": 2, "kind": "reply", "body": "reply body"}],
+                        "has_more": False, "next_cursor": "", "next_seq": "",
+                    })
+                self.assertNotIn("after_seq", query)
+                return success({
+                    "items": [{"sequence": 1, "kind": "comment", "body": "first"}],
+                    "has_more": True, "next_cursor": "1", "next_seq": "1",
+                })
+            if request["method"] == "POST" and parsed.path == "/api/web-share/12/comment-threads/90/replies":
+                self.assertEqual(json.loads(request["body"]), {"request_id": "reply-1", "release_id": "31", "body": "reply body"})
+                return success(thread)
+            return ResponseSpec(404, {"code": 404, "message": "unexpected request"})
+
+        with LocalHTTPSServer(self.server_certificate, self.server_key, responder) as server:
+            config = self.write_config(server.origin, endpoint="internal")
+            listed = self.run_cli(config, "--endpoint", "internal", "comments", "12", "--limit", "1")
+            self.assertEqual(listed.returncode, 0, listed.stderr)
+            listed_result = json.loads(listed.stdout)["result"]
+            self.assertEqual([item["id"] for item in listed_result["items"]], ["90", "80"])
+            self.assertEqual(listed_result["pages"], 2)
+
+            shown = self.run_cli(config, "--endpoint", "internal", "comment-show", "12", "90", "--limit", "1")
+            self.assertEqual(shown.returncode, 0, shown.stderr)
+            shown_result = json.loads(shown.stdout)["result"]
+            self.assertEqual([item["sequence"] for item in shown_result["events"]], [1, 2])
+            self.assertEqual(shown_result["pages"], 2)
+
+            body = self.fixture_root / "reply.txt"
+            body.write_text("reply body", encoding="utf-8")
+            replied = self.run_cli(
+                config, "--endpoint", "internal", "comment-reply", "12", "90",
+                "--body-file", str(body), "--release", "31", "--request-id", "reply-1",
+            )
+            self.assertEqual(replied.returncode, 0, replied.stderr)
+            reply_result = json.loads(replied.stdout)["result"]
+            self.assertEqual(reply_result["thread"]["id"], "90")
+            self.assertEqual(reply_result["event"]["request_id"], "reply-1")
+
+    def test_comment_state_and_reanchor_dry_run_build_exact_requests(self):
+        config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)
+        anchor = self.fixture_root / "anchor.json"
+        anchor.write_text(json.dumps({"kind": "module", "target_id": "route-map", "page_id": "guide-page"}), encoding="utf-8")
+        cases = [
+            (("comment-resolve", "12", "90", "--release", "31", "--revision", "2", "--request-id", "resolve-1"), "/resolve", "2"),
+            (("comment-reopen", "12", "90", "--release", "31", "--revision", "3", "--request-id", "reopen-1"), "/reopen", "3"),
+            ((
+                "comment-reanchor", "12", "90", "--page", "guide/index.html", "--anchor-file", str(anchor),
+                "--release", "32", "--revision", "4", "--request-id", "reanchor-1",
+            ), "/reanchor", "4"),
+        ]
+        for arguments, suffix, revision in cases:
+            with self.subTest(command=arguments[0]):
+                completed = self.run_cli(config, "--endpoint", "internal", "--dry-run", *arguments)
+                self.assertEqual(completed.returncode, 0, completed.stderr)
+                result = json.loads(completed.stdout)["result"]
+                self.assertEqual(result["method"], "POST")
+                self.assertTrue(result["path"].endswith(suffix))
+                self.assertEqual(result["revision"], revision)
+                self.assertIn(result["release_id"], {"31", "32"})
+                self.assertNotIn("body", result)
+        reanchor = json.loads(completed.stdout)["result"]
+        self.assertEqual(reanchor["anchor_kind"], "module")
+        self.assertEqual(reanchor["page"], "guide/index.html")
+
     # 验证成员列表与显式清空参数必须互斥且只用于 members 可见范围，合法清空计划输出空成员集合。
     def test_member_arguments_require_an_explicit_unambiguous_choice(self):
         config = self.write_config("https://localhost:1", endpoint="internal", with_credentials=False)

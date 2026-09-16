@@ -44,7 +44,7 @@ func moderationDatabase(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	database := db.MasterDB()
-	for _, table := range []string{"site_config_current", "site_config_history", "site_runtime_state", "application_access_token", "application", "user_account", "user_login_alias", "user_invitation", "admin_audit_log", "web_project_release", "web_project_member", "web_project", "login_token"} {
+	for _, table := range []string{"site_config_current", "site_config_history", "site_runtime_state", "application_access_token", "application", "user_account", "user_login_alias", "user_invitation", "admin_audit_log", "web_comment_event", "web_comment_thread", "web_project_release", "web_project_member", "web_project", "login_token"} {
 		if err := database.Exec("DROP TABLE IF EXISTS " + table).Error; err != nil {
 			t.Fatal(err)
 		}
@@ -52,7 +52,7 @@ func moderationDatabase(t *testing.T) *gorm.DB {
 	if err := database.Exec("CREATE TABLE login_token (id BIGINT NOT NULL,token VARCHAR(512),user_id BIGINT,is_expired INT,expire_time DATETIME)").Error; err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"20260909_web_projects.sql", "20260912_applications.sql", "20260913_accounts.sql", "20260913_runtime_config.sql"} {
+	for _, name := range []string{"20260909_web_projects.sql", "20260912_applications.sql", "20260913_accounts.sql", "20260913_runtime_config.sql", "20260916_web_comments.sql"} {
 		raw, err := migrations.SQL.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)
