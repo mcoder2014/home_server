@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN" data-hs-comment-schema="1" data-hs-page-id="web-container-comments-spec">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>网页托管增强容器与评论能力</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#5e6879; --line:#dce3ee; --paper:#fff; --soft:#f4f7fb; --brand:#2456d6; --green:#12735a; --amber:#99631c; }
+    * { box-sizing: border-box; }
+    body { margin:0; color:var(--ink); background:#eef2f8; font:15px/1.72 system-ui,-apple-system,"Segoe UI","PingFang SC",sans-serif; }
+    .top { position:sticky; top:0; z-index:3; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:12px max(20px,calc((100vw - 1120px)/2)); color:#fff; background:#18243c; box-shadow:0 2px 14px #12203a24; }
+    .top strong { font-size:14px; letter-spacing:.02em; }
+    .top span { color:#cfd8e8; font-size:13px; }
+    main { width:min(1120px,calc(100% - 32px)); margin:28px auto 70px; }
+    .hero,.card { background:var(--paper); border:1px solid var(--line); border-radius:16px; box-shadow:0 8px 28px #15264a0c; }
+    .hero { padding:34px 38px; background:linear-gradient(135deg,#fff 35%,#edf3ff); }
+    h1 { margin:0 0 10px; font-size:clamp(28px,4vw,44px); line-height:1.2; letter-spacing:-.03em; }
+    h2 { margin:0 0 16px; font-size:22px; }
+    h3 { margin:22px 0 8px; font-size:17px; }
+    p { margin:8px 0; }
+    .lead { max-width:850px; color:#3d4a60; font-size:17px; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+    .tag { padding:5px 10px; border-radius:999px; background:#e6edff; color:#234cba; font-size:12px; font-weight:650; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:18px; }
+    .card { padding:26px 28px; }
+    .wide { grid-column:1/-1; }
+    .verdict { border-left:4px solid var(--green); }
+    .callout { margin:14px 0; padding:12px 14px; border-radius:10px; background:#eef8f5; color:#195c4c; }
+    .warning { background:#fff7e8; color:#714812; }
+    ul,ol { margin:8px 0 8px 22px; padding:0; }
+    li + li { margin-top:5px; }
+    table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border:1px solid var(--line); border-radius:10px; font-size:14px; }
+    th,td { padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    th { background:var(--soft); font-weight:700; }
+    tr:last-child td { border-bottom:0; }
+    code { padding:.1em .35em; border-radius:4px; background:#edf1f7; font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    pre { overflow:auto; margin:12px 0; padding:16px; border-radius:10px; color:#dbe7ff; background:#142036; }
+    pre code { padding:0; color:inherit; background:transparent; }
+    .diagram { overflow:auto; padding:18px; border:1px solid var(--line); border-radius:12px; background:#fbfcff; }
+    .diagram svg { display:block; min-width:760px; width:100%; height:auto; }
+    .step { display:grid; grid-template-columns:34px 1fr; gap:12px; align-items:start; margin:13px 0; }
+    .step b { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; color:#fff; background:var(--brand); }
+    .small { color:var(--muted); font-size:13px; }
+    footer { margin-top:22px; color:var(--muted); text-align:center; font-size:13px; }
+    @media (max-width:760px) { .grid{grid-template-columns:1fr}.wide{grid-column:auto}.hero,.card{padding:22px}.top{align-items:flex-start;flex-direction:column;gap:2px} main{width:min(100% - 20px,1120px);margin-top:10px} }
+  </style>
+</head>
+<body>
+  <header class="top" data-hs-comment-ignore>
+    <strong>home_server · 技术规格</strong>
+    <span>实现版 · 2026-09-16 · 仅所有者可见</span>
+  </header>
+  <main data-hs-comment-root>
+    <section class="hero" data-hs-comment-id="overview" data-hs-comment-kind="text">
+      <h1>网页托管增强容器与评论能力</h1>
+      <p class="lead">让托管服务作为统一主容器提供导航、登录状态和可追踪评论，同时把原网页的按钮、表单、地图、图表与播放器交互完整保留下来。</p>
+      <div class="meta" data-hs-comment-ignore>
+        <span class="tag">默认浏览</span><span class="tag">匿名隐藏评论</span><span class="tag">稳定 HTML 锚点</span><span class="tag">AK/SK 评论</span><span class="tag">跨版本定位</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card verdict" data-hs-comment-id="core-decision" data-hs-comment-kind="text">
+        <h2>核心判断</h2>
+        <p><strong>值得实现。</strong>网页评审所需的账号、权限、存储和升级属于宿主能力，不应由每个 HTML 重复实现。</p>
+        <div class="callout">主题保存当前与原始定位，事件保存不可变历史。两张表即可支持回复、解决、重开与重新关联。</div>
+      </section>
+      <section class="card" data-hs-comment-id="compatibility-principle" data-hs-comment-kind="text">
+        <h2>兼容原则</h2>
+        <p>新项目默认使用增强容器；已有项目迁移后保持 <code>raw</code>。增强模式只变换 HTML 响应，不修改已发布文件、下载内容或非 HTML 资源。</p>
+        <p>地图等交互模块只从侧栏选择，容器不增加透明遮罩、不代理手势，也不重建第三方实例。</p>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="architecture" data-hs-comment-kind="image" data-hs-comment-label="系统架构">
+        <h2>系统架构</h2>
+        <figure class="diagram">
+          <svg viewBox="0 0 980 330" role="img" aria-labelledby="arch-title arch-desc">
+            <title id="arch-title">网页增强容器架构</title>
+            <desc id="arch-desc">浏览器或应用通过 home_server 身份和权限层访问页面、容器运行时及评论服务，评论落入主题和事件两张表。</desc>
+            <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#50668c"/></marker></defs>
+            <g fill="none" stroke="#50668c" stroke-width="2" marker-end="url(#arrow)">
+              <path d="M190 90H315"/><path d="M495 90H610"/><path d="M700 128V205"/><path d="M495 240H610"/><path d="M190 240H315"/><path d="M405 128V205"/>
+            </g>
+            <g font-family="system-ui, sans-serif" text-anchor="middle">
+              <g><rect x="30" y="48" width="160" height="80" rx="13" fill="#eaf0ff" stroke="#8ca8eb"/><text x="110" y="82" font-size="17" font-weight="700" fill="#1b3d99">浏览器 / AK/SK</text><text x="110" y="106" font-size="13" fill="#4c5d78">访问与评论操作</text></g>
+              <g><rect x="315" y="48" width="180" height="80" rx="13" fill="#f2f5fa" stroke="#aab7ca"/><text x="405" y="82" font-size="17" font-weight="700" fill="#27364f">身份与项目 ACL</text><text x="405" y="106" font-size="13" fill="#4c5d78">404 / scope / CSRF</text></g>
+              <g><rect x="610" y="48" width="180" height="80" rx="13" fill="#eaf8f3" stroke="#75bba2"/><text x="700" y="82" font-size="17" font-weight="700" fill="#17634e">发布文件</text><text x="700" y="106" font-size="13" fill="#4c5d78">HTML 响应注入</text></g>
+              <g><rect x="315" y="205" width="180" height="80" rx="13" fill="#fff4df" stroke="#d7aa61"/><text x="405" y="239" font-size="17" font-weight="700" fill="#815216">评论服务</text><text x="405" y="263" font-size="13" fill="#4c5d78">幂等与状态机</text></g>
+              <g><rect x="610" y="205" width="180" height="80" rx="13" fill="#f5edff" stroke="#aa8bdb"/><text x="700" y="239" font-size="17" font-weight="700" fill="#5b348e">主题 + 事件</text><text x="700" y="263" font-size="13" fill="#4c5d78">当前状态与完整历史</text></g>
+              <g><rect x="30" y="205" width="160" height="80" rx="13" fill="#edf7ff" stroke="#86b7d9"/><text x="110" y="239" font-size="17" font-weight="700" fill="#285f84">容器运行时</text><text x="110" y="263" font-size="13" fill="#4c5d78">菜单、定位、侧栏</text></g>
+            </g>
+          </svg>
+        </figure>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="permission-matrix" data-hs-comment-kind="text">
+        <h2>访问与权限矩阵</h2>
+        <table>
+          <thead><tr><th>身份</th><th>页面</th><th>评论数据</th><th>写操作</th></tr></thead>
+          <tbody>
+            <tr><td>未登录</td><td>仅公开项目；其他返回真实 404</td><td>不加载、不显示入口</td><td>禁止</td></tr>
+            <tr><td>已登录可见用户</td><td>按 owner/members/authenticated/public</td><td>进入评论模式后可读</td><td>创建、回复；自己主题可解决/重开/重新关联</td></tr>
+            <tr><td>项目所有者</td><td>自己的项目</td><td>可读；停用后仍可查历史</td><td>可管理项目内任意主题</td></tr>
+            <tr><td>AK/SK 应用</td><td>继承所属用户 ACL</td><td><code>web-comments:read</code></td><td><code>web-comments:write</code>，遵循所属用户规则</td></tr>
+          </tbody>
+        </table>
+        <p class="small">托管页只取得评论专用 CSRF 摘要，不能取得账号级 CSRF Token。<code>web-projects:write</code> 不自动包含评论权限。</p>
+      </section>
+
+      <section class="card" data-hs-comment-id="container-menu" data-hs-comment-kind="text">
+        <h2>固定菜单与浏览状态</h2>
+        <ul>
+          <li>显示项目名称、登录显示名或“未登录”。</li>
+          <li>提供系统主页 <code>/</code> 与网页托管 <code>/web-share</code>。</li>
+          <li>已登录且有权时才显示评论按钮。</li>
+          <li>刷新、新标签、页面路由或账号变化后默认浏览。</li>
+          <li>浏览状态不加载评论正文、不监听文字选区。</li>
+        </ul>
+      </section>
+      <section class="card" data-hs-comment-id="comment-objects" data-hs-comment-kind="text">
+        <h2>可评论对象</h2>
+        <ul>
+          <li><strong>整页：</strong>稳定 page ID，旧页面回退到项目相对路径。</li>
+          <li><strong>文字：</strong>目标 ID + 原文 + 前后文。</li>
+          <li><strong>图片：</strong>从侧栏选择唯一 target ID。</li>
+          <li><strong>模块：</strong>从侧栏选择外层 target ID，保护内部交互。</li>
+        </ul>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="html-contract" data-hs-comment-kind="text">
+        <h2>建议的 HTML 标准</h2>
+        <p>当前 schema 为 <code>1</code>。页面和模块 ID 使用 1～96 位小写语义标识：<code>^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$</code>。同一 page ID 下 target ID 唯一。</p>
+        <pre><code>&lt;html data-hs-comment-schema="1" data-hs-page-id="trip-guide"&gt;
+  &lt;main data-hs-comment-root&gt;
+    &lt;section data-hs-comment-id="day-one-summary"
+             data-hs-comment-kind="text"&gt;
+      上午参观博物馆，下午沿河步行。
+    &lt;/section&gt;
+    &lt;figure data-hs-comment-id="route-map"
+            data-hs-comment-kind="module"
+            data-hs-comment-label="路线地图"
+            data-hs-comment-interaction="preserve"&gt;
+      &lt;div id="map-container"&gt;&lt;/div&gt;
+    &lt;/figure&gt;
+    &lt;form data-hs-comment-ignore&gt;...&lt;/form&gt;
+  &lt;/main&gt;
+&lt;/html&gt;</code></pre>
+        <table>
+          <thead><tr><th>属性</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>data-hs-comment-root</code></td><td>限定可定位正文区域。</td></tr>
+            <tr><td><code>data-hs-comment-id/kind/label</code></td><td>声明稳定对象及 text/image/module 类型和侧栏名称。</td></tr>
+            <tr><td><code>data-hs-comment-interaction="preserve"</code></td><td>把整棵子树视为业务交互保护区，只允许关联外层模块。</td></tr>
+            <tr><td><code>data-hs-comment-ignore</code></td><td>排除表单、敏感内容和不应参与评论的子树，优先级最高。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card" data-hs-comment-id="map-protection" data-hs-comment-kind="module" data-hs-comment-label="地图交互保护" data-hs-comment-interaction="preserve">
+        <h2>地图和组件保护</h2>
+        <p>评论标记不接收指针事件；地图、图表、播放器和编辑器没有透明覆盖层。用户从侧栏选择“路线地图”，评论绑定外层模块。</p>
+        <p>容器不调用 <code>destroy()</code>、不重建实例、不改写交互开关，也不抓取运行时 DOM。拖拽、滚轮/双指缩放、Marker、信息窗和工具条仍由原页面负责。</p>
+      </section>
+      <section class="card" data-hs-comment-id="relocation" data-hs-comment-kind="text">
+        <h2>重新发布后的定位</h2>
+        <ol>
+          <li>优先用 page ID；没有时用相对路径。</li>
+          <li>在唯一 target ID 内核对原文。</li>
+          <li>重复原文使用前后文消歧。</li>
+          <li>仍不唯一时不猜测，放入页尾。</li>
+          <li>路径型页面明确 404 才标记删除；稳定 page ID 的旧路径不可访问时保守提示“可能已改名或删除”。</li>
+        </ol>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="comment-history" data-hs-comment-kind="text">
+        <h2>主题、事件与并发</h2>
+        <table>
+          <thead><tr><th>结构</th><th>保存内容</th><th>关键约束</th></tr></thead>
+          <tbody>
+            <tr><td><code>web_comment_thread</code></td><td>当前/原始 release、page、anchor，状态、revision、作者快照</td><td>列表快速读取；状态为 open/resolved</td></tr>
+            <tr><td><code>web_comment_event</code></td><td>comment、reply、resolve、reopen、reanchor 完整历史</td><td><code>(thread_id, sequence)</code> 唯一</td></tr>
+          </tbody>
+        </table>
+        <p>回复也递增 revision。解决、重开和重新关联必须携带最新 <code>If-Match</code>，避免覆盖未读回复。事件的 <code>source_release_id</code> 记录调用方实际查看的页面版本。每次写操作带 <code>request_id</code>；同一身份与项目的相同请求返回原结果，参数变化返回冲突。</p>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="api-surface" data-hs-comment-kind="text">
+        <h2>API 与 Skill 能力</h2>
+        <table>
+          <thead><tr><th>能力</th><th>接口/命令</th></tr></thead>
+          <tbody>
+            <tr><td>上下文</td><td><code>GET /api/web-share/{id}/view-context</code></td></tr>
+            <tr><td>主题列表/详情</td><td><code>GET .../comment-threads</code>、<code>GET .../{thread_id}</code></td></tr>
+            <tr><td>事件历史</td><td><code>GET .../{thread_id}/events</code>，自动读取分页</td></tr>
+            <tr><td>创建/回复</td><td><code>comment-create</code>、<code>comment-reply</code></td></tr>
+            <tr><td>状态与位置</td><td><code>comment-resolve</code>、<code>comment-reopen</code>、<code>comment-reanchor</code></td></tr>
+          </tbody>
+        </table>
+        <p>正文从 UTF-8 普通文件读取，最多 4000 个 Unicode 字符。写结果未知时按原 <code>request_id</code> 查询，确认未执行后才能以完全相同参数重试。</p>
+      </section>
+
+      <section class="card" data-hs-comment-id="deployment" data-hs-comment-kind="text">
+        <h2>上线与回滚</h2>
+        <div class="step"><b>1</b><div>在隔离库验证并执行 <code>20260916_web_comments.sql</code>。</div></div>
+        <div class="step"><b>2</b><div>部署后端和前端，新建 enhanced 测试项目验收。</div></div>
+        <div class="step"><b>3</b><div>旧项目由所有者逐个从 raw 切换。</div></div>
+        <div class="callout warning">回滚时先将已切换项目改为 raw，再回滚二进制；保留评论表，避免丢失历史。</div>
+      </section>
+      <section class="card" data-hs-comment-id="verification" data-hs-comment-kind="text">
+        <h2>验收覆盖</h2>
+        <ul>
+          <li>Go 领域与 HTTP 集成测试。</li>
+          <li>前端 60 项回归与生产构建。</li>
+          <li>真实 Chromium：匿名、默认浏览、文字/图片/模块、窄屏、iframe、失锚。</li>
+          <li>Skill：分页、正文文件、幂等读回和 revision。</li>
+          <li>Pi 专用数据库、存储、配置和端口的隔离部署。</li>
+        </ul>
+      </section>
+
+      <section class="card wide" data-hs-comment-id="scope-boundaries" data-hs-comment-kind="text">
+        <h2>当前边界</h2>
+        <p>首版不支持地图内部 POI、经纬度或屏幕坐标评论；未标记旧 HTML 不猜测 canvas、iframe 或自定义组件内部结构。评论附件、@提醒、实时推送和多人在线光标不在当前数据模型中。</p>
+        <p>所有托管项目共享浏览器源，适用于本人和受信任维护者上传的代码。评论专用 CSRF 缩小了托管脚本可调用的平台写接口范围，但不构成恶意同源 JavaScript 的隔离沙箱。页面自带 CSP 时需允许同源容器脚本；无法调整的 nonce/hash 限定页面使用原始页面模式。</p>
+      </section>
+    </div>
+    <footer data-hs-comment-ignore>home_server · 网页托管增强容器与评论能力 · 实现版</footer>
+  </main>
+</body>
+</html>

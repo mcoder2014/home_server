@@ -6,6 +6,7 @@ import (
 )
 
 type WebProject struct {
+	ContainerMode    string           `json:"container_mode" gorm:"column:container_mode"`
 	ID               int64            `json:"id,string" gorm:"column:id"`
 	OwnerUserID      int64            `json:"-" gorm:"column:owner_user_id"`
 	Name             string           `json:"name" gorm:"column:name"`

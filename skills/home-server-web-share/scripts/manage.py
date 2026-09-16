@@ -7,12 +7,14 @@ import argparse
 import json
 import math
 import os
+import posixpath
 from pathlib import Path
 import re
 import socket
 import ssl
+import stat
 import sys
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 
 # Resolve the actual checkout when the skill is installed through a symlink.
 sys.dont_write_bytecode = True
@@ -29,6 +31,69 @@ MODES = ("owner", "members", "authenticated", "public")
 ENDPOINTS = ("auto", "internal", "external")
 CONFIG_ENV = "CQ_HOME_SERVER_SKILL_CONFIG"
 SLUG = re.compile(r"[a-z0-9][a-z0-9-]{1,254}[a-z0-9]\Z")
+STABLE_COMMENT_ID = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
+REQUEST_ID = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
+
+
+def read_regular_file(path, maximum_bytes, label):
+    path = path.expanduser().absolute()
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise api.ClientError(f"{label}文件不可读") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_size > maximum_bytes:
+        raise api.ClientError(f"{label}文件必须是大小受限的普通文件，不能使用符号链接")
+    try:
+        data = path.read_bytes()
+    except OSError as error:
+        raise api.ClientError(f"{label}文件不可读") from error
+    if len(data) > maximum_bytes:
+        raise api.ClientError(f"{label}文件过大")
+    return data
+
+
+def comment_page(value):
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > 2048 or "\\" in value or any(char in value for char in "\x00?#"):
+        raise argparse.ArgumentTypeError("--page 必须是项目内规范相对路径")
+    if value.startswith("/") or posixpath.normpath(value) != value or value.startswith("../"):
+        raise argparse.ArgumentTypeError("--page 必须是项目内规范相对路径")
+    return value
+
+
+def read_comment_body(path):
+    try:
+        text = read_regular_file(path, 16000, "评论正文").decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise api.ClientError("评论正文必须是 UTF-8") from error
+    if not text.strip() or len(text) > 4000:
+        raise api.ClientError("评论正文必须为 1 到 4000 个 Unicode 字符")
+    return text
+
+
+def read_anchor(path):
+    try:
+        value = json.loads(read_regular_file(path, 32768, "锚点").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise api.ClientError("锚点文件必须是有效 UTF-8 JSON") from error
+    allowed = {"kind", "target_id", "exact", "prefix", "suffix", "label", "page_id"}
+    if not isinstance(value, dict) or set(value) - allowed or not all(isinstance(item, str) for item in value.values()):
+        raise api.ClientError("锚点字段无效")
+    kind = value.get("kind")
+    target_id, page_id = value.get("target_id", ""), value.get("page_id", "")
+    if kind not in {"text", "image", "module", "page"}:
+        raise api.ClientError("锚点 kind 无效")
+    if target_id and (len(target_id) > 96 or not STABLE_COMMENT_ID.fullmatch(target_id)):
+        raise api.ClientError("锚点 target_id 无效")
+    if page_id and (len(page_id) > 96 or not STABLE_COMMENT_ID.fullmatch(page_id)):
+        raise api.ClientError("锚点 page_id 无效")
+    if kind == "text" and not value.get("exact", "").strip():
+        raise api.ClientError("文字锚点必须包含 exact")
+    if kind in {"image", "module"} and not target_id:
+        raise api.ClientError("图片或组件锚点必须包含稳定 target_id")
+    limits = {"exact": 4096, "prefix": 128, "suffix": 128, "label": 256}
+    if any(len(value.get(name, "")) > limit for name, limit in limits.items()):
+        raise api.ClientError("锚点文本超过长度限制")
+    return value
 
 
 class Parser(argparse.ArgumentParser):
@@ -49,6 +114,18 @@ def positive_id(value):
     return value
 
 
+def nonnegative_id(value):
+    if not re.fullmatch(r"[0-9]{1,19}", value) or int(value) > 2**63 - 1:
+        raise argparse.ArgumentTypeError("需要非负整数 sequence")
+    return value
+
+
+def request_id(value):
+    if not REQUEST_ID.fullmatch(value):
+        raise argparse.ArgumentTypeError("--request-id 应为 1 到 128 位字母、数字或 . _ : -")
+    return value
+
+
 # 定义网页管理子命令及所需 ID、修订号、请求幂等键和可见范围参数，支持仅输出离线计划。
 def parse_args(argv=None):
     parser = Parser(description=__doc__)
@@ -56,10 +133,18 @@ def parse_args(argv=None):
     parser.add_argument("--endpoint", choices=ENDPOINTS)
     parser.add_argument("--dry-run", action="store_true", help="离线校验并输出操作摘要，不读取凭证或发送请求")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("doctor", "users", "list", "show", "releases", "create", "upload", "publish", "disable", "visibility"):
+    for name in (
+        "doctor", "users", "list", "show", "releases", "create", "upload", "publish", "disable", "visibility",
+        "comments", "comment-show", "comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor",
+    ):
         command = commands.add_parser(name)
-        if name in {"show", "releases", "upload", "publish", "disable", "visibility"}:
+        if name in {
+            "show", "releases", "upload", "publish", "disable", "visibility", "comments", "comment-show", "comment-create",
+            "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor",
+        }:
             command.add_argument("id", type=positive_id)
+        if name in {"comment-show", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+            command.add_argument("thread_id", type=positive_id)
         if name in {"publish", "disable", "visibility"}:
             command.add_argument("--revision", type=positive_id, required=True)
         if name in {"list", "releases"}:
@@ -84,6 +169,26 @@ def parse_args(argv=None):
             command.add_argument("--release", type=positive_id, required=True)
         if name == "visibility":
             command.add_argument("--mode", choices=MODES, required=True)
+        if name == "comments":
+            command.add_argument("--cursor", type=positive_id)
+            command.add_argument("--limit", type=int, default=100)
+            command.add_argument("--status", choices=("all", "open", "resolved"), default="all")
+            command.add_argument("--request-id", type=request_id)
+        if name == "comment-show":
+            command.add_argument("--after-seq", type=nonnegative_id, default="0")
+            command.add_argument("--limit", type=int, default=100)
+        if name in {"comment-create", "comment-reanchor"}:
+            command.add_argument("--page", type=comment_page, required=True)
+            command.add_argument("--anchor-file", type=Path)
+            command.add_argument("--release", type=positive_id, required=True)
+        if name in {"comment-reply", "comment-resolve", "comment-reopen"}:
+            command.add_argument("--release", type=positive_id)
+        if name in {"comment-create", "comment-reply"}:
+            command.add_argument("--body-file", type=Path, required=True)
+        if name in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+            command.add_argument("--request-id", type=request_id, required=True)
+        if name in {"comment-resolve", "comment-reopen", "comment-reanchor"}:
+            command.add_argument("--revision", type=positive_id, required=True)
     return parser.parse_args(argv)
 
 
@@ -142,7 +247,7 @@ def build_operation(args):
         if args.command == "releases":
             path += "/releases"
         path += "?" + urlencode(query)
-    if hasattr(args, "request_id") and not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", args.request_id):
+    if getattr(args, "request_id", None) and not REQUEST_ID.fullmatch(args.request_id):
         raise api.ClientError("--request-id 应为 1 到 128 位字母、数字或 . _ : -")
     if args.command in {"create", "visibility"}:
         mode = args.visibility if args.command == "create" else args.mode
@@ -176,6 +281,51 @@ def build_operation(args):
         body, headers["Content-Type"] = api.build_multipart(args.file.expanduser(), args.entry_file)
         headers["Idempotency-Key"] = args.request_id
         summary.update(file=str(args.file.expanduser().absolute()), entry_file=args.entry_file, request_id=args.request_id, request_bytes=len(body))
+    if args.command == "comments":
+        if not 1 <= args.limit <= 100:
+            raise api.ClientError("--limit 必须在 1 到 100 之间")
+        query = {"limit": args.limit, "status": args.status}
+        if args.cursor:
+            query["cursor"] = args.cursor
+        if args.request_id:
+            query["request_id"] = args.request_id
+        path += "/comment-threads?" + urlencode(query)
+        summary.update(method="GET", path=path)
+    if args.command == "comment-show":
+        if not 1 <= args.limit <= 100:
+            raise api.ClientError("--limit 必须在 1 到 100 之间")
+        path += "/comment-threads/" + args.thread_id
+        summary.update(method="GET", path=path, after_seq=args.after_seq, limit=args.limit)
+    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+        method = "POST"
+        path += "/comment-threads"
+        if args.command != "comment-create":
+            suffix = {
+                "comment-reply": "replies",
+                "comment-resolve": "resolve",
+                "comment-reopen": "reopen",
+                "comment-reanchor": "reanchor",
+            }[args.command]
+            path += "/" + args.thread_id + "/" + suffix
+        payload = {"request_id": args.request_id}
+        summary = {"method": method, "path": path, "request_id": args.request_id}
+        if args.command in {"comment-create", "comment-reanchor"}:
+            anchor = read_anchor(args.anchor_file) if args.anchor_file else {"kind": "page"}
+            page_key = "id:" + anchor["page_id"] if anchor.get("page_id") else "path:" + args.page
+            payload.update(release_id=args.release, page_key=page_key, page_path=args.page, anchor=anchor)
+            summary.update(release_id=args.release, page=args.page, anchor_kind=anchor["kind"])
+        elif getattr(args, "release", None):
+            payload["release_id"] = args.release
+            summary["release_id"] = args.release
+        if args.command in {"comment-create", "comment-reply"}:
+            comment_body = read_comment_body(args.body_file)
+            payload["body"] = comment_body
+            summary["body_characters"] = len(comment_body)
+        if args.command in {"comment-resolve", "comment-reopen", "comment-reanchor"}:
+            headers["If-Match"] = args.revision
+            summary["revision"] = args.revision
+        headers["Content-Type"] = "application/json"
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return method, path, headers, body, summary
 
 
@@ -225,6 +375,68 @@ def select_endpoint(config, *, probe=False):
     raise EndpointUnavailable(failures)
 
 
+def replace_query_parameter(path, name, value):
+    base, separator, query = path.partition("?")
+    values = [(key, item) for key, item in parse_qsl(query, keep_blank_values=True) if key != name]
+    values.append((name, str(value)))
+    return base + (separator or "?") + urlencode(values)
+
+
+def call_business(api_client, method, path, headers, body, sensitive):
+    response = api_client.call(method, path, body=body, headers=headers)
+    return api.business_result(response, sensitive)
+
+
+def fetch_all_pages(api_client, path, cursor_parameter, next_field, sensitive):
+    items = []
+    cursors = set()
+    pages = 0
+    while True:
+        data = call_business(api_client, "GET", path, {}, None, sensitive)
+        if not isinstance(data, dict) or not isinstance(data.get("items"), list) or not isinstance(data.get("has_more"), bool):
+            raise api.ClientError("评论分页响应格式无效")
+        items.extend(data["items"])
+        pages += 1
+        if not data["has_more"]:
+            result = dict(data)
+            result.update(items=items, has_more=False, next_cursor="", pages=pages)
+            if next_field == "next_seq":
+                result["next_seq"] = ""
+            return result
+        cursor = data.get(next_field) or data.get("next_cursor")
+        if not isinstance(cursor, str) or not re.fullmatch(r"[1-9][0-9]{0,18}", cursor) or cursor in cursors:
+            raise api.ClientError("评论分页游标无效或未推进")
+        cursors.add(cursor)
+        path = replace_query_parameter(path, cursor_parameter, cursor)
+
+
+def execute_operation(api_client, args, method, path, headers, body, sensitive):
+    if args.command == "comments":
+        return fetch_all_pages(api_client, path, "cursor", "next_cursor", sensitive)
+    if args.command == "comment-show":
+        thread = call_business(api_client, "GET", path, {}, None, sensitive)
+        if not isinstance(thread, dict) or not isinstance(thread.get("id"), str):
+            raise api.ClientError("评论主题响应格式无效")
+        query_values = {"limit": args.limit}
+        if args.after_seq != "0":
+            query_values["after_seq"] = args.after_seq
+        query = urlencode(query_values)
+        events = fetch_all_pages(api_client, path + "/events?" + query, "after_seq", "next_seq", sensitive)
+        return {"thread": thread, "events": events["items"], "pages": events["pages"]}
+    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+        written = call_business(api_client, method, path, headers, body, sensitive)
+        if not isinstance(written, dict) or not isinstance(written.get("id"), str):
+            raise api.ClientError("评论写入响应格式无效")
+        thread_path = API_PATH + "/" + args.id + "/comment-threads/" + written["id"]
+        thread = call_business(api_client, "GET", thread_path, {}, None, sensitive)
+        event_query = urlencode({"limit": 100, "request_id": args.request_id})
+        events = fetch_all_pages(api_client, thread_path + "/events?" + event_query, "after_seq", "next_seq", sensitive)
+        if len(events["items"]) != 1:
+            raise api.ClientError("评论写入已返回，但按 request_id 读回事件失败；请停止重试并人工核对")
+        return {"thread": thread, "event": events["items"][0]}
+    return call_business(api_client, method, path, headers, body, sensitive)
+
+
 # 执行离线计划或选定入口上的单次认证调用，统一脱敏 JSON 输出；写入结果未知时提示人工核对，不自动重试。
 def main(argv=None):
     api_client = None
@@ -251,8 +463,7 @@ def main(argv=None):
                 api_client.exchange_token()
                 sensitive += (api_client.access_token,)
                 mutation_attempted = method != "GET"
-                response = api_client.call(method, path, body=body, headers=headers)
-                data = api.business_result(response, sensitive)
+                data = execute_operation(api_client, args, method, path, headers, body, sensitive)
             result = {"endpoint": selected, "origin": origin, "result": data}
             if isinstance(data, dict) and isinstance(data.get("url"), str) and re.fullmatch(r"/p/[a-z0-9][a-z0-9-]{1,254}[a-z0-9]/", data["url"]):
                 result["urls"] = {name: config[name + "_url"] + data["url"] for name in ("internal", "external") if config.get(name + "_url")}

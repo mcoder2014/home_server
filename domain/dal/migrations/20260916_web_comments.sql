@@ -1,0 +1,47 @@
+-- Apply before deploying the comments binary. Existing pages remain raw.
+ALTER TABLE web_project ADD COLUMN container_mode VARCHAR(16) NOT NULL DEFAULT 'raw';
+CREATE TABLE web_comment_thread (
+ id BIGINT NOT NULL PRIMARY KEY,
+ project_id BIGINT NOT NULL,
+ release_id BIGINT NOT NULL,
+ original_release_id BIGINT NOT NULL,
+ page_key VARCHAR(256) NOT NULL,
+ page_path VARCHAR(2048) NOT NULL,
+ original_page_key VARCHAR(256) NOT NULL,
+ original_page_path VARCHAR(2048) NOT NULL,
+ anchor TEXT NOT NULL,
+ original_anchor TEXT NOT NULL,
+ status VARCHAR(16) NOT NULL,
+ revision BIGINT NOT NULL,
+ author_user_id BIGINT NOT NULL,
+ author_application_id BIGINT NOT NULL DEFAULT 0,
+ author_name_snapshot VARCHAR(256) NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ updated_at DATETIME(6) NOT NULL,
+ KEY idx_comment_project_id (project_id, id),
+ KEY idx_comment_project_status_id (project_id, status, id),
+ KEY idx_comment_project_release (project_id, release_id),
+ KEY idx_comment_project_original_release (project_id, original_release_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE web_comment_event (
+ id BIGINT NOT NULL PRIMARY KEY,
+ project_id BIGINT NOT NULL,
+ thread_id BIGINT NOT NULL,
+ sequence BIGINT NOT NULL,
+ kind VARCHAR(16) NOT NULL,
+ body TEXT NOT NULL,
+ anchor TEXT NOT NULL,
+ source_release_id BIGINT NOT NULL,
+ page_key VARCHAR(256) NOT NULL,
+ page_path VARCHAR(2048) NOT NULL,
+ actor_user_id BIGINT NOT NULL,
+ actor_application_id BIGINT NOT NULL DEFAULT 0,
+ actor_name_snapshot VARCHAR(256) NOT NULL,
+ request_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ created_at DATETIME(6) NOT NULL,
+ UNIQUE KEY uk_comment_sequence (thread_id, sequence),
+ UNIQUE KEY uk_comment_request (project_id, actor_user_id, actor_application_id, request_id),
+ KEY idx_comment_event_project (project_id, thread_id, sequence),
+ KEY idx_comment_event_source_release (project_id, source_release_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

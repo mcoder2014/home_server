@@ -2,6 +2,7 @@ package webprojects
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcoder2014/home_server/api/middleware"
@@ -12,6 +13,14 @@ import (
 )
 
 func InitRouter() error {
+	data.AddRoute(http.MethodGet, "/api/web-share/container.js", containerScript)
+	data.AddRoute(http.MethodGet, "/api/web-share/:id/view-context", requireModule, commentContext)
+	for _, suffix := range []string{"", "/:thread_id", "/:thread_id/events"} {
+		data.AddRoute(http.MethodGet, "/api/web-share/:id/comment-threads"+suffix, requireModule, comments)
+	}
+	for _, suffix := range []string{"", "/:thread_id/replies", "/:thread_id/resolve", "/:thread_id/reopen", "/:thread_id/reanchor"} {
+		data.AddRoute(http.MethodPost, "/api/web-share/:id/comment-threads"+suffix, requireModule, comments)
+	}
 	read := middleware.RequireIdentity("web-projects:read", false)
 	write := middleware.RequireIdentity("web-projects:write", false)
 	for _, prefix := range []string{"/api/web-share", "/api/web-projects"} {
@@ -43,7 +52,11 @@ func requireModule(c *gin.Context) {
 		return
 	}
 	if !enabled {
-		ginfmt.Fail(c, service.ErrForbidden)
+		if strings.HasPrefix(c.Request.URL.Path, "/p/") {
+			contentNotFound(c)
+		} else {
+			ginfmt.Fail(c, service.ErrForbidden)
+		}
 		c.Abort()
 		return
 	}

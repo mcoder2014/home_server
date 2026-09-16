@@ -15,7 +15,7 @@ Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，�
 | `/admin/config` | 根据 schema 生成分组表单；校验、查看差异、发布、查看历史、回滚、检查运行生效状态 | `/api/admin/config/schema`、`config`、`status`、`/:namespace`、`validate`、`history`、`rollback` |
 | `/admin/audit-logs` | 按目标类型与数字 ID 查询操作记录及脱敏变化 | `/api/admin/audit-logs` |
 
-原 `/applications`、`/web-share`、`/web-projects` 兼容入口、图书与扫码页面保留。网页托管与应用管理请求也使用 Cookie 和 CSRF；应用 scope 选择器只列出当前用户可以授予的藏书和 WebDAV 权限。应用有效期表单读取 `/me.application_policy` 的默认值及上限，随当前站点策略变化。应用统计区分有效与未吊销数量，网页统计区分发布与未删除数量。
+原 `/applications`、`/web-share`、`/web-projects` 兼容入口、图书与扫码页面保留。网页托管与应用管理请求也使用 Cookie 和 CSRF；应用 scope 选择器包含网页托管、网页评论、藏书和 WebDAV 权限，并按当前用户能力限制可授予范围。网页编辑页可在增强容器与原始页面之间切换；新项目默认增强，旧项目缺少字段时按原始页面显示。应用有效期表单读取 `/me.application_policy` 的默认值及上限，随当前站点策略变化。应用统计区分有效与未吊销数量，网页统计区分发布与未删除数量。
 
 ## 账号与权限边界
 

@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	ScopeWebCommentsRead  = "web-comments:read"
+	ScopeWebCommentsWrite = "web-comments:write"
 	ScopeWebProjectsRead  = "web-projects:read"
 	ScopeWebProjectsWrite = "web-projects:write"
 	ScopeLibraryRead      = "library:read"
@@ -45,6 +47,7 @@ const (
 )
 
 var orderedScopes = []string{
+	ScopeWebCommentsRead, ScopeWebCommentsWrite,
 	ScopeWebProjectsRead,
 	ScopeWebProjectsWrite,
 	ScopeLibraryRead,
@@ -54,6 +57,7 @@ var orderedScopes = []string{
 }
 
 var readForWrite = map[string]string{
+	ScopeWebCommentsWrite: ScopeWebCommentsRead,
 	ScopeWebProjectsWrite: ScopeWebProjectsRead,
 	ScopeLibraryWrite:     ScopeLibraryRead,
 	ScopeWebDAVWrite:      ScopeWebDAVRead,
@@ -312,11 +316,15 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 		return nil, fmt.Errorf("generate access token: %w", appErrors.ErrDependency)
 	}
 	now := s.now().UTC()
+	expiresAt := now.Add(options.TokenTTL)
+	if application.ExpiresAt.Before(expiresAt) {
+		expiresAt = application.ExpiresAt
+	}
 	tokenDigest := sha256.Sum256([]byte(rawToken))
 	token := &model.ApplicationAccessToken{
 		ApplicationID: application.ID, TokenDigest: tokenDigest[:], SecretVersion: application.SecretVersion,
 		ApplicationRevision: application.Revision, ScopeSnapshot: append([]string(nil), application.Scopes...),
-		ExpiredAt: now.Add(options.TokenTTL), CreateTime: now,
+		ExpiredAt: expiresAt, CreateTime: now,
 	}
 	if err := s.repository.StoreIssuedToken(ctx, application, token, now); err != nil {
 		if errors.Is(err, appErrors.ErrUnauthorized) {
@@ -325,7 +333,7 @@ func (s *Service) IssueToken(ctx context.Context, accessKey, secretKey string) (
 		return nil, normalizeRepositoryError(err)
 	}
 	_ = s.repository.CleanupExpiredTokens(ctx, now, cleanupBatchLimit)
-	return &IssuedToken{AccessToken: rawToken, ExpiresIn: int(options.TokenTTL / time.Second), Scopes: append([]string(nil), application.Scopes...)}, nil
+	return &IssuedToken{AccessToken: rawToken, ExpiresIn: int(expiresAt.Sub(now) / time.Second), Scopes: append([]string(nil), application.Scopes...)}, nil
 }
 
 // AuthenticateToken 校验令牌有效期及应用的密钥版本、修订号和授权范围，构造保留原快照的应用身份。

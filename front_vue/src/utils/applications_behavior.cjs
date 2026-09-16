@@ -1,4 +1,6 @@
 const SCOPES = [
+    'web-comments:read',
+    'web-comments:write',
     'web-projects:read',
     'web-projects:write',
     'library:read',

@@ -153,6 +153,9 @@ func TestScopeValidationAndWriteImpliesRead(t *testing.T) {
 	application, _, err := service.Create(context.Background(), 101, CreateInput{Name: "writer", Scopes: []string{ScopeLibraryWrite, ScopeLibraryWrite}})
 	require.NoError(t, err)
 	require.Equal(t, []string{ScopeLibraryRead, ScopeLibraryWrite}, application.Scopes)
+	commentApplication, _, err := service.Create(context.Background(), 101, CreateInput{Name: "commenter", Scopes: []string{ScopeWebCommentsWrite}})
+	require.NoError(t, err)
+	require.Equal(t, []string{ScopeWebCommentsRead, ScopeWebCommentsWrite}, commentApplication.Scopes)
 
 	_, _, err = service.Create(context.Background(), 101, CreateInput{Name: "bad", Scopes: []string{"admin:*"}})
 	require.ErrorIs(t, err, appErrors.ErrInvalid)
@@ -161,6 +164,22 @@ func TestScopeValidationAndWriteImpliesRead(t *testing.T) {
 	zeroDays := 0
 	_, _, err = service.Create(context.Background(), 101, CreateInput{Name: "no ttl", ExpiresInDays: &zeroDays})
 	require.ErrorIs(t, err, appErrors.ErrInvalid)
+}
+
+func TestIssuedTokenCannotOutliveApplication(t *testing.T) {
+	service, repo, now := testService()
+	application, secret, err := service.Create(context.Background(), 101, CreateInput{Name: "short-lived"})
+	require.NoError(t, err)
+	stored := repo.applications[application.ID]
+	stored.ExpiresAt = now.Add(2 * time.Minute)
+	repo.applications[application.ID] = stored
+
+	issued, err := service.IssueToken(context.Background(), application.AccessKey, secret)
+	require.NoError(t, err)
+	require.Equal(t, 120, issued.ExpiresIn)
+	for _, token := range repo.tokens {
+		require.Equal(t, stored.ExpiresAt, token.ExpiredAt)
+	}
 }
 
 func TestIssueTokenValidatesUserAndParameters(t *testing.T) {

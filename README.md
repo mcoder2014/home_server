@@ -78,6 +78,8 @@ cq_ddns_client -conf /etc/home_server/client_config.yaml -dry-run
 | --- | --- |
 | 创建 `report` | 得到 `/p/report/`，默认仅自己可见，发布前为草稿。 |
 | 上传并发布 | 单 HTML 成为 `index.html`；ZIP 保留目录结构，发布时切换完整版本。 |
+| 页面容器 | 新项目默认使用增强容器，提供固定导航、登录状态、浏览/评论切换；旧项目迁移后保持原始页面模式。 |
+| 评论 | 登录且可见页面的用户可评论、回复；作者或项目所有者可解决、重开及重新关联，匿名用户看不到评论入口。 |
 | 更改 URL | 修改 slug，文件目录和用户授权保持不变；旧地址不再指向该项目。 |
 | 指定用户 | 创建者和选中的有效账号可读，其他账号不可读。 |
 | 下线或删除 | 后续页面和资源请求返回 404；删除有 7 天回收期。 |
@@ -89,9 +91,11 @@ cq_ddns_client -conf /etc/home_server/client_config.yaml -dry-run
 
 项目共享浏览器源，适合本人和受信任维护者上传的网页。服务端检查每个 HTML、JS、图片和附件请求，但不提供不可信 JavaScript 的项目间隔离。
 
+增强容器只变换响应，不修改已发布文件。默认浏览模式不加载评论正文；评论模式的文字标记不接收指针事件，图片和交互模块从侧栏选择。地图、图表、播放器等模块使用 `data-hs-comment-interaction="preserve"`，容器不遍历内部 DOM、不代理业务事件。产品边界和实现细节见[需求文档](docs/specs/web-container-comments-requirements.md)与[技术方案](docs/specs/web-container-comments-technical-design.md)，结构标准和 AK/SK 评论命令见 [home-server-web-share skill](skills/home-server-web-share/SKILL.md)。原始页面模式不注入菜单或评论运行时，已有评论数据仍保留。
+
 ### 部署配置
 
-先检查现有 `login_token` 的索引；网页资源会逐请求验证 token，需要以 `token` 为首列的索引。首次安装的 `domain/dal/migrations/20260909_web_projects.sql` 包含普通 token 索引和三张新表，已有等价 token 索引时跳过相应建索引语句，不假设历史 token 数据唯一。已安装旧 PR 文字枚举表的环境改用 `20260912_web_projects_refactor.sql`，两者不能对同一个库重复执行；升级脚本遇到未知枚举会中止，修正数据后可重跑。迁移在目标数据库执行并核对后，再添加服务端配置：
+先检查现有 `login_token` 的索引；网页资源会逐请求验证 token，需要以 `token` 为首列的索引。首次安装的 `domain/dal/migrations/20260909_web_projects.sql` 包含普通 token 索引和三张新表，已有等价 token 索引时跳过相应建索引语句，不假设历史 token 数据唯一。已安装旧 PR 文字枚举表的环境改用 `20260912_web_projects_refactor.sql`，两者不能对同一个库重复执行；升级脚本遇到未知枚举会中止，修正数据后可重跑。启用增强容器前执行 `20260916_web_comments.sql`：现有项目增加 `container_mode=raw`，并创建评论主题和事件表；新项目由应用层默认设为 `enhanced`。迁移在目标数据库执行并核对后，再添加服务端配置：
 
 ```yaml
 web_projects:
@@ -291,7 +295,8 @@ AK/SK 管理在服务端按用户隔离；应用不是新的共享管理员账�
 
 1. 已有旧网页托管表先执行 `domain/dal/migrations/20260912_web_projects_refactor.sql`；首次安装仅执行新的 `20260909_web_projects.sql`。升级保留 HTTP 字符串枚举，但数据库使用 INT；name/slug/幂等键为 256，entry_file 为 2048，诊断信息进入 `extra TEXT` JSON。
 2. 启用应用身份前执行 `domain/dal/migrations/20260912_applications.sql`，创建应用和访问 Token 表。数据库账号仅授予目标库权限，先在隔离库验证，不直接导入包含 `USE home_server` 的历史建表文件。
-3. 在配置增加下列字段，更新同源 Nginx 片段并设置实际后端端口，再部署后端和前端。
+3. 启用网页评论前执行 `domain/dal/migrations/20260916_web_comments.sql`，再部署包含容器运行时的后端；旧项目保持 `raw`，由所有者明确切换。
+4. 在配置增加下列字段，更新同源 Nginx 片段并设置实际后端端口，再部署后端和前端。
 
 ```yaml
 auth:
