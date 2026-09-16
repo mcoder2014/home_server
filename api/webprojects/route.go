@@ -19,6 +19,7 @@ func InitRouter() error {
 		data.AddRoute(http.MethodPost, prefix, requireModule, write, createProject)
 		data.AddRoute(http.MethodGet, prefix+"/eligible-users", requireModule, read, eligibleUsers)
 		data.AddRoute(http.MethodGet, prefix+"/:id", requireModule, read, getProject)
+		data.AddRoute(http.MethodGet, prefix+"/:id/stats", requireModule, read, projectStatistics)
 		data.AddRoute(http.MethodPatch, prefix+"/:id", requireModule, write, updateProject)
 		data.AddRoute(http.MethodPost, prefix+"/:id/disable", requireModule, write, disableProject)
 		data.AddRoute(http.MethodDelete, prefix+"/:id", requireModule, write, deleteProject)
@@ -34,6 +35,7 @@ func InitRouter() error {
 
 // requireModule 逐请求检查网页托管模块；内容路径关闭时返回不可见结果，管理请求使用功能关闭错误。
 func requireModule(c *gin.Context) {
+	middleware.EnableReadSnapshot(c)
 	enabled, err := accounts.ModuleEnabled(c.Request.Context(), "web_projects")
 	if err != nil {
 		ginfmt.Fail(c, service.ErrDependency)

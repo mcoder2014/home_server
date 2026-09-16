@@ -10,6 +10,21 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.0
+        ports: ['16389:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-isolated-root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mariadb-admin ping -h 127.0.0.1 -uroot -pci-isolated-root"
+          --health-interval 5s --health-timeout 3s --health-retries 30
     steps:
     - uses: actions/checkout@v2
 
@@ -18,20 +33,63 @@ jobs:
       with:
         go-version: '1.21.12'
 
+    - name: Create isolated integration databases
+      run: |
+        docker exec -i ${{ job.services.mariadb.id }} mariadb -uroot -pci-isolated-root <<'SQL'
+        CREATE DATABASE home_server_accounts_http_test_ci;
+        CREATE DATABASE home_server_analytics_test_ci;
+        CREATE DATABASE home_server_readcache_test_ci;
+        CREATE USER 'home_server_ci'@'%' IDENTIFIED BY 'ci-isolated-tests';
+        GRANT ALL ON home_server_accounts_http_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_analytics_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_readcache_test_ci.* TO 'home_server_ci'@'%';
+        SQL
+
+    - name: Exercise availability-first Redis policy
+      run: docker exec ${{ job.services.redis.id }} redis-cli CONFIG SET maxmemory-policy allkeys-lru
+
     - name: Check public deployment examples
       run: python3 script/check_public_deployment.py
 
     - name: Build
       run: go build -v ./...
 
-    - name: Test offline packages
-      # DAL/RPC/DDNS and device tests need an explicitly isolated integration environment.
+    - name: Test application and isolated storage packages
+      # RPC/DDNS/device integration stays opt-in; these databases contain only synthetic fixtures.
       env:
         HOME_SERVER_LOG_FILE: ${{ runner.temp }}/home_server_test.log
-      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./utils ./utils/md ./utils/log ./utils/ginfmt
+        HOME_SERVER_TEST_REDIS_ADDR: '127.0.0.1:16389'
+        HOME_SERVER_CACHE_HTTP_TEST: '1'
+        ACCOUNTS_HTTP_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_accounts_http_test_ci?parseTime=true'
+        HOME_SERVER_ANALYTICS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_analytics_test_ci?parseTime=true'
+        HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
+      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
+
+    - name: Test isolated DAL cache bindings
+      env:
+        HOME_SERVER_TEST_REDIS_ADDR: '127.0.0.1:16389'
+        HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
+      run: go test -v ./domain/dal -run TestReadCache -count=1
 
     - name: Test AI API client
       run: python3 script/test_home_server_api.py -v
 
     - name: Test web hosting skill over isolated HTTPS
       run: python3 script/test_web_hosting_skill.py -v
+
+    - name: Use public npm registry in the disposable CI checkout
+      working-directory: front_vue
+      run: python3 -c "from pathlib import Path; path = Path('package-lock.json'); path.write_text(path.read_text(encoding='utf-8').replace('http://bnpm.byted.org/', 'https://registry.npmjs.org/'), encoding='utf-8')"
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: npm
+        cache-dependency-path: front_vue/package-lock.json
+
+    - name: Test and build frontend
+      working-directory: front_vue
+      run: |
+        npm ci --ignore-scripts
+        npm run test:frontend
+        npm run build

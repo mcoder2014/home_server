@@ -478,15 +478,19 @@ func (application *Application) GetReleaseForDownload(ownerUserID, projectID, re
 }
 
 // GetPublishedProject 检查模块开关、项目发布及审核状态；数据库身份模式额外校验所有者状态，再返回归属一致的当前版本。
-func (application *Application) GetPublishedProject(slug string) (*model.WebProject, *model.WebProjectRelease, error) {
-	enabled, gateErr := accounts.ModuleEnabled(context.Background(), "web_projects")
+func (application *Application) GetPublishedProject(slug string, contexts ...context.Context) (*model.WebProject, *model.WebProjectRelease, error) {
+	ctx := context.Background()
+	if len(contexts) > 0 && contexts[0] != nil {
+		ctx = contexts[0]
+	}
+	enabled, gateErr := accounts.ModuleEnabled(ctx, "web_projects")
 	if gateErr != nil {
 		return nil, nil, service.ErrDependency
 	}
 	if !enabled {
 		return nil, nil, service.ErrForbidden
 	}
-	project, release, err := application.repository.FindPublished(slug)
+	project, release, err := application.repository.FindPublished(slug, ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: query published project", service.ErrDependency)
 	}
@@ -497,7 +501,7 @@ func (application *Application) GetPublishedProject(slug string) (*model.WebProj
 		return nil, nil, service.ErrNotFound
 	}
 	if accounts.DatabaseMode() {
-		owner, ownerErr := accounts.GetByID(context.Background(), project.OwnerUserID)
+		owner, ownerErr := accounts.GetByID(ctx, project.OwnerUserID)
 		if ownerErr != nil {
 			return nil, nil, service.ErrDependency
 		}

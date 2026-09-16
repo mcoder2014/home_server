@@ -73,3 +73,19 @@ test('surfaces the server status and message for failed envelopes', async () => 
         (error) => error.code === 41002 && error.message === 'revision conflict',
     )
 })
+
+test('owner statistics use the authenticated project API and only supported day ranges', async () => {
+    const transport = createTransport({code: 0, data: {project_id: '9223372036854775807', daily: []}})
+    const api = createWebShareApi(transport, () => 'csrf')
+    assert.equal(typeof api.getStats, 'function')
+    const data = await api.getStats('9223372036854775807', 7)
+    await api.getStats('12')
+    assert.equal(data.project_id, '9223372036854775807')
+    assert.deepEqual(transport.calls[0], {
+        method: 'get', url: '/api/web-share/9223372036854775807/stats',
+        params: {days: 7}, headers: {'X-CSRF-Token': 'csrf'},
+    })
+    assert.equal(transport.calls[1].params.days, 30)
+    assert.throws(() => api.getStats('12', 14), /7.*30.*90/)
+    assert.equal(transport.calls.length, 2)
+})

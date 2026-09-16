@@ -42,6 +42,12 @@ function createWebShareApi(transport, getCSRF) {
         getProject(projectID) {
             return request({method: 'get', url: `/api/web-share/${encodeURIComponent(projectID)}`, headers: headers()})
         },
+        getStats(projectID, days = 30) {
+            if (![7, 30, 90].includes(days)) {
+                throw new Error('统计范围仅支持 7、30、90 日')
+            }
+            return request({method: 'get', url: `/api/web-share/${encodeURIComponent(projectID)}/stats`, params: {days}, headers: headers()})
+        },
         updateProject(projectID, revision, data) {
             return request({
                 method: 'patch',
