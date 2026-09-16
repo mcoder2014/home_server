@@ -1,6 +1,6 @@
 # 网页托管增强容器与评论能力技术方案
 
-状态：实现版，已通过 Pi 隔离环境验收
+状态：实现版；基础容器已部署，新增 Skill 检查与删除仅完成静态检查和构建，未执行测试套件
 
 更新时间：2026-09-16
 
@@ -45,7 +45,7 @@ flowchart LR
 | 浏览器运行时 | `api/webprojects/container/runtime.js` | 菜单、模式生命周期、DOM 定位、侧栏和页尾降级 |
 | 项目编辑页 | `front_vue/src/views/WebProjectEditor.vue` | 选择增强/原始容器 |
 | 应用权限 | `domain/service/applications`、`front_vue/src/views/Applications.vue` | `web-comments:read/write` scope |
-| Agent 接口 | `skills/home-server-web-share` | 查询和处理评论、HTML 结构标准 |
+| Agent 接口 | `skills/home-server-web-share` | 上传前兼容性检查、查询和处理评论、HTML 结构标准 |
 
 ## 3. 请求链路
 
@@ -146,12 +146,13 @@ stateDiagram-v2
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/web-share/{project_id}/view-context` | 页面身份、容器和评论能力；公开页允许匿名 |
-| GET | `/api/web-share/{project_id}/comment-threads` | 主题列表；支持 `status=all/open/resolved`、`cursor`、`limit`、`request_id` |
+| GET | `/api/web-share/{project_id}/comment-threads` | 主题列表；支持 `status=all/open/resolved/deleted`、`cursor`、`limit`、`request_id`；默认 all 不含 deleted |
 | POST | `/api/web-share/{project_id}/comment-threads` | 创建主题 |
 | GET | `/api/web-share/{project_id}/comment-threads/{thread_id}` | 主题当前状态 |
 | GET | `/api/web-share/{project_id}/comment-threads/{thread_id}/events` | 事件流；支持 `cursor`/`after_seq`、`limit`、`request_id` |
 | POST | `/api/web-share/{project_id}/comment-threads/{thread_id}/replies` | 回复，允许已解决主题 |
 | POST | `/api/web-share/{project_id}/comment-threads/{thread_id}/resolve` | 解决；要求 `If-Match` |
+| POST | `/api/web-share/{project_id}/comment-threads/{thread_id}/delete` | 软删除整个讨论与回复、追加审计；要求 `If-Match` |
 | POST | `/api/web-share/{project_id}/comment-threads/{thread_id}/reopen` | 重开；要求 `If-Match` |
 | POST | `/api/web-share/{project_id}/comment-threads/{thread_id}/reanchor` | 重新关联；要求 `If-Match` 和当前 release |
 
@@ -183,7 +184,7 @@ stateDiagram-v2
 - `exact/prefix/suffix/label` 分别最多 4096/128/128/256 个 Unicode 字符。
 - 页面路径必须是清理后的项目相对路径，不能包含反斜杠、NUL、查询或片段。
 - 创建与重新关联使用的 `release_id` 必须等于当前发布版本；版本变化返回冲突。
-- 回复、解决和重开可携带调用方实际查看的 `release_id`，该版本必须属于当前项目；版本文件已淘汰时可由本项目持久化的主题或事件证明归属，旧客户端省略时兼容记录当前版本。
+- 回复、解决、删除和重开可携带调用方实际查看的 `release_id`，该版本必须属于当前项目；版本文件已淘汰时可由本项目持久化的主题或事件证明归属，旧客户端省略时兼容记录当前版本。
 
 ## 6. 数据模型
 
@@ -222,11 +223,11 @@ erDiagram
 
 ### 6.1 主题表
 
-`web_comment_thread` 保存列表所需当前状态：当前 release/page/anchor、状态、revision 和作者快照；同时保留 `original_*` 字段用于审计原始位置。状态只有 `open/resolved`。
+`web_comment_thread` 保存列表所需当前状态：当前 release/page/anchor、状态、revision 和作者快照；同时保留 `original_*` 字段用于审计原始位置。状态为 `open/resolved/deleted`。`deleted` 隐藏整个讨论和回复，不物理清除数据；现有 VARCHAR 字段可容纳，无需增加 DDL。
 
 ### 6.2 事件表
 
-`web_comment_event` 保存 `comment/reply/resolve/reopen/reanchor`。事件不可更新；`sequence` 与写入后的主题 revision 相同，唯一键 `(thread_id, sequence)` 保证顺序。`source_release_id` 记录执行动作时调用方实际查看的页面版本，而不是事务执行时的最新版本。
+`web_comment_event` 保存 `comment/reply/resolve/delete/reopen/reanchor`。事件不可更新；`sequence` 与写入后的主题 revision 相同，唯一键 `(thread_id, sequence)` 保证顺序。`source_release_id` 记录执行动作时调用方实际查看的页面版本，而不是事务执行时的最新版本。
 
 幂等唯一键是 `(project_id, actor_user_id, actor_application_id, request_id)`。服务端保存标准输入的 SHA-256：
 
@@ -243,15 +244,30 @@ stateDiagram-v2
     open --> resolved: resolve + If-Match
     resolved --> resolved: reply，revision+1
     resolved --> open: reopen + If-Match
+    open --> deleted: delete + If-Match
+    resolved --> deleted: delete + If-Match
+    deleted --> open: reopen + If-Match
     open --> open: reanchor + If-Match
     resolved --> resolved: reanchor + If-Match
 ```
 
 回复也递增 revision，防止项目所有者在未看到新回复时用旧 revision 解决主题。状态变更和重新关联要求 `If-Match`；不一致返回冲突。
 
+删除、已删除历史查询和恢复限于作者或项目所有者，仍须通过项目 ACL、有效身份与应用 scope。其他读者对 deleted 主题及事件得到 404。deleted 不接受回复、解决和重新关联；相同 request_id 与 payload 的删除重试仍返回幂等结果。按调用方 request_id 精确查询时可返回其有权读取的已删除主题，避免误判未知写入尚未发生。
+
 ## 7. HTML 定位协议
 
 完整规范见 [HTML 评论结构标准](../../skills/home-server-web-share/references/html-comment-contract.md)。当前 schema 版本为 `1`。
+
+### 7.1 上传前静态检查
+
+`skills/home-server-web-share/scripts/html_check.py` 使用标准库 HTMLParser 与 ZIP reader 进行有界离线检查，不提取归档、不执行脚本。`manage.py check-html` 可无配置调用；`upload` 使用 `build_multipart(..., include_content=True)` 返回的实际内容检查，避免检查与发送之间重新读取文件。
+
+检查分为 `hosting` 与 `enhanced` 两类，覆盖 ZIP 入口/路径/白名单/CRC/容量、静态标记版本/唯一性/正文根/类型/保护区、meta CSP、资源地址与交互模块提示。上传在认证前阻断托管错误，认证后 GET 项目实际 `container_mode`，再决定增强错误是否阻断；通过后才发上传。dry-run 的 mode 为 unknown，不查询服务端。
+
+报告含 SHA-256、文件、行号、错误/警告计数与建议；最多输出 200 条明细，计数仍覆盖全部问题。CSP 检查只针对静态 meta，动态脚本、响应头策略、外部 CSS/JS 和 HTML5 DOM 修复仍需运行环境核对。[检查规则](../../skills/home-server-web-share/references/html-upload-check.md)
+
+### 7.2 结构与定位
 
 ```html
 <html data-hs-comment-schema="1" data-hs-page-id="trip-guide">
@@ -318,7 +334,7 @@ stateDiagram-v2
 | 运行时单元测试 | page identity、重复原文消歧、跨页面隔离、双身份显示 |
 | Chromium 测试 | 默认浏览、匿名隐藏、文字/图片/模块、地图式交互、页尾失锚、窄屏、iframe、生命周期清理 |
 | 前端测试与构建 | 容器模式表单、scope 选择、既有页面回归、生产构建 |
-| Skill 测试 | 参数边界、自动分页、正文文件、request_id 读回、revision 和 dry-run 脱敏 |
+| Skill 验证 | 上传前静态检查、实际内容摘要、参数边界、自动分页、正文文件、request_id 读回、删除/恢复、revision 和 dry-run 脱敏 |
 | Pi 隔离验收 | 专用数据库、存储、配置和端口；真实服务验证访问矩阵、发布更新、失锚与原交互 |
 
 完成标准以 [需求文档第 8 节](web-container-comments-requirements.md#8-验收标准) 为准。

@@ -60,4 +60,6 @@ ln -s /absolute/path/home_server/skills/home-server-web-share \
   "$HOME/.codex/skills/home-server-web-share"
 ```
 
-随后重新加载技能并使用 `$home-server-web-share`。不要覆盖已有同名安装。脚本会解析符号链接得到实际仓库路径，因此不依赖运行命令时的当前目录。此 skill 复用仓库中的 API 客户端，安装时保留整个仓库，不能只复制 skill 子目录；不要让长期安装指向之后会删除的临时 worktree。
+随后重新加载技能并使用 `$home-server-web-share`。已有同名安装时先核对实际链接目标；用户授权升级后保留旧版本用于回滚，再把链接更新到完整稳定版本，不盲目覆盖其他技能。脚本会解析符号链接得到实际仓库路径，因此不依赖运行命令时的当前目录。此 skill 复用仓库中的 API 客户端，安装时保留整个仓库，不能只复制 skill 子目录；不要让长期安装指向之后会删除的临时 worktree。
+
+`check-html` 完全离线，不要求配置或凭证。评论查询/写入需要应用的 `web-comments:read/write`；仅有 `web-projects:write` 无法操作评论。删除评论还要求服务端支持 `/comment-threads/{id}/delete`，客户端更新不能代替服务端升级。
