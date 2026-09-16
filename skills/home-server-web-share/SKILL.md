@@ -1,6 +1,6 @@
 ---
 name: home-server-web-share
-description: Use when managing home_server hosted HTML or equipment manuals, publishing static pages, changing visibility, operating page comments, or generating HTML that needs stable comment anchors and protected interactive modules.
+description: Use when checking HTML or ZIP compatibility before home_server upload; managing hosted pages, comments, visibility, or equipment manuals; or generating HTML with stable anchors and protected interactive modules.
 ---
 
 # Home Server 网页与说明书
@@ -25,6 +25,19 @@ description: Use when managing home_server hosted HTML or equipment manuals, pub
 生成或修改用于本服务的 HTML 时，先读 [HTML 评论结构标准](references/html-comment-contract.md)。使用稳定页面 ID、正文根与语义模块 ID，为地图、编辑器等组件声明原交互保护；更新页面保留仍代表同一对象的 ID。单纯上传已有 HTML 时不强制改写产物，先说明缺少标记时只能保守定位。
 
 增强容器由服务端在响应时注入，页面本身不要实现评论接口、模拟登录态或透明事件遮罩。匿名用户和浏览模式不加载评论正文；已登录用户主动进入评论模式后才能选择文字或从面板选择图片、模块。原始页面模式不注入容器，也不接受新的评论写入。
+
+## 上传前兼容性检查
+
+上传前先运行离线检查，默认按增强模式判断；这个命令不读取配置或凭证、不联网，也不执行 HTML 中的脚本。
+
+```bash
+python3 "$MANAGE" check-html --file /absolute/path/index.html --mode enhanced
+python3 "$MANAGE" check-html --file /absolute/path/site.zip --entry-file index.html --mode enhanced
+```
+
+结果包含状态、SHA-256、文件与行号、问题代码、原因和修正建议。`errors>0` 时退出码为 1；只有警告时为 0，仍需逐项核对。详细规则见 [上传检查与处理](references/html-upload-check.md)。地图或动态 SPA 的警告不能仅凭静态扫描宣称已经通过浏览器兼容验证。
+
+`upload` 必定检查实际 multipart 请求中的同一份内容，并在发送上传前读取项目实际 `container_mode`。托管格式错误始终阻断；结构或 CSP 的增强模式阻断项仅对 `enhanced` 项目阻断，对 `raw` 保留提示。`--dry-run upload` 不查询服务端，报告 `mode=unknown`，增强模式问题仍待核对，不能据此宣称增强上传已获准。不要通过修改可见范围或关闭 CSP 绕过问题。
 
 ## 选择目标和入口
 
@@ -114,7 +127,22 @@ python3 "$MANAGE" --config "$CONFIG" --endpoint internal comment-reanchor 123 90
   --revision 4 --request-id reanchor-UNIQUE-ID
 ```
 
-回复允许发生在已解决主题；重新打开使用 `comment-reopen`。回复、解决和重开的 `--release` 建议填写调用方实际查看的页面版本，省略时服务端兼容记录当前版本。解决、重开、重新关联必须先读取最新主题并使用其 `revision`。同一写操作结果不确定时，只能在核对 `comments --request-id ORIGINAL-ID` 后，以完全相同的参数和原 `request_id` 明确重试。
+回复允许发生在已解决主题；重新打开使用 `comment-reopen`。回复、解决、删除和重开的 `--release` 建议填写调用方实际查看的页面版本，省略时服务端兼容记录当前版本。解决、删除、重开、重新关联必须先读取最新主题并使用其 `revision`。同一写操作结果不确定时，只能在核对 `comments --request-id ORIGINAL-ID` 后，以完全相同的参数和原 `request_id` 明确重试。
+
+### 删除与恢复
+
+删除作用于整个讨论及其回复，使用软删除并追加 `delete` 审计事件；不物理清除正文。仅主题作者或项目所有者可删除、查询已删除历史及恢复，AK/SK 应用遵循所属用户权限。单条回复独立删除不属于此命令。
+
+```bash
+python3 "$MANAGE" --config "$CONFIG" --endpoint internal comment-show 123 9001
+python3 "$MANAGE" --config "$CONFIG" --endpoint internal comment-delete 123 9001 \
+  --revision 5 --release 457 --request-id delete-UNIQUE-ID
+python3 "$MANAGE" --config "$CONFIG" --endpoint internal comments 123 --status deleted
+python3 "$MANAGE" --config "$CONFIG" --endpoint internal comment-reopen 123 9001 \
+  --revision 6 --release 457 --request-id restore-UNIQUE-ID
+```
+
+成功读回必须显示 `thread.status=deleted`、匹配 request_id 的 `event.kind=delete` 及新 revision。默认 `comments --status all` 只包含未删除的未解决/已解决讨论；已删除讨论不显示标记、页尾或普通列表，不接受回复、解决、重新关联。`comment-reopen` 可从 `resolved` 或 `deleted` 恢复为 `open`，保留历史。删除接口要求服务端包含本版本的 `/comment-threads/{id}/delete`；404 不能当作删除成功。
 
 ## 失败与交付
 

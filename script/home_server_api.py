@@ -318,7 +318,7 @@ class HomeServerAPI:
 
 
 # 从已核对的普通 HTML/ZIP 文件构造有界 multipart 请求，验证入口字段并返回请求体和 Content-Type；不发送上传。
-def build_multipart(upload_file: Path, entry_file: Optional[str], *, boundary: Optional[str] = None):
+def build_multipart(upload_file: Path, entry_file: Optional[str], *, boundary: Optional[str] = None, include_content: bool = False):
     suffix = upload_file.suffix.lower()
     if suffix not in {".html", ".htm", ".zip"}:
         raise ClientError("--upload-file 仅支持 HTML 或 ZIP")
@@ -362,7 +362,10 @@ def build_multipart(upload_file: Path, entry_file: Optional[str], *, boundary: O
         content,
         f"\r\n--{selected_boundary}--\r\n".encode("ascii"),
     ])
-    return b"".join(parts), f"multipart/form-data; boundary={selected_boundary}"
+    result = (b"".join(parts), f"multipart/form-data; boundary={selected_boundary}")
+    # Optional content is the exact immutable byte string used in the request,
+    # so a preflight checker never inspects a second, possibly replaced file.
+    return result + (content,) if include_content else result
 
 
 def read_json_body(path: Path) -> bytes:
