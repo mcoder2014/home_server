@@ -63,7 +63,7 @@ jobs:
         ACCOUNTS_HTTP_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_accounts_http_test_ci?parseTime=true'
         HOME_SERVER_ANALYTICS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_analytics_test_ci?parseTime=true'
         HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
-      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
+      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/webcomments ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
 
     - name: Test isolated DAL cache bindings
       env:
