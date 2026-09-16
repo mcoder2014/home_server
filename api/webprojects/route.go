@@ -18,7 +18,7 @@ func InitRouter() error {
 	for _, suffix := range []string{"", "/:thread_id", "/:thread_id/events"} {
 		data.AddRoute(http.MethodGet, "/api/web-share/:id/comment-threads"+suffix, requireModule, comments)
 	}
-	for _, suffix := range []string{"", "/:thread_id/replies", "/:thread_id/resolve", "/:thread_id/reopen", "/:thread_id/reanchor"} {
+	for _, suffix := range []string{"", "/:thread_id/replies", "/:thread_id/resolve", "/:thread_id/delete", "/:thread_id/reopen", "/:thread_id/reanchor"} {
 		data.AddRoute(http.MethodPost, "/api/web-share/:id/comment-threads"+suffix, requireModule, comments)
 	}
 	read := middleware.RequireIdentity("web-projects:read", false)

@@ -23,7 +23,9 @@ if not (REPOSITORY / "script" / "home_server_api.py").is_file():
     print(json.dumps({"error": "missing_client", "message": "请保留完整 home_server 仓库，不能只复制 skill 目录"}, ensure_ascii=False), file=sys.stderr)
     sys.exit(2)
 sys.path.insert(0, str(REPOSITORY / "script"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import home_server_api as api
+import html_check
 
 
 API_PATH = "/api/web-share"
@@ -108,6 +110,12 @@ class EndpointUnavailable(api.ClientError):
         self.probes = probes
 
 
+class HTMLIncompatible(api.ClientError):
+    def __init__(self, report):
+        super().__init__("上传前检查发现阻断项；修正产物或核对项目容器模式后再上传")
+        self.report = report
+
+
 def positive_id(value):
     if not re.fullmatch(r"[1-9][0-9]{0,18}", value) or int(value) > 2**63 - 1:
         raise argparse.ArgumentTypeError("需要正整数 ID 或 revision")
@@ -135,15 +143,15 @@ def parse_args(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     for name in (
         "doctor", "users", "list", "show", "releases", "create", "upload", "publish", "disable", "visibility",
-        "comments", "comment-show", "comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor",
+        "check-html", "comments", "comment-show", "comment-create", "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor",
     ):
         command = commands.add_parser(name)
         if name in {
             "show", "releases", "upload", "publish", "disable", "visibility", "comments", "comment-show", "comment-create",
-            "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor",
+            "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor",
         }:
             command.add_argument("id", type=positive_id)
-        if name in {"comment-show", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+        if name in {"comment-show", "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
             command.add_argument("thread_id", type=positive_id)
         if name in {"publish", "disable", "visibility"}:
             command.add_argument("--revision", type=positive_id, required=True)
@@ -162,9 +170,11 @@ def parse_args(argv=None):
             command.add_argument("--visibility", choices=MODES, default="owner")
         if name in {"create", "upload"}:
             command.add_argument("--request-id", required=True, help="本次操作的唯一标识；人工核对后重试时保留原值")
-        if name == "upload":
+        if name in {"upload", "check-html"}:
             command.add_argument("--file", type=Path, required=True)
             command.add_argument("--entry-file")
+        if name == "check-html":
+            command.add_argument("--mode", choices=("enhanced", "raw"), default="enhanced")
         if name == "publish":
             command.add_argument("--release", type=positive_id, required=True)
         if name == "visibility":
@@ -172,7 +182,7 @@ def parse_args(argv=None):
         if name == "comments":
             command.add_argument("--cursor", type=positive_id)
             command.add_argument("--limit", type=int, default=100)
-            command.add_argument("--status", choices=("all", "open", "resolved"), default="all")
+            command.add_argument("--status", choices=("all", "open", "resolved", "deleted"), default="all")
             command.add_argument("--request-id", type=request_id)
         if name == "comment-show":
             command.add_argument("--after-seq", type=nonnegative_id, default="0")
@@ -181,13 +191,13 @@ def parse_args(argv=None):
             command.add_argument("--page", type=comment_page, required=True)
             command.add_argument("--anchor-file", type=Path)
             command.add_argument("--release", type=positive_id, required=True)
-        if name in {"comment-reply", "comment-resolve", "comment-reopen"}:
+        if name in {"comment-reply", "comment-resolve", "comment-delete", "comment-reopen"}:
             command.add_argument("--release", type=positive_id)
         if name in {"comment-create", "comment-reply"}:
             command.add_argument("--body-file", type=Path, required=True)
-        if name in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+        if name in {"comment-create", "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
             command.add_argument("--request-id", type=request_id, required=True)
-        if name in {"comment-resolve", "comment-reopen", "comment-reanchor"}:
+        if name in {"comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
             command.add_argument("--revision", type=positive_id, required=True)
     return parser.parse_args(argv)
 
@@ -278,7 +288,11 @@ def build_operation(args):
     if args.command == "upload":
         if api.CONTROL_CHARACTER.search(args.file.name):
             raise api.ClientError("上传文件名不能包含控制字符")
-        body, headers["Content-Type"] = api.build_multipart(args.file.expanduser(), args.entry_file)
+        body, headers["Content-Type"], content = api.build_multipart(args.file.expanduser(), args.entry_file, include_content=True)
+        args.html_findings = html_check.inspect_upload(content, args.file.suffix, args.entry_file)
+        args.html_report = html_check.report(args.html_findings, "unknown")
+        if args.html_report["errors"]:
+            raise HTMLIncompatible(args.html_report)
         headers["Idempotency-Key"] = args.request_id
         summary.update(file=str(args.file.expanduser().absolute()), entry_file=args.entry_file, request_id=args.request_id, request_bytes=len(body))
     if args.command == "comments":
@@ -296,13 +310,14 @@ def build_operation(args):
             raise api.ClientError("--limit 必须在 1 到 100 之间")
         path += "/comment-threads/" + args.thread_id
         summary.update(method="GET", path=path, after_seq=args.after_seq, limit=args.limit)
-    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
         method = "POST"
         path += "/comment-threads"
         if args.command != "comment-create":
             suffix = {
                 "comment-reply": "replies",
                 "comment-resolve": "resolve",
+                "comment-delete": "delete",
                 "comment-reopen": "reopen",
                 "comment-reanchor": "reanchor",
             }[args.command]
@@ -321,7 +336,7 @@ def build_operation(args):
             comment_body = read_comment_body(args.body_file)
             payload["body"] = comment_body
             summary["body_characters"] = len(comment_body)
-        if args.command in {"comment-resolve", "comment-reopen", "comment-reanchor"}:
+        if args.command in {"comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
             headers["If-Match"] = args.revision
             summary["revision"] = args.revision
         headers["Content-Type"] = "application/json"
@@ -423,7 +438,7 @@ def execute_operation(api_client, args, method, path, headers, body, sensitive):
         query = urlencode(query_values)
         events = fetch_all_pages(api_client, path + "/events?" + query, "after_seq", "next_seq", sensitive)
         return {"thread": thread, "events": events["items"], "pages": events["pages"]}
-    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-reopen", "comment-reanchor"}:
+    if args.command in {"comment-create", "comment-reply", "comment-resolve", "comment-delete", "comment-reopen", "comment-reanchor"}:
         written = call_business(api_client, method, path, headers, body, sensitive)
         if not isinstance(written, dict) or not isinstance(written.get("id"), str):
             raise api.ClientError("评论写入响应格式无效")
@@ -431,8 +446,12 @@ def execute_operation(api_client, args, method, path, headers, body, sensitive):
         thread = call_business(api_client, "GET", thread_path, {}, None, sensitive)
         event_query = urlencode({"limit": 100, "request_id": args.request_id})
         events = fetch_all_pages(api_client, thread_path + "/events?" + event_query, "after_seq", "next_seq", sensitive)
-        if len(events["items"]) != 1:
+        expected_kind = args.command.removeprefix("comment-").replace("create", "comment")
+        if len(events["items"]) != 1 or not isinstance(events["items"][0], dict) or events["items"][0].get("request_id") != args.request_id or events["items"][0].get("kind") != expected_kind:
             raise api.ClientError("评论写入已返回，但按 request_id 读回事件失败；请停止重试并人工核对")
+        expected_status = {"comment-delete": "deleted", "comment-resolve": "resolved", "comment-reopen": "open"}.get(args.command)
+        if not isinstance(thread, dict) or thread.get("id") != written["id"] or expected_status and thread.get("status") != expected_status:
+            raise api.ClientError("评论事件已写入，但当前主题状态不一致；可能有并发更新，请停止重试并核对最新历史")
         return {"thread": thread, "event": events["items"][0]}
     return call_business(api_client, method, path, headers, body, sensitive)
 
@@ -444,6 +463,13 @@ def main(argv=None):
     mutation_attempted = False
     try:
         args = parse_args(argv)
+        if args.command == "check-html":
+            if api.CONTROL_CHARACTER.search(args.file.name):
+                raise api.ClientError("上传文件名不能包含控制字符")
+            _, _, content = api.build_multipart(args.file.expanduser(), args.entry_file, include_content=True)
+            checked = html_check.report(html_check.inspect_upload(content, args.file.suffix, args.entry_file), args.mode)
+            print(json.dumps({"result": checked, "mutation_attempted": False}, ensure_ascii=False, indent=2))
+            return 1 if checked["errors"] else 0
         config = load_config(args.config, args.endpoint)
         method, path, headers, body, summary = build_operation(args)
         if args.dry_run:
@@ -462,13 +488,26 @@ def main(argv=None):
                 api_client = api.HomeServerAPI(transport, credentials)
                 api_client.exchange_token()
                 sensitive += (api_client.access_token,)
+                if args.command == "upload":
+                    project = call_business(api_client, "GET", API_PATH + "/" + args.id, {}, None, sensitive)
+                    if not isinstance(project, dict) or project.get("container_mode") not in {"raw", "enhanced"}:
+                        raise api.ClientError("无法核对项目容器模式；上传尚未发送，请确认服务端已升级")
+                    args.html_report = html_check.report(args.html_findings, project["container_mode"])
+                    if args.html_report["errors"]:
+                        raise HTMLIncompatible(args.html_report)
                 mutation_attempted = method != "GET"
                 data = execute_operation(api_client, args, method, path, headers, body, sensitive)
             result = {"endpoint": selected, "origin": origin, "result": data}
             if isinstance(data, dict) and isinstance(data.get("url"), str) and re.fullmatch(r"/p/[a-z0-9][a-z0-9-]{1,254}[a-z0-9]/", data["url"]):
                 result["urls"] = {name: config[name + "_url"] + data["url"] for name in ("internal", "external") if config.get(name + "_url")}
+        if hasattr(args, "html_report"):
+            result["html_check"] = args.html_report
         print(json.dumps(api.redact_output(result, sensitive), ensure_ascii=False, indent=2))
         return 0
+    except HTMLIncompatible as error:
+        print(json.dumps(api.redact_output({"error": "html_incompatible", "message": str(error), "html_check": error.report,
+                                           "mutation_attempted": False}, sensitive), ensure_ascii=False, indent=2), file=sys.stderr)
+        return 1
     except EndpointUnavailable as error:
         print(json.dumps({"error": "endpoint_unavailable", "message": str(error), "probes": error.probes}, ensure_ascii=False), file=sys.stderr)
         return 3

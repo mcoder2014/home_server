@@ -473,7 +473,7 @@
     function renderReanchor() {
       const old = details.querySelector('[data-reanchor]')
       if (old) old.remove()
-      if (!activeThread || !selectedAnchor || !canManage(activeThread)) return
+      if (!activeThread || activeThread.status === 'deleted' || !selectedAnchor || !canManage(activeThread)) return
       const thread = activeThread, anchor = {...selectedAnchor}
       const control = button('用所选位置重新关联', () => mutate('/comment-threads/' + encodeURIComponent(thread.id) + '/reanchor',
         {anchor, release_id: settings.releaseId, page_key: page.key, page_path: page.path}, thread.revision, control, openThread), {'data-reanchor': ''})
@@ -489,18 +489,22 @@
         if (mode !== 'comment' || sequence !== detailSequence) return
         activeThread = current
         details.replaceChildren(element('h3', {}, '讨论 ' + current.id + ' · 事件记录'))
-        const kinds = {comment: '评论', reply: '回复', resolve: '已解决', reopen: '已重开', reanchor: '重新关联'}
+        const kinds = {comment: '评论', reply: '回复', resolve: '已解决', delete: '已删除', reopen: '已重开', reanchor: '重新关联'}
         for (const event of events) {
           const item = element('div', {class: 'event'})
           item.append(element('small', {}, (kinds[event.kind] || event.kind) + ' · ' + authorLabel(event.actor_user_id, event.actor_application_id, event.actor_name_snapshot) + ' · ' + (event.created_at || '')),
             element('p', {class: 'body'}, event.body || ''))
           details.append(item)
         }
-        const input = element('textarea', {'aria-label': '回复内容', maxlength: '4000'})
-        const reply = button('提交回复', () => mutate('/comment-threads/' + encodeURIComponent(current.id) + '/replies', {body: input.value.trim()}, null, reply, openThread))
-        details.append(input, reply)
+        if (current.status !== 'deleted') {
+          const input = element('textarea', {'aria-label': '回复内容', maxlength: '4000'})
+          const reply = button('提交回复', () => mutate('/comment-threads/' + encodeURIComponent(current.id) + '/replies', {body: input.value.trim()}, null, reply, openThread))
+          details.append(input, reply)
+        } else {
+          details.append(element('p', {class: 'notice'}, '讨论已删除；保留事件记录，重新打开后可继续回复。'))
+        }
         if (canManage(current)) {
-          const action = current.status === 'resolved' ? 'reopen' : 'resolve'
+          const action = current.status === 'open' ? 'resolve' : 'reopen'
           const change = button(action === 'resolve' ? '标记已解决' : '重新打开', () => mutate('/comment-threads/' + encodeURIComponent(current.id) + '/' + action, {}, current.revision, change, openThread))
           details.append(change)
         }

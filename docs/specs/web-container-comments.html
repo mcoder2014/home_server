@@ -48,14 +48,14 @@
 <body>
   <header class="top" data-hs-comment-ignore>
     <strong>home_server · 技术规格</strong>
-    <span>实现版 · Pi 隔离验收通过 · 2026-09-16 · 仅所有者可见</span>
+    <span>基础容器已部署 · Skill 扩展已实现 · 2026-09-16 · 仅所有者可见</span>
   </header>
   <main data-hs-comment-root>
     <section class="hero" data-hs-comment-id="overview" data-hs-comment-kind="text">
       <h1>网页托管增强容器与评论能力</h1>
       <p class="lead">让托管服务作为统一主容器提供导航、登录状态和可追踪评论，同时把原网页的按钮、表单、地图、图表与播放器交互完整保留下来。</p>
       <div class="meta" data-hs-comment-ignore>
-        <span class="tag">默认浏览</span><span class="tag">匿名隐藏评论</span><span class="tag">稳定 HTML 锚点</span><span class="tag">AK/SK 评论</span><span class="tag">跨版本定位</span>
+        <span class="tag">默认浏览</span><span class="tag">匿名隐藏评论</span><span class="tag">稳定 HTML 锚点</span><span class="tag">AK/SK 评论</span><span class="tag">上传前检查</span><span class="tag">评论删除与恢复</span>
       </div>
     </section>
 
@@ -177,11 +177,12 @@
         <table>
           <thead><tr><th>结构</th><th>保存内容</th><th>关键约束</th></tr></thead>
           <tbody>
-            <tr><td><code>web_comment_thread</code></td><td>当前/原始 release、page、anchor，状态、revision、作者快照</td><td>列表快速读取；状态为 open/resolved</td></tr>
-            <tr><td><code>web_comment_event</code></td><td>comment、reply、resolve、reopen、reanchor 完整历史</td><td><code>(thread_id, sequence)</code> 唯一</td></tr>
+            <tr><td><code>web_comment_thread</code></td><td>当前/原始 release、page、anchor，状态、revision、作者快照</td><td>列表快速读取；状态为 open/resolved/deleted</td></tr>
+            <tr><td><code>web_comment_event</code></td><td>comment、reply、resolve、delete、reopen、reanchor 完整历史</td><td><code>(thread_id, sequence)</code> 唯一</td></tr>
           </tbody>
         </table>
-        <p>回复也递增 revision。解决、重开和重新关联必须携带最新 <code>If-Match</code>，避免覆盖未读回复。事件的 <code>source_release_id</code> 记录调用方实际查看的页面版本。每次写操作带 <code>request_id</code>；同一身份与项目的相同请求返回原结果，参数变化返回冲突。</p>
+        <p>回复也递增 revision。解决、删除、重开和重新关联必须携带最新 <code>If-Match</code>，避免覆盖未读回复。事件的 <code>source_release_id</code> 记录调用方实际查看的页面版本。每次写操作带 <code>request_id</code>；同一身份与项目的相同请求返回原结果，参数变化返回冲突。</p>
+        <p>删除整个讨论及回复时使用软删除并保留审计，普通列表、标记和页尾隐藏它。只有满足项目访问权限的作者或所有者可查询已删除历史、重新打开恢复；其他用户读取已删除详情和事件得到 404。无需新增 DDL。</p>
       </section>
 
       <section class="card wide" data-hs-comment-id="api-surface" data-hs-comment-kind="text">
@@ -189,14 +190,22 @@
         <table>
           <thead><tr><th>能力</th><th>接口/命令</th></tr></thead>
           <tbody>
+            <tr><td>上传前检查</td><td><code>check-html --file PATH --mode enhanced</code>；upload 自动检查实际发送内容</td></tr>
             <tr><td>上下文</td><td><code>GET /api/web-share/{id}/view-context</code></td></tr>
             <tr><td>主题列表/详情</td><td><code>GET .../comment-threads</code>、<code>GET .../{thread_id}</code></td></tr>
             <tr><td>事件历史</td><td><code>GET .../{thread_id}/events</code>，自动读取分页</td></tr>
             <tr><td>创建/回复</td><td><code>comment-create</code>、<code>comment-reply</code></td></tr>
             <tr><td>状态与位置</td><td><code>comment-resolve</code>、<code>comment-reopen</code>、<code>comment-reanchor</code></td></tr>
+            <tr><td>删除与恢复</td><td><code>comment-delete</code>、<code>comments --status deleted</code>、<code>comment-reopen</code></td></tr>
           </tbody>
         </table>
         <p>正文从 UTF-8 普通文件读取，最多 4000 个 Unicode 字符。写结果未知时按原 <code>request_id</code> 查询，确认未执行后才能以完全相同参数重试。</p>
+        <h3>上传兼容性检查</h3>
+        <p>离线检查 HTML 标记、ZIP 入口/路径/白名单/容量/校验、meta CSP、资源地址和交互保护。结果包含文件、行号、问题、原因与建议；报告最多展示 200 条，阻断计数覆盖全部问题。上传读取目标实际容器模式，托管错误总是阻断，增强错误只对 enhanced 阻断。</p>
+        <pre><code>python3 "$MANAGE" check-html --file /absolute/path/index.html --mode enhanced
+python3 "$MANAGE" --config "$CONFIG" --endpoint external comment-delete 123 9001 \
+  --revision 5 --request-id delete-UNIQUE-ID</code></pre>
+        <div class="callout warning">静态检查不联网、不执行 JavaScript、不模拟浏览器 DOM 修复。动态 SPA、地图手势、外部 CSS/JS 与布局仍需浏览器核对；raw 模式保留增强问题提示，不自动改写页面或关闭 CSP。</div>
       </section>
 
       <section class="card" data-hs-comment-id="deployment" data-hs-comment-kind="text">
@@ -207,7 +216,7 @@
         <div class="callout warning">回滚时先将已切换项目改为 raw，再回滚二进制；保留评论表，避免丢失历史。</div>
       </section>
       <section class="card" data-hs-comment-id="verification" data-hs-comment-kind="text">
-        <h2>验收覆盖</h2>
+        <h2>基础容器验收覆盖</h2>
         <ul>
           <li>Go 领域与 HTTP 集成测试。</li>
           <li>前端 60 项回归与生产构建。</li>
@@ -216,6 +225,7 @@
           <li>Pi 专用数据库、存储、配置、HTTPS 入口和回环端口的隔离部署已通过。</li>
           <li>真实服务完成私有 404、匿名隐藏、原交互、应用回复、跨版本定位、失锚页尾和 Skill 状态流转验收。</li>
         </ul>
+        <p class="small">新增上传检查与删除扩展的验证范围为静态检查和构建，未执行测试套件；上述基础容器历史验收不代表新增生命周期已通过自动化验收。</p>
       </section>
 
       <section class="card wide" data-hs-comment-id="scope-boundaries" data-hs-comment-kind="text">

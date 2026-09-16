@@ -36,22 +36,36 @@ type EventPage struct {
 }
 
 func List(ctx context.Context, projectID int64, p *utils.Principal, status string, cursor int64, limit int, request string) (*Page, error) {
-	if status != "" && status != "all" && status != "open" && status != "resolved" {
+	if p == nil {
+		return nil, apperrors.ErrUnauthorized
+	}
+	if status != "" && status != "all" && status != "open" && status != "resolved" && status != "deleted" {
 		return nil, apperrors.ErrInvalid
 	}
 	if request != "" && !requestIDPattern.MatchString(request) {
 		return nil, apperrors.ErrInvalid
 	}
 	tx := db.MasterDB().WithContext(ctx)
-	if _, err := Authorize(tx, projectID, p, false, true); err != nil {
+	project, err := Authorize(tx, projectID, p, false, true)
+	if err != nil {
 		return nil, err
 	}
 	q := tx.Table("web_comment_thread").Select(threadColumns).Where("project_id = ?", projectID)
 	if cursor > 0 {
 		q = q.Where("id < ?", cursor)
 	}
-	if status != "" && status != "all" {
+	if status == "deleted" {
 		q = q.Where("status = ?", status)
+		if p.UserID != project.OwnerUserID {
+			q = q.Where("author_user_id = ?", p.UserID)
+		}
+	} else if status != "" && status != "all" {
+		q = q.Where("status = ?", status)
+	} else if request == "" {
+		q = q.Where("status IN ?", []string{"open", "resolved"})
+	} else if p.UserID != project.OwnerUserID {
+		// Idempotency lookups include a deleted discussion only for its author.
+		q = q.Where("(status IN ? OR (status = ? AND author_user_id = ?))", []string{"open", "resolved"}, "deleted", p.UserID)
 	}
 	if request != "" {
 		var event Event
@@ -77,17 +91,24 @@ func List(ctx context.Context, projectID int64, p *utils.Principal, status strin
 }
 
 func Detail(ctx context.Context, projectID, threadID int64, p *utils.Principal) (*Thread, error) {
+	if p == nil {
+		return nil, apperrors.ErrUnauthorized
+	}
 	tx := db.MasterDB().WithContext(ctx)
-	if _, err := Authorize(tx, projectID, p, false, true); err != nil {
+	project, err := Authorize(tx, projectID, p, false, true)
+	if err != nil {
 		return nil, err
 	}
 	var thread Thread
-	err := tx.Table("web_comment_thread").Select(threadColumns).Where("project_id = ? AND id = ?", projectID, threadID).Take(&thread).Error
+	err = tx.Table("web_comment_thread").Select(threadColumns).Where("project_id = ? AND id = ?", projectID, threadID).Take(&thread).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, apperrors.ErrNotFound
 	}
 	if err != nil {
 		return nil, apperrors.ErrDependency
+	}
+	if thread.Status == "deleted" && p.UserID != thread.AuthorUserID && p.UserID != project.OwnerUserID {
+		return nil, apperrors.ErrNotFound
 	}
 	return &thread, nil
 }
@@ -165,6 +186,9 @@ func Mutate(ctx context.Context, projectID, threadID, revision int64, p *utils.P
 			if e != nil {
 				return apperrors.ErrDependency
 			}
+			if result.Status == "deleted" && p.UserID != result.AuthorUserID && p.UserID != project.OwnerUserID {
+				return apperrors.ErrNotFound
+			}
 			return nil
 		}
 		if !errors.Is(e, gorm.ErrRecordNotFound) {
@@ -199,6 +223,14 @@ func Mutate(ctx context.Context, projectID, threadID, revision int64, p *utils.P
 			if e != nil {
 				return apperrors.ErrDependency
 			}
+			if result.Status == "deleted" {
+				if p.UserID != result.AuthorUserID && p.UserID != project.OwnerUserID {
+					return apperrors.ErrNotFound
+				}
+				if action != "reopen" {
+					return apperrors.ErrConflict
+				}
+			}
 			if action != "reply" {
 				if p.UserID != result.AuthorUserID && p.UserID != project.OwnerUserID {
 					return apperrors.ErrForbidden
@@ -215,10 +247,14 @@ func Mutate(ctx context.Context, projectID, threadID, revision int64, p *utils.P
 				}
 				result.Status = "resolved"
 			case "reopen":
-				if result.Status != "resolved" {
+				if result.Status != "resolved" && result.Status != "deleted" {
 					return apperrors.ErrConflict
 				}
 				result.Status = "open"
+			case "delete":
+				// Retain the immutable discussion history; deletion hides the whole
+				// thread and replies until its author or project owner reopens it.
+				result.Status = "deleted"
 			case "reanchor":
 				rid, e := strconv.ParseInt(input.ReleaseID, 10, 64)
 				if e != nil || project.CurrentReleaseID == nil || rid != *project.CurrentReleaseID {
@@ -234,7 +270,7 @@ func Mutate(ctx context.Context, projectID, threadID, revision int64, p *utils.P
 			result.Revision++
 			result.UpdatedAt = now
 			fields := map[string]interface{}{"revision": result.Revision, "updated_at": result.UpdatedAt}
-			if action == "resolve" || action == "reopen" {
+			if action == "resolve" || action == "reopen" || action == "delete" {
 				fields["status"] = result.Status
 			}
 			if action == "reanchor" {
