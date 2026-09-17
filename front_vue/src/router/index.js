@@ -15,6 +15,7 @@ const routes = [
     {path: '/register', name: 'Register', component: () => import('@/views/Register.vue'), meta: {title: '受邀注册'}},
     {path: '/account', name: 'Account', component: () => import('@/views/Account.vue'), meta: {title: '个人中心', requireAuth: true}},
     {path: '/account/security', name: 'AccountSecurity', component: () => import('@/views/Account.vue'), meta: {title: '账户安全', requireAuth: true}},
+    {path: '/account/sessions', name: 'AccountSessions', component: () => import('@/views/Account.vue'), meta: {title: '登录管理', requireAuth: true}},
     {path: '/invitations', name: 'Invitations', component: () => import('@/views/Invitations.vue'), meta: {title: '邀请朋友', requireAuth: true}},
     {path: '/forbidden', name: 'Forbidden', component: () => import('@/views/AccessState.vue'), meta: {title: '功能未开通'}},
     {path: '/unavailable', name: 'Unavailable', component: () => import('@/views/AccessState.vue'), meta: {title: '服务暂不可用'}},

@@ -37,10 +37,16 @@ jobs:
       run: |
         docker exec -i ${{ job.services.mariadb.id }} mariadb -uroot -pci-isolated-root <<'SQL'
         CREATE DATABASE home_server_accounts_http_test_ci;
+        CREATE DATABASE home_server_accounts_migration_test_ci;
+        CREATE DATABASE home_server_account_sessions_test_ci;
+        CREATE DATABASE home_server_accounts_runtime_test;
         CREATE DATABASE home_server_analytics_test_ci;
         CREATE DATABASE home_server_readcache_test_ci;
         CREATE USER 'home_server_ci'@'%' IDENTIFIED BY 'ci-isolated-tests';
         GRANT ALL ON home_server_accounts_http_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_accounts_migration_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_account_sessions_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_accounts_runtime_test.* TO 'home_server_ci'@'%';
         GRANT ALL ON home_server_analytics_test_ci.* TO 'home_server_ci'@'%';
         GRANT ALL ON home_server_readcache_test_ci.* TO 'home_server_ci'@'%';
         SQL
@@ -61,9 +67,12 @@ jobs:
         HOME_SERVER_TEST_REDIS_ADDR: '127.0.0.1:16389'
         HOME_SERVER_CACHE_HTTP_TEST: '1'
         ACCOUNTS_HTTP_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_accounts_http_test_ci?parseTime=true'
+        ACCOUNTS_MIGRATION_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_accounts_migration_test_ci?parseTime=true'
+        ACCOUNTS_SESSIONS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_account_sessions_test_ci?parseTime=true'
+        HOME_SERVER_RUNTIME_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_accounts_runtime_test?parseTime=true'
         HOME_SERVER_ANALYTICS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_analytics_test_ci?parseTime=true'
         HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
-      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/webcomments ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
+      run: go test -v ./config ./api/accounts ./api/webprojects ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/webprojects ./domain/service/webcomments ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./cmd/accounts-maintain ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
 
     - name: Test isolated DAL cache bindings
       env:

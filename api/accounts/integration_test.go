@@ -212,6 +212,17 @@ func newHTTPFixture(t *testing.T, initialApplications ...bool) *httpFixture {
 	if err := accountsmigrate.Apply(context.Background(), sqlDB, source, opts, plan.SHA256, parsed.DBName); err != nil {
 		t.Fatal(err)
 	}
+	centerOptions, err := accountsmigrate.AccountCenterOptions(parsed.DBName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	centerPlan, err := accountsmigrate.BuildAdditivePlan(context.Background(), sqlDB, centerOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := accountsmigrate.ApplyAdditive(context.Background(), sqlDB, centerOptions, centerPlan.SHA256, parsed.DBName, true); err != nil {
+		t.Fatal(err)
+	}
 	config.SetGlobalConfig(fixture.conf)
 	if err := db.InitDatabase(parsed.FormatDSN()); err != nil {
 		t.Fatal(err)
@@ -229,6 +240,12 @@ func newHTTPFixture(t *testing.T, initialApplications ...bool) *httpFixture {
 	config.SetGlobalConfig(fixture.conf)
 	runtimeService := siteconfig.New(db.MasterDB(), fixture.conf)
 	if err := runtimeService.Initialize(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// General HTTP regressions opt into a larger synthetic-only session limit.
+	snapshot := config.Runtime()
+	snapshot.AccountPolicy.MaxActiveSessions = 100
+	if err := config.StoreRuntimeSnapshot(snapshot); err != nil {
 		t.Fatal(err)
 	}
 	accounts.Configure(runtimeService)

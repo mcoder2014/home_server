@@ -33,6 +33,15 @@
     return label
   }
 
+  function currentIdentity(user, missingName) {
+    const clean = text => String(text || '').replace(/[\p{Cc}\p{Cf}]/gu, character => character === '\u200d' ? character : '').trim()
+    const name = user ? clean(user.display_name) || clean(user.user_name) || '用户 ' + user.user_id : missingName || '已注销用户'
+    let initial = user ? Array.from(name)[0] || '' : ''
+    if (initial && typeof Intl.Segmenter === 'function') initial = new Intl.Segmenter('zh', {granularity: 'grapheme'}).segment(name)[Symbol.iterator]().next().value.segment
+    const avatar = user && /^\/api\/account\/avatars\/[1-9][0-9]*\/[1-9][0-9]*$/.test(user.avatar_url || '') ? user.avatar_url : ''
+    return {name, initial, avatar}
+  }
+
   if (typeof document === 'undefined') {
     if (typeof module === 'object' && module.exports) module.exports = {pageIdentity, quoteOffset, samePage, authorLabel}
     return
@@ -54,6 +63,7 @@
     nav{position:fixed;right:12px;top:12px;max-width:calc(100vw - 24px);display:flex;align-items:center;flex-wrap:wrap;gap:10px;
       padding:9px 12px;background:#fff;border:1px solid #d6dfd4;border-radius:12px;box-shadow:0 3px 16px #0002;pointer-events:auto}
     nav .identity{max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#556553}
+    .user-identity{display:inline-flex;align-items:center;gap:6px;max-width:100%;vertical-align:middle}.identity-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex-shrink:0;border-radius:50%;background:#edf0e7;color:#687447;font-size:12px;overflow:hidden}.avatar img{width:100%;height:100%;object-fit:cover}.author{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:6px 0}
     .panel{position:fixed;right:12px;top:76px;width:370px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 96px);overflow:auto;
       padding:16px;background:#fff;border:1px solid #d6dfd4;border-radius:12px;box-shadow:0 5px 24px #0002;pointer-events:auto}
     h2{font-size:17px;margin:0 0 12px}h3{font-size:14px;margin:12px 0 8px}p{margin:6px 0}small,.muted{color:#637365}
@@ -79,6 +89,26 @@
     const node = element('button', {type: 'button', ...attrs}, text)
     node.addEventListener('click', action)
     return node
+  }
+
+  function renderIdentity(user, missingName) {
+    const identity = currentIdentity(user, missingName)
+    const wrap = element('span', {class: 'user-identity'}), avatar = element('span', {class: 'avatar', 'aria-hidden': 'true'}, identity.initial || '●')
+    if (identity.avatar) {
+      const image = element('img', {src: identity.avatar, alt: ''})
+      image.addEventListener('error', () => avatar.replaceChildren(document.createTextNode(identity.initial || '●')), {once: true})
+      avatar.replaceChildren(image)
+    }
+    wrap.append(avatar, element('span', {class: 'identity-name'}, identity.name))
+    return wrap
+  }
+
+  function renderAuthor(userID, application, snapshot, user) {
+    const line = element('small', {class: 'author'})
+    if (application && application !== '0') line.append(element('span', {}, authorLabel(userID, application, snapshot)))
+    if (userID && userID !== '0') line.append(renderIdentity(user))
+    else if (!application || application === '0') line.append(renderIdentity(null))
+    return line
   }
 
   function makeHost(footer) {
@@ -111,7 +141,7 @@
     function renderMenu() {
       menu.replaceChildren(element('a', {href: settings.origin + '/'}, '系统主页'), element('a', {href: settings.origin + '/web-share'}, '网页托管'))
       if (identity && identity.project_name) menu.append(element('span', {class: 'identity', title: identity.project_name}, identity.project_name))
-      if (identity && identity.user_id) menu.append(element('span', {class: 'identity'}, identity.display_name || '用户 ' + identity.user_id))
+      if (identity && identity.user_id) menu.append(renderIdentity({user_id: identity.user_id, display_name: identity.display_name, avatar_url: identity.avatar_url}))
       else menu.append(element('a', {href: settings.origin + '/web-share/open?target=' + encodeURIComponent(location.pathname + location.search + location.hash)}, '未登录'))
       menu.append(element('span', {class: 'status'}, mode === 'browse' ? '浏览' : '评论中'))
       if (identity && identity.user_id && identity.can_comment && identity.container_mode !== 'raw') {
@@ -418,7 +448,7 @@
           const item = element('article', {class: 'thread'})
           const anchor = thread.anchor || {}
           item.append(element('strong', {}, '讨论 ' + thread.id), element('p', {class: 'status'}, thread.status === 'resolved' ? '已解决' : '未解决'),
-            element('small', {}, authorLabel(thread.author_user_id, thread.author_application_id, thread.author_name_snapshot)),
+            renderAuthor(thread.author_user_id, thread.author_application_id, thread.author_name_snapshot, thread.author_user),
             element('p', {class: 'quote'}, anchor.exact || anchor.label || '整页讨论'))
           if (!samePage(thread, page)) item.append(element('p', {class: 'muted'}, '其他页面：' + thread.page_path))
           else if (!locate(thread)) item.append(element('p', {class: 'muted'}, '原文无法定位'))
@@ -492,7 +522,7 @@
         const kinds = {comment: '评论', reply: '回复', resolve: '已解决', reopen: '已重开', reanchor: '重新关联'}
         for (const event of events) {
           const item = element('div', {class: 'event'})
-          item.append(element('small', {}, (kinds[event.kind] || event.kind) + ' · ' + authorLabel(event.actor_user_id, event.actor_application_id, event.actor_name_snapshot) + ' · ' + (event.created_at || '')),
+          item.append(element('small', {}, (kinds[event.kind] || event.kind) + ' · ' + (event.created_at || '')), renderAuthor(event.actor_user_id, event.actor_application_id, event.actor_name_snapshot, event.actor_user),
             element('p', {class: 'body'}, event.body || ''))
           details.append(item)
         }

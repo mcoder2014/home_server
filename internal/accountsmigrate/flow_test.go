@@ -151,6 +151,41 @@ func TestMigrationPlansAppliesAndDoesNotResetChangedCredentials(t *testing.T) {
 	}
 }
 
+// TestV1ImportChecksumSurvivesNewSessionPolicy binds the import to the checksum
+// measured with origin/master 8404303. Runtime-only defaults must not rewrite it.
+func TestV1ImportChecksumSurvivesNewSessionPolicy(t *testing.T) {
+	db, source, opts := fixtureDatabase(t)
+	ctx := context.Background()
+	const original = "d65cb34634d164438017e16edaeb1e6d6e5c9c66ea45cc9bbc06dcfb76309468"
+	plan, err := BuildPlan(ctx, db, source, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.ImportSHA256 != original {
+		t.Fatalf("published v1 import changed: got %s, want %s", plan.ImportSHA256, original)
+	}
+	if _, ok := plan.RuntimeValues["account_policy"]["max_active_sessions"]; ok {
+		t.Fatal("v1 import contains a later runtime policy")
+	}
+	if err := Apply(ctx, db, source, opts, plan.SHA256, opts.Database); err != nil {
+		t.Fatal(err)
+	}
+	var stored, checksum string
+	if err := db.QueryRow("SELECT values_json FROM site_config_current WHERE namespace='account_policy'").Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "max_active_sessions") {
+		t.Fatal("v1 import wrote a later policy into immutable configuration")
+	}
+	if err := db.QueryRow("SELECT checksum FROM schema_migration WHERE migration_id=?", dataMigrationID).Scan(&checksum); err != nil || checksum != original {
+		t.Fatalf("historical import marker differs: %s %v", checksum, err)
+	}
+	again, err := BuildPlan(ctx, db, source, opts)
+	if err != nil || !again.DataAlreadyImported || again.ImportSHA256 != original {
+		t.Fatalf("rerun rejected a completed original import: %v %v", again, err)
+	}
+}
+
 func TestMigrationRejectsUnknownOwnersBeforeDDL(t *testing.T) {
 	db, source, opts := fixtureDatabase(t)
 	if _, err := db.Exec("UPDATE application SET owner_user_id=999 WHERE id=1"); err != nil {

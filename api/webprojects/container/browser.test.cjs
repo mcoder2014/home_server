@@ -40,6 +40,7 @@ async function setup(options = {}) {
   const page = await browser.newPage({viewport: {width: options.width || (options.mobile ? 390 : 1280), height: 850}})
   if (options.moduleGlobal) await page.addInitScript(() => { window.module = {exports: {business: true}} })
   page.setDefaultTimeout(10000)
+  await page.route('**/api/account/avatars/**', route => route.fulfill({contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==', 'base64')}))
   const state = {identity: {...context, ...options.identity}, requests: [], writes: [], threads: options.threads || [], events: [{id: '1', sequence: 1, kind: 'comment', body: '原始讨论', actor_user_id: '42', actor_application_id: '8', created_at: '2026-09-16T00:00:00Z'}, {id: '2', sequence: 2, kind: 'reply', body: '历史回复', actor_user_id: '43', actor_application_id: '', created_at: '2026-09-16T00:01:00Z'}]}
   await page.route('**/api/web-share/7/**', async route => {
     const request = route.request(), url = new URL(request.url())
@@ -69,6 +70,43 @@ async function selectText(page, id, start = 0, end) {
     document.dispatchEvent(new Event('selectionchange'))
   }, {id, start, end})
 }
+
+test('评论使用当前昵称和头像，重置后不回退到历史违规快照', async () => {
+  const user = {user_id: '42', user_name: 'friend', display_name: '👩🏽‍💻 当前昵称', avatar_url: '/api/account/avatars/42/9'}
+  const {page, state} = await setup({identity: {display_name: user.display_name, avatar_url: user.avatar_url}, threads: [thread('1', {author_application_id: '', author_name_snapshot: '旧违规昵称', author_user: user})]})
+  try {
+    await page.getByRole('button', {name: '评论', exact: true}).click()
+    await page.getByRole('button', {name: '查看讨论 1'}).waitFor()
+    assert.equal(await page.getByText('旧违规昵称', {exact: true}).count(), 0)
+    assert.ok(await page.getByText('👩🏽‍💻 当前昵称', {exact: true}).count() >= 2)
+    const picture = page.locator('hs-web-container img').first()
+    const original = await picture.elementHandle()
+    await picture.evaluate(image => image.dispatchEvent(new Event('error')))
+    assert.equal(await original.evaluate(image => image.isConnected), false)
+    state.threads[0].author_user = {...user, display_name: '', avatar_url: ''}
+    await page.getByRole('button', {name: '刷新列表'}).click()
+    await page.getByText('friend', {exact: true}).waitFor()
+    assert.equal(await page.getByText('旧违规昵称', {exact: true}).count(), 0)
+  } finally { await page.close() }
+})
+
+test('删除账号的评论使用注销占位，外链头像不会发起请求', async () => {
+  const {page, state} = await setup({threads: [thread('1', {author_application_id: '', author_name_snapshot: '历史名称', author_user: null}), thread('2', {author_application_id: '', author_user: {user_id: '43', user_name: 'safe', display_name: '<img src=x onerror=alert(1)>', avatar_url: 'https://tracker.invalid/avatar.png'}})]})
+  try {
+    let tracked = 0
+    await page.route('https://tracker.invalid/**', route => {tracked++; route.abort()})
+    await page.getByRole('button', {name: '评论', exact: true}).click()
+    await page.getByRole('button', {name: '查看讨论 2'}).waitFor()
+    await page.getByText('已注销用户', {exact: true}).waitFor()
+    await page.getByText('<img src=x onerror=alert(1)>', {exact: true}).waitFor()
+    assert.equal(await page.getByText('历史名称', {exact: true}).count(), 0)
+    assert.equal(tracked, 0)
+    state.events[0].actor_user = {user_id: '42', user_name: 'friend', display_name: '现在的作者', avatar_url: ''}
+    state.events[1].actor_user = null
+    await page.getByRole('button', {name: '查看讨论 1'}).click()
+    await page.getByText('现在的作者', {exact: true}).waitFor()
+  } finally { await page.close() }
+})
 
 test('匿名只有固定菜单且原网页按钮可用，无评论请求或可聚焦入口', async () => {
   const {page, state} = await setup({identity: {user_id: '', display_name: '', can_comment: false, csrf_token: ''}})

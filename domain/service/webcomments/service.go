@@ -14,6 +14,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/service/accounts"
+	"github.com/mcoder2014/home_server/domain/service/passport"
 	apperrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
 	"gorm.io/gorm"
@@ -33,6 +34,40 @@ type EventPage struct {
 	HasMore      bool     `json:"has_more"`
 	NextCursor   string   `json:"next_cursor"`
 	NextSequence string   `json:"next_seq"`
+}
+
+// commentUsers reads current identities in both supported modes; snapshots remain database evidence.
+func commentUsers(ctx context.Context, ids []int64) (map[int64]accounts.UserDisplay, error) {
+	identities := map[int64]accounts.UserDisplay{}
+	if accounts.DatabaseMode() {
+		var err error
+		identities, err = accounts.DisplayUsers(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		for _, id := range ids {
+			identity := accounts.UserDisplay{UserID: id, DisplayName: "已注销用户"}
+			user, err := passport.GetMockData().GetByID(id)
+			if err != nil {
+				return nil, apperrors.ErrDependency
+			}
+			if user != nil {
+				identity.UserName, identity.DisplayName = user.UserName, user.UserName
+			}
+			identities[id] = identity
+		}
+	}
+	for id, identity := range identities {
+		if identity.DisplayName == "" {
+			identity.DisplayName = identity.UserName
+			if identity.DisplayName == "" {
+				identity.DisplayName = "用户 " + strconv.FormatInt(id, 10)
+			}
+			identities[id] = identity
+		}
+	}
+	return identities, nil
 }
 
 func List(ctx context.Context, projectID int64, p *utils.Principal, status string, cursor int64, limit int, request string) (*Page, error) {
@@ -73,6 +108,21 @@ func List(ctx context.Context, projectID int64, p *utils.Principal, status strin
 		result.Items = result.Items[:limit]
 		result.NextCursor = strconv.FormatInt(result.Items[limit-1].ID, 10)
 	}
+	ids := make([]int64, 0, len(result.Items))
+	for _, thread := range result.Items {
+		ids = append(ids, thread.AuthorUserID)
+	}
+	identities, err := commentUsers(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, thread := range result.Items {
+		identity := identities[thread.AuthorUserID]
+		thread.AuthorUser = &identity
+		if thread.AuthorApplicationID == 0 {
+			thread.AuthorNameSnapshot = identity.DisplayName
+		}
+	}
 	return result, nil
 }
 
@@ -88,6 +138,15 @@ func Detail(ctx context.Context, projectID, threadID int64, p *utils.Principal) 
 	}
 	if err != nil {
 		return nil, apperrors.ErrDependency
+	}
+	identities, e := commentUsers(ctx, []int64{thread.AuthorUserID})
+	if e != nil {
+		return nil, e
+	}
+	identity := identities[thread.AuthorUserID]
+	thread.AuthorUser = &identity
+	if thread.AuthorApplicationID == 0 {
+		thread.AuthorNameSnapshot = identity.DisplayName
 	}
 	return &thread, nil
 }
@@ -117,6 +176,21 @@ func Events(ctx context.Context, projectID, threadID int64, p *utils.Principal, 
 	if requestID == "" {
 		for _, event := range result.Items {
 			event.RequestID = ""
+		}
+	}
+	ids := make([]int64, 0, len(result.Items))
+	for _, event := range result.Items {
+		ids = append(ids, event.ActorUserID)
+	}
+	identities, e := commentUsers(ctx, ids)
+	if e != nil {
+		return nil, e
+	}
+	for _, event := range result.Items {
+		identity := identities[event.ActorUserID]
+		event.ActorUser = &identity
+		if event.ActorApplicationID == 0 {
+			event.ActorNameSnapshot = identity.DisplayName
 		}
 	}
 	return result, nil
@@ -291,7 +365,19 @@ func Mutate(ctx context.Context, projectID, threadID, revision int64, p *utils.P
 		}
 		return nil
 	})
-	return &result, err
+	if err != nil {
+		return nil, err
+	}
+	identities, err := commentUsers(ctx, []int64{result.AuthorUserID})
+	if err != nil {
+		return nil, err
+	}
+	identity := identities[result.AuthorUserID]
+	result.AuthorUser = &identity
+	if result.AuthorApplicationID == 0 {
+		result.AuthorNameSnapshot = identity.DisplayName
+	}
+	return &result, nil
 }
 
 // A pruned release loses its file row, but comment metadata remains durable.

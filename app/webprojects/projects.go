@@ -536,6 +536,18 @@ func (application *Application) IsMember(projectID, userID int64) (bool, error) 
 }
 
 func (application *Application) EligibleUsers() ([]service.EligibleUser, error) {
+	if accounts.DatabaseMode() {
+		identities, err := accounts.ListActiveUsers(context.Background())
+		if err != nil {
+			return nil, service.ErrDependency
+		}
+		users := make([]service.EligibleUser, 0, len(identities))
+		for _, user := range identities {
+			identity := accounts.DisplayUser(user)
+			users = append(users, service.EligibleUser{ID: strconv.FormatInt(user.ID, 10), UserName: identity.UserName, DisplayName: identity.DisplayName, AvatarURL: identity.AvatarURL})
+		}
+		return users, nil
+	}
 	identities, err := passport.ListUsersWithError(context.Background())
 	if err != nil {
 		return nil, service.ErrDependency

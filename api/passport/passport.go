@@ -94,7 +94,8 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, err := passport.GenToken(res)
+	metadata := accounts.NewSessionMetadata(source, c.Request.UserAgent(), "legacy")
+	token, err := passport.GenTokenWithContext(ctx, res, metadata)
 	if err != nil {
 		ginfmt.FormatWithError(c, err)
 		return

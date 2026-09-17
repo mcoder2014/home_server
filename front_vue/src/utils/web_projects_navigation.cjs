@@ -41,7 +41,7 @@ function normalizeInternalRedirect(value, inheritedHash = '') {
         return '/'
     }
     if (!PROJECT_PATH.test(parsed.pathname)
-        && !['/account', '/account/security', '/invitations', '/book/list', '/book/add', '/book/info', '/scanCodePage', '/admin/users', '/admin/web-share', '/admin/config', '/admin/audit-logs'].includes(parsed.pathname)
+        && !['/account', '/account/security', '/account/sessions', '/invitations', '/book/list', '/book/add', '/book/info', '/scanCodePage', '/admin/users', '/admin/web-share', '/admin/config', '/admin/audit-logs'].includes(parsed.pathname)
         && parsed.pathname !== '/applications'
         && parsed.pathname !== '/web-share'
         && !parsed.pathname.startsWith('/web-share/')

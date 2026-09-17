@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mcoder2014/home_server/domain/model"
 	apperrors "github.com/mcoder2014/home_server/errors"
 )
 
@@ -40,6 +41,8 @@ type Thread struct {
 	AuthorNameSnapshot  string    `json:"author_name_snapshot"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
+
+	AuthorUser *model.UserDisplay `gorm:"-" json:"author_user,omitempty"`
 }
 
 type Event struct {
@@ -59,6 +62,8 @@ type Event struct {
 	RequestID          string    `json:"request_id,omitempty"`
 	PayloadHash        string    `json:"-"`
 	CreatedAt          time.Time `json:"created_at"`
+
+	ActorUser *model.UserDisplay `gorm:"-" json:"actor_user,omitempty"`
 }
 
 type Input struct {

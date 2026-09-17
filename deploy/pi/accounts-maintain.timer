@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily CQ Home Server session metadata retention
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Asia/Singapore
+RandomizedDelaySec=15m
+Persistent=true
+Unit=accounts-maintain.service
+
+[Install]
+WantedBy=timers.target

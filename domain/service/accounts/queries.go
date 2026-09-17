@@ -2,6 +2,7 @@ package accounts
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strconv"
 	"time"
@@ -23,17 +24,34 @@ func ListActiveUsers(ctx context.Context) ([]*model.UserAccount, error) {
 }
 
 // UserDetail 组合账号资料及最近的应用、网页项目和邀请记录，应用列表仅选取管理页面需要的非密钥字段。
+// 账号与会话数量共用只读快照；其他资源保留独立读取顺序。
 func UserDetail(ctx context.Context, id int64) (map[string]interface{}, error) {
 	database, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
-	user, err := dal.QueryAccount(database, id, false)
+	var user *model.UserAccount
+	var counts []sessionCount
+	var now time.Time
+	err = database.Transaction(func(tx *gorm.DB) error {
+		var e error
+		user, e = dal.QueryAccount(tx, id, false)
+		if e != nil {
+			return e
+		}
+		if user == nil {
+			return apperrors.ErrNotFound
+		}
+		now = time.Now()
+		counts, e = sessionCountsTx(tx, []*model.UserAccount{user}, now)
+		return e
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
 		return nil, normalizeError(err)
 	}
-	if user == nil {
-		return nil, apperrors.ErrNotFound
+	var activeSessions, restrictedSessions int64
+	if len(counts) > 0 {
+		activeSessions, restrictedSessions = counts[0].Total, counts[0].Restricted
 	}
 	var apps []struct {
 		ID        int64     `json:"id,string"`
@@ -54,7 +72,7 @@ func UserDetail(ctx context.Context, id int64) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]interface{}{"user": user, "applications": apps, "projects": projects, "invitations": invites.Items}, nil
+	return map[string]interface{}{"user": user, "applications": apps, "projects": projects, "invitations": invites.Items, "active_session_count": activeSessions, "restricted_session_count": restrictedSessions, "server_time": now, "session_warning_threshold": SessionWarningThreshold}, nil
 }
 
 type UserSummary struct {
@@ -63,12 +81,16 @@ type UserSummary struct {
 	ActiveApplicationCount int64 `json:"active_application_count"`
 	ProjectCount           int64 `json:"project_count"`
 	PublishedProjectCount  int64 `json:"published_project_count"`
+	ActiveSessionCount     int64 `json:"active_session_count"`
+	RestrictedSessionCount int64 `json:"restricted_session_count"`
 }
 
 type UserPage struct {
-	Items      []*UserSummary `json:"items"`
-	NextCursor string         `json:"next_cursor"`
-	HasMore    bool           `json:"has_more"`
+	Items                   []*UserSummary `json:"items"`
+	NextCursor              string         `json:"next_cursor"`
+	HasMore                 bool           `json:"has_more"`
+	ServerTime              time.Time      `json:"server_time"`
+	SessionWarningThreshold int            `json:"session_warning_threshold"`
 }
 
 // ListUsers 按账号游标分页，并批量汇总本页用户的应用与项目数量，多读一条判断是否有下一页。
@@ -83,13 +105,25 @@ func ListUsers(ctx context.Context, filter dal.AccountFilter) (*UserPage, error)
 	if err != nil {
 		return nil, err
 	}
+	var page *UserPage
+	err = database.Transaction(func(tx *gorm.DB) error {
+		var e error
+		page, e = listUsersPageTx(tx, filter, time.Now())
+		return e
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	return page, normalizeError(err)
+}
+
+// listUsersPageTx reads a user page and batches all resource/session counts in
+// the same snapshot; database failures never become invented zero counts.
+func listUsersPageTx(database *gorm.DB, filter dal.AccountFilter, now time.Time) (*UserPage, error) {
 	limit := filter.Limit
 	filter.Limit++
 	users, err := dal.ListAccounts(database, filter)
 	if err != nil {
 		return nil, normalizeError(err)
 	}
-	page := &UserPage{Items: []*UserSummary{}, HasMore: len(users) > limit}
+	page := &UserPage{Items: []*UserSummary{}, HasMore: len(users) > limit, ServerTime: now, SessionWarningThreshold: SessionWarningThreshold}
 	if page.HasMore {
 		users = users[:limit]
 	}
@@ -104,12 +138,20 @@ func ListUsers(ctx context.Context, filter dal.AccountFilter) (*UserPage, error)
 	if len(ids) == 0 {
 		return page, nil
 	}
+	sessions, err := sessionCountsTx(database, users, now)
+	if err != nil {
+		return nil, normalizeError(err)
+	}
+	for _, count := range sessions {
+		byID[count.UserID].ActiveSessionCount = count.Total
+		byID[count.UserID].RestrictedSessionCount = count.Restricted
+	}
 	var counts []struct {
 		OwnerUserID int64
 		Total       int64
 		Active      int64
 	}
-	err = database.Table(dal.ApplicationTable).Select("owner_user_id, COUNT(*) AS total, SUM(status = 1 AND expires_at > ?) AS active", time.Now()).Where("owner_user_id IN ? AND status <> ?", ids, model.ApplicationStatusRevoked).Group("owner_user_id").Scan(&counts).Error
+	err = database.Table(dal.ApplicationTable).Select("owner_user_id, COUNT(*) AS total, SUM(status = 1 AND expires_at > ?) AS active", now).Where("owner_user_id IN ? AND status <> ?", ids, model.ApplicationStatusRevoked).Group("owner_user_id").Scan(&counts).Error
 	if err != nil {
 		return nil, normalizeError(err)
 	}
@@ -135,6 +177,7 @@ func ListUsers(ctx context.Context, filter dal.AccountFilter) (*UserPage, error)
 type AuditView struct {
 	model.AdminAuditLog
 	ActorUserName string                 `json:"actor_user_name"`
+	ActorUser     *UserDisplay           `json:"actor_user"`
 	Before        map[string]interface{} `json:"before"`
 	After         map[string]interface{} `json:"after"`
 }
@@ -173,19 +216,25 @@ func ListAudit(ctx context.Context, cursor int64, limit int, targetType string, 
 	for _, log := range logs {
 		ids = append(ids, log.ActorUserID)
 	}
-	var actors []model.UserAccount
+	var actorRows []model.UserAccount
 	if len(ids) > 0 {
-		if err = database.Table(dal.AccountTable).Select("id", "username").Where("id IN ?", ids).Find(&actors).Error; err != nil {
+		if err = database.Table(dal.AccountTable).Select("id", "username", "display_name", "avatar_version", "status", "must_change_password").Where("id IN ?", ids).Find(&actorRows).Error; err != nil {
 			return nil, normalizeError(err)
 		}
 	}
 	names := map[int64]string{}
-	for _, actor := range actors {
+	actors := map[int64]UserDisplay{}
+	for _, actor := range actorRows {
 		names[actor.ID] = actor.Username
+		actors[actor.ID] = DisplayUser(&actor)
 	}
 	items := []AuditView{}
 	for _, log := range logs {
-		v := AuditView{AdminAuditLog: log, ActorUserName: names[log.ActorUserID]}
+		actor, found := actors[log.ActorUserID]
+		if !found {
+			actor = UserDisplay{UserID: log.ActorUserID, DisplayName: "已注销用户"}
+		}
+		v := AuditView{AdminAuditLog: log, ActorUserName: names[log.ActorUserID], ActorUser: &actor}
 		_ = json.Unmarshal([]byte(log.BeforeSummary), &v.Before)
 		_ = json.Unmarshal([]byte(log.AfterSummary), &v.After)
 		items = append(items, v)

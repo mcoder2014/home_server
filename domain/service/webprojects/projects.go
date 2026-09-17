@@ -92,8 +92,10 @@ type ReleasePage struct {
 }
 
 type EligibleUser struct {
-	ID       string `json:"id"`
-	UserName string `json:"user_name"`
+	ID          string `json:"id"`
+	UserName    string `json:"user_name"`
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url"`
 }
 
 // ValidateProjectInput checks the complete post-update value set before a

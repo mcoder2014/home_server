@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -127,5 +128,35 @@ func TestResourceQuotaSchemaDefaultsAndRelationships(t *testing.T) {
 	values["max_user_bytes"] = int64(1)
 	if _, err := ValidateValues(conf, "web_projects", values); err == nil {
 		t.Fatal("per-user quota accepted below per-project quota")
+	}
+}
+
+func TestMaxActiveSessionsPolicyDefaultsAndBounds(t *testing.T) {
+	conf := Config{}
+	values := DefaultRuntimeValues(conf)
+	if values["account_policy"]["max_active_sessions"] != 5 {
+		t.Fatalf("default website session limit must be 5: %v", values["account_policy"])
+	}
+	snapshot, err := BuildRuntimeSnapshot(conf, 0, nil, values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(snapshot.AccountPolicy)
+	var policy map[string]interface{}
+	if err := json.Unmarshal(raw, &policy); err != nil || policy["max_active_sessions"] != float64(5) {
+		t.Fatalf("runtime omitted website session policy: %s %v", raw, err)
+	}
+	for _, limit := range []interface{}{1, 100, 0, -1, 101, 1.5, "5", true, nil} {
+		candidate := DefaultRuntimeValues(conf)["account_policy"]
+		candidate["max_active_sessions"] = limit
+		_, err := ValidateValues(conf, "account_policy", candidate)
+		valid := limit == 1 || limit == 100
+		if (err == nil) != valid {
+			t.Errorf("website session limit %v validity=%t: %v", limit, valid, err)
+		}
+	}
+	delete(values["account_policy"], "max_active_sessions")
+	if _, err := ValidateValues(conf, "account_policy", values["account_policy"]); err == nil {
+		t.Fatal("new publication accepted a missing website session limit")
 	}
 }

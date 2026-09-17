@@ -7,7 +7,7 @@ const vm = require('node:vm')
 function component(name, api = {}) {
     const source = fs.readFileSync(path.join(__dirname, `../src/views/${name}.vue`), 'utf8')
     const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
-    const box = {module: {exports: {}}, MyHeader: {}, AdminConfirm: {}, Key: {}, Plus: {}, Refresh: {}, bookFallback: 'fixture.svg', alert() {}, console, setInterval, clearInterval, URLSearchParams,
+    const box = {module: {exports: {}}, MyHeader: {}, UserIdentity: {}, AvatarCropper: {}, LoginSessions: {}, AdminConfirm: {}, Key: {}, Plus: {}, Refresh: {}, bookFallback: 'fixture.svg', alert() {}, console, setInterval, clearInterval, URLSearchParams,
         require: name => name === '@/api/accounts.cjs' ? {accountsApi: api} : require(path.join(__dirname, '../src/', name.slice(2))),
     }
     vm.runInNewContext(script, box, {filename: `${name}.vue`})
@@ -72,6 +72,51 @@ test('a config publish conflict retains the draft and revision for explicit revi
     assert.equal(view.draft.title, '草稿标题')
     assert.equal(view.conflict, true)
     assert.equal(view.pendingRequest, null)
+})
+
+test('legacy account policy rollback fills the additive session limit without modifying history', async () => {
+    const legacy = {session_ttl_seconds: 604800, temporary_password_ttl_days: 7, min_password_length: 15, bcrypt_cost: 12}
+    const fields = Object.entries({...legacy, max_active_sessions: 5}).map(([key, default_value]) => ({key, label: key, type: 'integer', default_value, minimum: 1, maximum: key === 'max_active_sessions' ? 100 : 2592000}))
+    const requests = []
+    const {view} = component('AdminConfig', {
+        validateConfig: async (...args) => {requests.push(['validate', ...args]); return {revision: 7, values: args[1]}},
+        rollbackConfig: async (...args) => {requests.push(['rollback', ...args]); return {namespace: 'account_policy', revision: 8, values: {...legacy, max_active_sessions: 5}}},
+        configStatus: async () => ({apply_state: 'applied'}),
+    })
+    view.namespace = 'account_policy'; view.schemas = [{namespace: 'account_policy', fields}]
+    view.records = [{namespace: 'account_policy', revision: 7, values: {...legacy, max_active_sessions: 3}}]
+    view.resetDraft()
+    const record = {revision: 1, values: legacy}
+    await view.prepareRollback(record)
+    assert.equal(view.historyError, '')
+    assert.equal(requests[0][2].max_active_sessions, 5)
+    assert.equal(Object.hasOwn(record.values, 'max_active_sessions'), false)
+    assert.equal(view.draft.max_active_sessions, 3)
+    assert.equal(view.confirmVisible, true)
+    await view.publish({current_password: 'fixture-password', reason: '合成旧版本回滚'})
+    assert.equal(requests[1][0], 'rollback')
+    assert.equal(requests[1][2], 7)
+    assert.equal(requests[1][3].target_revision, 1)
+    assert.equal(Object.hasOwn(requests[1][3], 'values'), false)
+    assert.equal(view.current.revision, 8)
+    assert.equal(view.draft.max_active_sessions, 5)
+    assert.equal(Object.hasOwn(record.values, 'max_active_sessions'), false)
+})
+
+test('legacy rollback compatibility keeps other missing fields and explicit invalid limits rejected', async () => {
+    const defaults = {session_ttl_seconds: 604800, temporary_password_ttl_days: 7, min_password_length: 15, bcrypt_cost: 12, max_active_sessions: 5}
+    const fields = Object.entries(defaults).map(([key, default_value]) => ({key, label: key, type: 'integer', default_value, minimum: 1, maximum: key === 'max_active_sessions' ? 100 : 2592000}))
+    for (const change of [values => {delete values.min_password_length}, values => {values.max_active_sessions = null}, values => {values.max_active_sessions = 101}]) {
+        const requests = []
+        const {view} = component('AdminConfig', {validateConfig: async (...args) => {requests.push(args); return {revision: 7, values: args[1]}}})
+        view.namespace = 'account_policy'; view.schemas = [{namespace: 'account_policy', fields}]
+        view.records = [{namespace: 'account_policy', revision: 7, values: defaults}]
+        const candidate = {...defaults}; change(candidate)
+        await view.prepareRollback({revision: 1, values: candidate})
+        assert.ok(view.historyError)
+        assert.equal(view.confirmVisible, false)
+        assert.deepEqual(requests, [])
+    }
 })
 
 test('administrator preview offers only ready release files, excluding cleanup in progress', () => {

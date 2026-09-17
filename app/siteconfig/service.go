@@ -156,6 +156,12 @@ func (s *Service) checkedValues(row model.SiteConfigCurrent) (map[string]interfa
 	if err != nil {
 		return nil, appErrors.ErrDependency
 	}
+	// Published v1 account policies omit this additive key; preserve their original JSON and checksum.
+	if row.Namespace == "account_policy" && values != nil {
+		if _, exists := values["max_active_sessions"]; !exists {
+			values["max_active_sessions"] = 5
+		}
+	}
 	normalized, err := config.ValidateValues(s.bootstrap, row.Namespace, values)
 	if err != nil {
 		return nil, appErrors.ErrDependency
