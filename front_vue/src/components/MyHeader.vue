@@ -10,7 +10,7 @@
     </nav>
     <div class="header-user">
       <template v-if="user">
-        <el-dropdown trigger="click" @command="navigate"><button class="account-trigger"><span class="user-avatar">{{ displayName.slice(0, 1).toUpperCase() }}</span><span class="username">{{ displayName }}</span><span aria-hidden="true">⌄</span></button>
+        <el-dropdown trigger="click" @command="navigate"><button class="account-trigger"><UserIdentity :user="user" :hide-avatar="user.must_change_password" :size="30" /><span aria-hidden="true">⌄</span></button>
           <template #dropdown><el-dropdown-menu><el-dropdown-item command="/account/security" v-if="user.must_change_password">修改初始密码</el-dropdown-item><template v-else><el-dropdown-item command="/account">个人中心</el-dropdown-item><el-dropdown-item command="/invitations">邀请朋友</el-dropdown-item></template></el-dropdown-menu></template>
         </el-dropdown>
         <el-button plain size="small" :loading="loggingOut" @click="logout">退出</el-button>
@@ -20,9 +20,10 @@
   </div></header>
 </template>
 <script>
+import UserIdentity from '@/components/UserIdentity.vue'
 const {accountsApi} = require('@/api/accounts.cjs')
 export default {
-  name: 'MyHeader',
+  name: 'MyHeader', components: {UserIdentity},
   data() { return {loggingOut: false} },
   computed: {
     user() { return this.$store.state.userInfo },
@@ -70,7 +71,7 @@ export default {
 .header-nav a.active { color: var(--primary-dark); background: #edf4ef; font-weight: 600; }
 .header-user { display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
 .user-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #edf0e7; color: #687447; font-size: 12px; font-weight: 650; }
-.username { font-size: 13px; color: var(--text-secondary); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-trigger :deep(.identity-name) { font-size: 13px; color: var(--text-secondary); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 820px) {
   .header-inner { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 14px 20px 10px; }
   .header-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); grid-row: 2; grid-column: 1 / -1; margin-top: 12px; width: 100%; }
@@ -80,7 +81,7 @@ export default {
 @media (max-width: 480px) {
   .header-inner { padding-left: 16px; padding-right: 16px; }
   .logo-text { font-size: 15px; }
-  .username { display: none; }
+  .account-trigger :deep(.identity-text) { display: none; }
   .user-avatar { width: 26px; height: 26px; }
   .header-user { gap: 6px; }
   .header-nav { gap: 2px; }

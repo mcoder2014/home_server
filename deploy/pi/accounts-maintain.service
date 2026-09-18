@@ -1,0 +1,23 @@
+# Public example; install a built accounts-maintain binary and a private 0600 YAML first.
+[Unit]
+Description=CQ Home Server session metadata retention
+After=network.target mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+User=home-server
+Group=home-server
+WorkingDirectory=/opt/home_server/current
+ExecStart=/opt/home_server/current/bin/accounts-maintain --config /etc/home_server/server.yaml --clear-session-metadata --timeout=5m
+TimeoutStartSec=330
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=accounts-maintain

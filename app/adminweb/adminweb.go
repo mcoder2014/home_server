@@ -36,8 +36,9 @@ type MutationRequest struct {
 
 type ProjectView struct {
 	*webprojects.ProjectView
-	OwnerUserID string `json:"owner_user_id"`
-	UserName    string `json:"user_name"`
+	OwnerUserID string               `json:"owner_user_id"`
+	UserName    string               `json:"user_name"`
+	OwnerUser   accounts.UserDisplay `json:"owner_user"`
 }
 
 type Page struct {
@@ -127,21 +128,15 @@ func List(ctx context.Context, actorID, version int64, filter Filter) (*Page, er
 	for _, project := range projects {
 		owners = append(owners, project.OwnerUserID)
 	}
-	names := map[int64]string{}
-	if len(owners) > 0 {
-		var users []struct {
-			ID       int64
-			Username string
-		}
-		if err := db.MasterDB().WithContext(ctx).Table(dal.AccountTable).Select("id", "username").Where("id IN ?", owners).Find(&users).Error; err != nil {
-			return nil, apperrors.ErrDependency
-		}
-		for _, user := range users {
-			names[user.ID] = user.Username
-		}
+	identities, err := accounts.DisplayUsers(ctx, owners)
+	if err != nil {
+		return nil, err
 	}
 	for _, project := range projects {
-		result.Items = append(result.Items, projectView(project, names[project.OwnerUserID]))
+		identity := identities[project.OwnerUserID]
+		view := projectView(project, identity.UserName)
+		view.OwnerUser = identity
+		result.Items = append(result.Items, view)
 	}
 	if result.HasMore {
 		result.NextCursor = strconv.FormatInt(projects[len(projects)-1].ID, 10)
@@ -178,7 +173,9 @@ func Get(ctx context.Context, actorID, version, projectID int64) (*Detail, error
 	if releases == nil {
 		releases = []*model.WebProjectRelease{}
 	}
-	return &Detail{Project: projectView(project, owner.Username), Releases: releases}, nil
+	view := projectView(project, owner.Username)
+	view.OwnerUser = accounts.DisplayUser(owner)
+	return &Detail{Project: view, Releases: releases}, nil
 }
 
 // Change never grants normal browsing rights. It rechecks the administrator's

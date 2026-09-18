@@ -7,10 +7,11 @@ Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，�
 | 入口 | 用户可执行的操作 | 接口范围 |
 | --- | --- | --- |
 | `/login`、`/register` | 密码登录、校验邀请码、受邀注册 | `/api/auth/login`、`registration-policy`、`invitations/validate`、`register` |
-| `/account` | 更新显示名称、联系邮箱和电话；查看账号与功能权限 | `GET /api/auth/me`、`PATCH /api/account/profile` |
+| `/account` | 更新昵称、联系邮箱和电话；裁剪上传／移除头像；查看账号与功能权限 | `GET /api/auth/me`、`PATCH /api/account/profile`、`POST/DELETE /api/account/avatar` |
 | `/account/security` | 验证当前密码后改密，退出全部会话；初始密码账号必须先改密 | `/api/auth/change-password`、`logout-all` |
+| `/account/sessions` | 查看当前及其他有效登录；退出选中或其他全部登录 | `GET /api/account/sessions`、`sessions/revoke`、`sessions/revoke-others` |
 | `/invitations` | 查看本月剩余额度、生成单次邀请码、复制一次性邀请码或链接、撤销未用邀请 | `/api/account/invitations`、`/:id/revoke` |
-| `/admin/users` | 搜索和分页查询用户；创建、封禁、恢复、删除、重置密码、退出全部会话；管理员、藏书和 WebDAV 授权 | `/api/admin/users`、`/:id` 及管理动作；`/:id/invitations/:invitation_id/revoke` |
+| `/admin/users` | 搜索用户、有效会话统计与详情；创建、封禁、恢复、删除、重置密码、昵称／头像、退出全部会话；管理员、藏书和 WebDAV 授权 | `/api/admin/users`、`/:id`、`/:id/sessions`、`/:id/reset-profile` 及原管理动作 |
 | `/admin/web-share` | 按所有者、名称、发布状态、可见范围和审核状态筛选全站网页；版本预览、下架、删除、恢复、解除审核锁 | `/api/admin/web-share`、`/:id`、`/:id/:action`、管理员版本预览路径 |
 | `/admin/config` | 根据 schema 生成分组表单；校验、查看差异、发布、查看历史、回滚、检查运行生效状态 | `/api/admin/config/schema`、`config`、`status`、`/:namespace`、`validate`、`history`、`rollback` |
 | `/admin/audit-logs` | 按目标类型与数字 ID 查询操作记录及脱敏变化 | `/api/admin/audit-logs` |
@@ -26,6 +27,12 @@ Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，�
 - 邀请链接采用 `/register#invite=...`；读取后清除地址片段，校验和注册通过请求体传递完整邀请码。生成请求使用稳定 `request_id` 处理结果不明确时的重试。
 
 个人联系方式不自动变成登录别名或找回密码渠道。管理员身份不自动开通家庭藏书或 WebDAV。WebDAV Basic 客户端独立于网页会话和首次改密流程，获准账号可直接使用未过期密码；网页登录失败限速不连带影响 Basic。HTML 预览继续同源执行，界面明确提示这一已接受的信任边界；预览不声称提供脚本沙箱。
+
+昵称最多 64 个 Unicode 字符，留空显示用户名。头像仅支持 JPEG／PNG、2 MiB、4096×4096 以内且总像素不超过 1600 万；客户端处理方向并裁剪，服务端独立检查并输出 256×256 JPEG。冲突时保留昵称与裁剪草稿；跨标签页仅广播刷新事件，不广播凭据。资料、成员、邀请、所有者与评论统一显示当前身份；管理记录保留稳定用户名／ID，普通评论不会回退历史违规昵称。
+
+有效会话按服务端认证条件统计，受限改密会话单列；剩余时间根据服务器响应计算，所有时间显示 UTC+8。登录 IP 与 UA 是登录时的描述，不能作为设备指纹。选择退出保护当前会话并覆盖所选记录；退出其他全部涵盖未加载页。管理员数量达到 10 仅提示核查，不自动封禁。配置用户模式保留既有登录与评论；数据库专属管理接口拒绝调用。
+
+“站点设置 → 账号策略 → 每个账号同时有效的网站登录上限”默认 5，允许 1–100 个网站会话，普通与受限改密会话均占名额。达到上限保留已有登录并拒绝新登录；调低上限不会自动退出旧会话。登录管理显示有效数量和网站上限。应用凭证、Basic 和同一 Token 的 Cookie 兑换不占名额。
 
 ## 动态配置表单
 

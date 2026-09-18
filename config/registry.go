@@ -84,6 +84,7 @@ func Registry(conf Config) []NamespaceSchema {
 		{"web_projects", "max_concurrent_extracts", "全站同时上传数量", "个", 1, 100, 4},
 		{"web_projects", "delete_retention_days", "删除后保留时间", "天", 1, 365, 7},
 		{"account_policy", "session_ttl_seconds", "用户会话有效期", "秒", 300, 2592000, 604800},
+		{"account_policy", "max_active_sessions", "每个账号同时有效的网站登录上限", "个会话", 1, 100, 5},
 		{"account_policy", "temporary_password_ttl_days", "临时密码有效期", "天", 1, 30, 7},
 		{"account_policy", "min_password_length", "密码最少字符数", "字符", 15, 64, 15},
 		{"account_policy", "bcrypt_cost", "密码哈希成本", "", 10, 14, 12},

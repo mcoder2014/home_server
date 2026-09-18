@@ -22,6 +22,7 @@ import (
 )
 
 const AccountContextKey = "account"
+const AccountSessionContextKey = "account_session_id"
 
 // TrustedClientIP ignores forwarding headers from direct clients and walks a
 // trusted proxy chain from right to left. A caller-controlled left prefix never
@@ -153,6 +154,10 @@ func RequireAccount(admin, allowPasswordChange bool) gin.HandlerFunc {
 			user, session, err = accounts.CheckSession(ginfmt.RPCContext(c), token, allowPasswordChange)
 			if session != nil {
 				tokenExpiresAt = session.ExpireTime
+				if session.Purpose == model.SessionPasswordChange && user != nil && user.PasswordExpiresAt != nil && user.PasswordExpiresAt.Before(tokenExpiresAt) {
+					tokenExpiresAt = *user.PasswordExpiresAt
+				}
+				c.Set(AccountSessionContextKey, session.ID)
 			}
 		} else {
 			var identity *model.UserIdentity

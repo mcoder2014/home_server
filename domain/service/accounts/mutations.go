@@ -191,6 +191,7 @@ func AdminCreate(ctx context.Context, actorID, version int64, input CreateInput)
 }
 
 type AdminInput struct {
+	ActingToken      string `json:"-"`
 	Reason           string `json:"reason"`
 	CurrentPassword  string `json:"current_password"`
 	Password         string `json:"password"`
@@ -198,6 +199,8 @@ type AdminInput struct {
 	Role             string `json:"role"`
 	Enabled          bool   `json:"enabled"`
 	Permission       string `json:"permission"`
+	ResetDisplayName bool   `json:"reset_display_name"`
+	ResetAvatar      bool   `json:"reset_avatar"`
 }
 
 func VerifyAdminPassword(ctx context.Context, id int64, password string) (*model.UserAccount, error) {
@@ -272,6 +275,16 @@ func AdminChange(ctx context.Context, actorID, version, targetID, revision int64
 		if actor == nil || actor.Status != model.AccountActive || actor.Role != model.RoleAdmin || actor.MustChangePassword || actor.AuthVersion != version || actor.PasswordHash != verified.PasswordHash {
 			return apperrors.ErrUnauthorized
 		}
+		if action == "reset-profile" {
+			// Both account locks are already held; take the acting session lock next.
+			acting, _, _, e := actingSessionTx(tx, input.ActingToken, true, true)
+			if e != nil {
+				return e
+			}
+			if acting.ID != actorID || acting.AuthVersion != version {
+				return apperrors.ErrUnauthorized
+			}
+		}
 		if target == nil {
 			return apperrors.ErrNotFound
 		}
@@ -279,6 +292,9 @@ func AdminChange(ctx context.Context, actorID, version, targetID, revision int64
 			return apperrors.ErrConflict
 		}
 		before := accountSummary(target)
+		if action == "reset-profile" {
+			before = profileSummary(target)
+		}
 		fields, e := adminTransition(tx, actorID, target, action, input, hash)
 		if e != nil {
 			return e
@@ -334,6 +350,10 @@ func adminTransition(tx *gorm.DB, actorID int64, target *model.UserAccount, acti
 		if action == "delete" {
 			fields["status"] = model.AccountDeleted
 			fields["deleted_at"] = now
+			fields["avatar_version"] = int64(0)
+			if err := tx.Table(dal.AccountAvatarTable).Where("user_id = ?", target.ID).Delete(&model.UserAvatar{}).Error; err != nil {
+				return nil, err
+			}
 		}
 		if err := suspendApplicationsTx(tx, target.ID, action == "delete"); err != nil {
 			return nil, err
@@ -355,6 +375,19 @@ func adminTransition(tx *gorm.DB, actorID int64, target *model.UserAccount, acti
 			return nil, apperrors.ErrConflict
 		}
 		fields["status"] = model.AccountActive
+	case "reset-profile":
+		if !input.ResetDisplayName && !input.ResetAvatar {
+			return nil, apperrors.ErrInvalid
+		}
+		if input.ResetDisplayName {
+			fields["display_name"] = ""
+		}
+		if input.ResetAvatar {
+			fields["avatar_version"] = int64(0)
+			if err := tx.Table(dal.AccountAvatarTable).Where("user_id = ?", target.ID).Delete(&model.UserAvatar{}).Error; err != nil {
+				return nil, err
+			}
+		}
 	case "role":
 		if input.Role != model.RoleAdmin && input.Role != model.RoleUser {
 			return nil, apperrors.ErrInvalid
@@ -456,10 +489,21 @@ func accountSummary(user *model.UserAccount) string {
 	return string(data)
 }
 
+func profileSummary(user *model.UserAccount) string {
+	if user == nil {
+		return "{}"
+	}
+	data, _ := json.Marshal(map[string]interface{}{"display_name": user.DisplayName, "avatar_version": user.AvatarVersion, "revision": user.Revision})
+	return string(data)
+}
+
 func writeAudit(tx *gorm.DB, actorID int64, action, targetType string, targetID int64, before, reason string, after *model.UserAccount) error {
 	if before == "" {
 		before = "{}"
 	}
 	audit := model.AdminAuditLog{ActorUserID: actorID, Action: action, TargetType: targetType, TargetID: targetID, BeforeSummary: before, AfterSummary: accountSummary(after), Reason: reason, Result: "success", CreateTime: time.Now()}
+	if action == "reset-profile" {
+		audit.AfterSummary = profileSummary(after)
+	}
 	return tx.Table(dal.AdminAuditTable).Create(&audit).Error
 }

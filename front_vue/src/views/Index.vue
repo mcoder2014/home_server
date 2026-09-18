@@ -6,7 +6,7 @@
       <section class="welcome-banner">
         <div class="welcome-copy">
           <span class="page-eyebrow">你的家庭工作台</span>
-          <h1>欢迎回来，{{ username }}</h1>
+          <h1>欢迎回来，<UserIdentity v-if="$store.state.userInfo" :user="$store.state.userInfo" :size="44" /><span v-else>访客</span></h1>
           <p>收藏好书，记录想法，让实用的小工具随时可用。<br>你的家庭服务，从这里开始。</p>
           <router-link class="welcome-link" to="/web-share">进入网页托管 <el-icon><ArrowRight /></el-icon></router-link>
         </div>
@@ -55,11 +55,12 @@
 
 <script>
 import MyHeader from '../components/MyHeader'
+import UserIdentity from '@/components/UserIdentity.vue'
 import {ArrowRight, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
 
 export default {
   name: 'MyIndex',
-  components: {MyHeader, Monitor, Plus, Reading, Key, ArrowRight},
+  components: {MyHeader, UserIdentity, Monitor, Plus, Reading, Key, ArrowRight},
   created() { this.$store.dispatch('loadBootstrap').catch(() => {}) },
   computed: {
     libraryAvailable() { return this.$store.state.userInfo?.library_enabled && this.$store.state.userInfo?.capabilities?.library !== false },

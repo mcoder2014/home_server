@@ -18,6 +18,7 @@ import (
 	"github.com/mcoder2014/home_server/utils"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -130,7 +131,7 @@ func Authenticate(ctx context.Context, key, password string) (*model.UserAccount
 // Login validates the password before a short row-locked transaction. The lock
 // rechecks the exact password and auth version so a reset/ban cannot race token
 // issuance. A temporary password only receives a password-change session.
-func Login(ctx context.Context, key, password string) (*model.UserAccount, string, *model.AccountSession, error) {
+func Login(ctx context.Context, key, password string, metadata ...SessionMetadata) (*model.UserAccount, string, *model.AccountSession, error) {
 	verified, err := Authenticate(ctx, key, password)
 	if err != nil {
 		return nil, "", nil, err
@@ -151,6 +152,10 @@ func Login(ctx context.Context, key, password string) (*model.UserAccount, strin
 	var user *model.UserAccount
 	var token string
 	var session *model.AccountSession
+	info := NewSessionMetadata("", "", "unknown")
+	if len(metadata) > 0 {
+		info = NewSessionMetadata(metadata[0].LoginIP, metadata[0].UserAgent, metadata[0].LoginSource)
+	}
 	// 锁定账号后确认凭据快照仍有效，必要时升级 bcrypt 成本，再原子写入新会话。
 	err = database.Transaction(func(tx *gorm.DB) error {
 		var e error
@@ -171,20 +176,39 @@ func Login(ctx context.Context, key, password string) (*model.UserAccount, strin
 			user.PasswordHash = upgraded
 			user.Revision++
 		}
-		token, session, e = issueSessionTx(tx, user)
+		token, session, e = issueSessionTx(tx, user, info)
 		return e
 	})
 	return user, token, session, normalizeError(err)
 }
 
-// issueSessionTx 保存随机会话令牌的摘要并更新登录时间；待改密账号仅获得十分钟的改密专用会话。
-func issueSessionTx(tx *gorm.DB, user *model.UserAccount) (string, *model.AccountSession, error) {
+// issueSessionTx requires the user row lock. It checks the effective-session
+// limit with a current locking read before issuing a token or changing login time.
+// Temporary passwords only receive ten-minute password-change sessions.
+func issueSessionTx(tx *gorm.DB, user *model.UserAccount, metadata SessionMetadata) (string, *model.AccountSession, error) {
+	policy := config.Runtime().AccountPolicy
+	if policy.MaxActiveSessions < 1 || policy.MaxActiveSessions > 100 {
+		return "", nil, apperrors.ErrDependency
+	}
+	now := time.Now()
+	var active []struct{ ID int64 }
+	// A locking read sees sessions committed while this transaction waited for
+	// the user lock, even if an earlier consistent read established a snapshot.
+	err := activeSessionQuery(tx, now).Select("s.id").
+		Where("s.user_id = ? AND s.auth_version = ?", user.ID, user.AuthVersion).
+		Limit(policy.MaxActiveSessions).
+		Clauses(clause.Locking{Strength: "UPDATE"}).Find(&active).Error
+	if err != nil {
+		return "", nil, err
+	}
+	if len(active) >= policy.MaxActiveSessions {
+		return "", nil, apperrors.WithMessage(apperrors.ErrRateLimited, "有效登录会话已达到网站上限，请从已登录设备退出其他登录或联系管理员")
+	}
 	token, err := randomSecret("us_cq_", 32)
 	if err != nil {
 		return "", nil, err
 	}
-	now := time.Now()
-	ttl := time.Duration(config.Runtime().AccountPolicy.SessionTTLSeconds) * time.Second
+	ttl := time.Duration(policy.SessionTTLSeconds) * time.Second
 	purpose := model.SessionUser
 	if user.MustChangePassword {
 		purpose = model.SessionPasswordChange
@@ -194,7 +218,7 @@ func issueSessionTx(tx *gorm.DB, user *model.UserAccount) (string, *model.Accoun
 		return "", nil, apperrors.ErrDependency
 	}
 	digest := sha256.Sum256([]byte(token))
-	session := &model.AccountSession{ID: utils.GenInt64ID(), UserID: user.ID, TokenDigest: digest[:], AuthVersion: user.AuthVersion, Purpose: purpose, AuthenticatedAt: now, ExpireTime: now.Add(ttl), CreateTime: now, UpdateTime: now}
+	session := &model.AccountSession{ID: utils.GenInt64ID(), UserID: user.ID, TokenDigest: digest[:], AuthVersion: user.AuthVersion, Purpose: purpose, AuthenticatedAt: now, ExpireTime: now.Add(ttl), CreateTime: now, UpdateTime: now, LoginIP: metadata.LoginIP, UserAgent: metadata.UserAgent, ClientName: metadata.ClientName, OSName: metadata.OSName, DeviceType: metadata.DeviceType, LoginSource: metadata.LoginSource}
 	if err = dal.InsertAccountSession(tx, session); err != nil {
 		return "", nil, err
 	}
@@ -206,12 +230,16 @@ func issueSessionTx(tx *gorm.DB, user *model.UserAccount) (string, *model.Accoun
 }
 
 // IssueVerifiedSession 为已验证身份签发会话，锁内复核认证版本、账号状态和临时密码有效期。
-func IssueVerifiedSession(ctx context.Context, id, version int64) (string, error) {
+func IssueVerifiedSession(ctx context.Context, id, version int64, metadata ...SessionMetadata) (string, error) {
 	database, err := database(ctx)
 	if err != nil {
 		return "", err
 	}
 	var token string
+	info := NewSessionMetadata("", "", "unknown")
+	if len(metadata) > 0 {
+		info = NewSessionMetadata(metadata[0].LoginIP, metadata[0].UserAgent, metadata[0].LoginSource)
+	}
 	err = database.Transaction(func(tx *gorm.DB) error {
 		user, e := dal.QueryAccount(tx, id, true)
 		if e != nil {
@@ -223,7 +251,7 @@ func IssueVerifiedSession(ctx context.Context, id, version int64) (string, error
 		if user.MustChangePassword && (user.PasswordExpiresAt == nil || !user.PasswordExpiresAt.After(time.Now())) {
 			return ErrCredentials
 		}
-		token, _, e = issueSessionTx(tx, user)
+		token, _, e = issueSessionTx(tx, user, info)
 		return e
 	})
 	return token, normalizeError(err)
@@ -243,18 +271,19 @@ func CheckSession(ctx context.Context, token string, allowPasswordChange bool) (
 	if err != nil {
 		return nil, nil, normalizeError(err)
 	}
-	if session == nil || session.IsExpired != 0 || !session.ExpireTime.After(time.Now()) {
+	if session == nil || len(session.TokenDigest) == 0 || session.IsExpired != 0 || !session.ExpireTime.After(time.Now()) {
 		return nil, nil, apperrors.ErrUnauthorized
 	}
 	user, err := GetByID(ctx, session.UserID)
 	if err != nil {
 		return nil, nil, normalizeError(err)
 	}
-	if user == nil || user.Status != model.AccountActive || user.AuthVersion != session.AuthVersion {
+	now := time.Now()
+	if user == nil || user.Status != model.AccountActive || user.AuthVersion != session.AuthVersion || len(session.TokenDigest) == 0 || session.IsExpired != 0 || !session.ExpireTime.After(now) {
 		return nil, nil, apperrors.ErrUnauthorized
 	}
 	if user.MustChangePassword || session.Purpose == model.SessionPasswordChange {
-		if !allowPasswordChange || session.Purpose != model.SessionPasswordChange || user.PasswordExpiresAt == nil || !user.PasswordExpiresAt.After(time.Now()) {
+		if !allowPasswordChange || !sessionUsableAt(user, session, now) {
 			return nil, nil, apperrors.ErrForbidden
 		}
 	} else if session.Purpose != model.SessionUser {

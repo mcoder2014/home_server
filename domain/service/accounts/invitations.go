@@ -71,15 +71,9 @@ func ListInvitations(ctx context.Context, id int64) (*InvitationPage, error) {
 			usedIDs = append(usedIDs, *inv.UsedByUserID)
 		}
 	}
-	names := map[int64]string{}
-	if len(usedIDs) > 0 {
-		var usedUsers []model.UserAccount
-		if e := database.Table(dal.AccountTable).Select("id", "username").Where("id IN ?", usedIDs).Find(&usedUsers).Error; e != nil {
-			return nil, normalizeError(e)
-		}
-		for _, usedUser := range usedUsers {
-			names[usedUser.ID] = usedUser.Username
-		}
+	identities, e := DisplayUsers(ctx, usedIDs)
+	if e != nil {
+		return nil, e
 	}
 	for _, inv := range page.Items {
 		if inv.Status == "unused" {
@@ -91,7 +85,9 @@ func ListInvitations(ctx context.Context, id int64) (*InvitationPage, error) {
 			}
 		}
 		if inv.UsedByUserID != nil {
-			inv.UsedByUserName = names[*inv.UsedByUserID]
+			identity := identities[*inv.UsedByUserID]
+			inv.UsedByUserName = identity.UserName
+			inv.UsedByUser = &identity
 		}
 	}
 	return page, nil

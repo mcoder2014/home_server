@@ -108,11 +108,12 @@ type accountView struct {
 	Capabilities      map[string]bool `json:"capabilities"`
 	PasswordPolicy    map[string]int  `json:"password_policy"`
 	ApplicationPolicy map[string]int  `json:"application_policy"`
+	SessionPolicy     map[string]int  `json:"session_policy"`
 }
 
 func view(user *model.UserAccount, token string) accountView {
 	runtime := config.Runtime()
-	return accountView{UserAccount: user, CSRFToken: middleware.CSRFToken(token), Capabilities: map[string]bool{"library": user.LibraryEnabled && runtime.LibraryEnabled, "webdav": user.WebDAVPermission != model.WebDAVNone && runtime.WebDAVEnabled, "applications": runtime.Auth.ApplicationsEnabled, "web_projects": runtime.WebProjects.Enabled}, PasswordPolicy: map[string]int{"min_length": runtime.AccountPolicy.MinPasswordLength}, ApplicationPolicy: map[string]int{"default_credential_ttl_days": runtime.Auth.DefaultCredentialTTLDays, "max_credential_ttl_days": runtime.Auth.MaxCredentialTTLDays, "max_applications_per_user": runtime.Auth.MaxApplicationsPerUser}}
+	return accountView{UserAccount: user, CSRFToken: middleware.CSRFToken(token), Capabilities: map[string]bool{"library": user.LibraryEnabled && runtime.LibraryEnabled, "webdav": user.WebDAVPermission != model.WebDAVNone && runtime.WebDAVEnabled, "applications": runtime.Auth.ApplicationsEnabled, "web_projects": runtime.WebProjects.Enabled}, PasswordPolicy: map[string]int{"min_length": runtime.AccountPolicy.MinPasswordLength}, ApplicationPolicy: map[string]int{"default_credential_ttl_days": runtime.Auth.DefaultCredentialTTLDays, "max_credential_ttl_days": runtime.Auth.MaxCredentialTTLDays, "max_applications_per_user": runtime.Auth.MaxApplicationsPerUser}, SessionPolicy: map[string]int{"max_active_sessions": runtime.AccountPolicy.MaxActiveSessions}}
 }
 
 // login 处理 POST /api/auth/login：验证用户名和密码，建立 HttpOnly 浏览器会话并返回本人资料与 CSRF 信息。
@@ -128,7 +129,8 @@ func login(c *gin.Context) {
 	c.Set(accountservice.PasswordSourceIPKey, middleware.TrustedClientIP(c.Request))
 	ctx := ginfmt.RPCContext(c)
 	if accountservice.DatabaseMode() {
-		user, token, session, err := accountservice.Login(ctx, input.UserName, input.Password)
+		metadata := accountservice.NewSessionMetadata(middleware.TrustedClientIP(c.Request), c.Request.UserAgent(), "web")
+		user, token, session, err := accountservice.Login(ctx, input.UserName, input.Password, metadata)
 		if err != nil {
 			respond(c, nil, err)
 			return

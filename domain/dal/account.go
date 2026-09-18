@@ -11,16 +11,17 @@ import (
 )
 
 const (
-	AccountTable    = "user_account"
-	LoginAliasTable = "user_login_alias"
-	InvitationTable = "user_invitation"
-	AdminAuditTable = "admin_audit_log"
+	AccountTable       = "user_account"
+	AccountAvatarTable = "user_avatar"
+	LoginAliasTable    = "user_login_alias"
+	InvitationTable    = "user_invitation"
+	AdminAuditTable    = "admin_audit_log"
 )
 
-var AccountColumns = []string{"id", "username", "username_key", "display_name", "contact_email", "contact_mobile", "password_hash", "status", "role", "library_enabled", "webdav_permission", "auth_version", "revision", "must_change_password", "password_expires_at", "invite_eligible_at", "source", "invited_by_user_id", "created_by_user_id", "imported_at", "last_login_at", "deleted_at", "create_time", "update_time"}
+var AccountColumns = []string{"id", "username", "username_key", "display_name", "avatar_version", "contact_email", "contact_mobile", "password_hash", "status", "role", "library_enabled", "webdav_permission", "auth_version", "revision", "must_change_password", "password_expires_at", "invite_eligible_at", "source", "invited_by_user_id", "created_by_user_id", "imported_at", "last_login_at", "deleted_at", "create_time", "update_time"}
 
 var InvitationColumns = []string{"id", "inviter_user_id", "quota_month", "slot", "token_digest", "token_hint", "registration_epoch", "status", "expires_at", "used_by_user_id", "used_at", "revoked_at", "revoke_reason", "note", "request_id", "create_time"}
-var AccountSessionColumns = []string{"id", "user_id", "token_digest", "auth_version", "purpose", "is_expired", "authenticated_at", "expire_time", "create_time", "update_time"}
+var AccountSessionColumns = []string{"id", "user_id", "token_digest", "auth_version", "purpose", "is_expired", "authenticated_at", "login_ip", "user_agent", "client_name", "os_name", "device_type", "login_source", "expire_time", "create_time", "update_time"}
 var AdminAuditColumns = []string{"id", "actor_user_id", "action", "target_type", "target_id", "before_summary", "after_summary", "reason", "result", "request_id", "create_time"}
 
 // Queries involving identity/session material suppress SQL logging, including
@@ -35,6 +36,7 @@ func QueryAccount(database *gorm.DB, id int64, lock bool) (*model.UserAccount, e
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
+	user.AvatarURL = model.AccountAvatarURL(&user)
 	return &user, err
 }
 
@@ -109,6 +111,9 @@ func ListAccounts(database *gorm.DB, filter AccountFilter) ([]*model.UserAccount
 	}
 	var accounts []*model.UserAccount
 	err := query.Order("id DESC").Limit(filter.Limit).Find(&accounts).Error
+	for _, user := range accounts {
+		user.AvatarURL = model.AccountAvatarURL(user)
+	}
 	return accounts, err
 }
 

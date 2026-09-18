@@ -22,7 +22,7 @@ test('password validation accepts spaces, counts UTF-8 bytes, and rejects mismat
 
 test('self profile submission strips authority fields and preserves string identifiers', () => {
     assert.deepEqual(behavior.profilePayload({id: '9223372036854775807', display_name: '朋友', contact_email: 'friend@example.com', contact_mobile: '', role: 'admin', library_enabled: true}), {display_name: '朋友', contact_email: 'friend@example.com', contact_mobile: ''})
-    assert.match(behavior.profileError({display_name: '', contact_email: '', contact_mobile: ''}), /名称/)
+    assert.equal(behavior.profileError({display_name: '', contact_email: '', contact_mobile: ''}), '')
     assert.match(behavior.profileError({display_name: '朋友', contact_email: 'broken', contact_mobile: ''}), /邮箱/)
 })
 

@@ -69,7 +69,7 @@
                   placeholder="选择已有账号；创建者始终可访问"
                   class="full-width"
                 >
-                  <el-option v-for="user in eligibleUsers" :key="user.id" :label="user.user_name" :value="user.id" />
+                  <el-option v-for="user in eligibleUsers" :key="user.id" :label="`${user.display_name || user.user_name} (@${user.user_name} / ${user.id})`" :value="user.id"><UserIdentity :user="user" secondary :size="26" /></el-option>
                 </el-select>
               </el-form-item>
               <div class="form-actions">
@@ -196,6 +196,7 @@
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {ArrowLeft, Refresh, UploadFilled} from '@element-plus/icons-vue'
 import MyHeader from '@/components/MyHeader'
+import UserIdentity from '@/components/UserIdentity.vue'
 import WebProjectStats from '@/components/WebProjectStats.vue'
 
 const {webShareApi} = require('@/api/web_projects.cjs')
@@ -203,7 +204,7 @@ const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projec
 
 export default {
   name: 'WebShareEditor',
-  components: {MyHeader, WebProjectStats, ArrowLeft, Refresh, UploadFilled},
+  components: {MyHeader, UserIdentity, WebProjectStats, ArrowLeft, Refresh, UploadFilled},
   // 初始化托管设置、成员选择、版本分页和上传状态，保留草稿表单与服务端项目状态的分别表示。
   data() {
     return {

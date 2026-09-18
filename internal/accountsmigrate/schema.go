@@ -39,7 +39,7 @@ type Step struct {
 var identifier = regexp.MustCompile("^[A-Za-z_][A-Za-z0-9_]*$")
 var createPattern = regexp.MustCompile("(?is)^CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?`?([a-zA-Z_][a-zA-Z0-9_]*)`?\\s*\\((.*)\\)\\s*(?:ENGINE\\s*=.*)?$")
 var alterPattern = regexp.MustCompile("(?is)^ALTER\\s+TABLE\\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?\\s+(.+)$")
-var columnPattern = regexp.MustCompile("(?is)^`?([a-zA-Z_][a-zA-Z0-9_]*)`?\\s+((?:BIGINT|TINYINT|SMALLINT|INTEGER|INT|BOOLEAN|BOOL|DATETIME|TIMESTAMP|VARCHAR|CHAR|BINARY|TEXT|LONGTEXT)(?:\\([0-9]+\\))?(?:\\s+UNSIGNED)?)(.*)$")
+var columnPattern = regexp.MustCompile("(?is)^`?([a-zA-Z_][a-zA-Z0-9_]*)`?\\s+((?:BIGINT|TINYINT|SMALLINT|INTEGER|INT|BOOLEAN|BOOL|DATETIME|TIMESTAMP|VARCHAR|CHAR|BINARY|TEXT|LONGTEXT|MEDIUMBLOB)(?:\\([0-9]+\\))?(?:\\s+UNSIGNED)?)(.*)$")
 var indexPattern = regexp.MustCompile("(?is)^(PRIMARY\\s+KEY|(?:UNIQUE\\s+)?(?:KEY|INDEX)\\s+`?[a-zA-Z_][a-zA-Z0-9_]*`?)\\s*\\(([^)]+)\\)$")
 var checkPattern = regexp.MustCompile("(?is)^CONSTRAINT\\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?\\s+CHECK\\s*\\((.+)\\)$")
 var commentPattern = regexp.MustCompile("(?is)\\s+COMMENT\\s+'(?:''|[^'])*'")

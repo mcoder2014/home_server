@@ -30,6 +30,15 @@ func GenToken(identity *model.UserIdentity) (string, error) {
 	return token.Token, nil
 }
 
+// GenTokenWithContext retains request cancellation and login metadata on the
+// database-backed legacy path while preserving config-mode token semantics.
+func GenTokenWithContext(ctx context.Context, identity *model.UserIdentity, metadata ...accounts.SessionMetadata) (string, error) {
+	if accounts.DatabaseMode() {
+		return accounts.IssueVerifiedSession(ctx, identity.ID, identity.AuthVersion, metadata...)
+	}
+	return GenToken(identity)
+}
+
 // CheckToken 按身份来源验证会话并带回到期时间；旧版令牌到期后同时标记数据库中的失效状态。
 func CheckToken(ctx context.Context, token string) (*model.UserIdentity, error) {
 	if accounts.DatabaseMode() {

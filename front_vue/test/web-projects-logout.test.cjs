@@ -8,8 +8,8 @@ const vm = require('node:vm')
 async function runLogout(rejection) {
     const routes = [], errors = [], mutations = []
     const source = fs.readFileSync(path.join(__dirname, '../src/components/MyHeader.vue'), 'utf8')
-    const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace('export default', 'module.exports =')
-    const sandbox = {module: {exports: {}}, require: () => ({accountsApi: {logout: async () => {if (rejection) throw rejection}}})}
+    const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
+    const sandbox = {UserIdentity: {}, module: {exports: {}}, require: () => ({accountsApi: {logout: async () => {if (rejection) throw rejection}}})}
     vm.runInNewContext(script, sandbox, {filename: 'MyHeader.vue'})
     const component = sandbox.module.exports
     const view = {...component.data(), $store: {commit: value => mutations.push(value)}, $router: {push: target => routes.push(target)}, $message: {error: message => errors.push(message)}}

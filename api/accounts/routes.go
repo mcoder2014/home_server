@@ -49,14 +49,21 @@ func InitAuthRouter() error {
 	data.AddRoute(http.MethodPost, "/api/auth/logout-all", user, write, requireDatabase, logoutAll)
 	data.AddRoute(http.MethodPost, "/api/auth/change-password", limited, write, requireDatabase, changePassword)
 	data.AddRoute(http.MethodPatch, "/api/account/profile", user, write, requireDatabase, updateProfile)
+	data.AddRoute(http.MethodPost, "/api/account/avatar", user, write, requireDatabase, updateAvatar)
+	data.AddRoute(http.MethodDelete, "/api/account/avatar", user, write, requireDatabase, updateAvatar)
+	data.AddRoute(http.MethodGet, "/api/account/avatars/:user_id/:version", user, requireDatabase, readAvatar)
+	data.AddRoute(http.MethodGet, "/api/account/sessions", user, requireDatabase, listSessions)
+	data.AddRoute(http.MethodPost, "/api/account/sessions/revoke", user, write, requireDatabase, revokeSessions)
+	data.AddRoute(http.MethodPost, "/api/account/sessions/revoke-others", user, write, requireDatabase, revokeOtherSessions)
 	data.AddRoute(http.MethodGet, "/api/account/invitations", user, requireDatabase, listInvitations)
 	data.AddRoute(http.MethodPost, "/api/account/invitations", user, write, requireDatabase, createInvitation)
 	data.AddRoute(http.MethodPost, "/api/account/invitations/:id/revoke", user, write, requireDatabase, revokeInvitation)
 	data.AddRoute(http.MethodGet, "/api/admin/users", admin, listUsers)
 	data.AddRoute(http.MethodPost, "/api/admin/users", admin, write, createUser)
 	data.AddRoute(http.MethodGet, "/api/admin/users/:id", admin, getUser)
+	data.AddRoute(http.MethodGet, "/api/admin/users/:id/sessions", admin, requireDatabase, adminUserSessions)
 	// POST 动作依次提供封禁、恢复、删除、重置密码和踢出网站会话，均交由 changeUser 执行权限及版本校验。
-	for _, action := range []string{"ban", "unban", "delete", "reset-password", "logout-all"} {
+	for _, action := range []string{"ban", "unban", "delete", "reset-password", "logout-all", "reset-profile"} {
 		current := action
 		data.AddRoute(http.MethodPost, "/api/admin/users/:id/"+current, admin, write, func(c *gin.Context) { changeUser(c, current) })
 	}

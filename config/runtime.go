@@ -9,6 +9,7 @@ import (
 
 type AccountPolicyConfig struct {
 	SessionTTLSeconds        int `json:"session_ttl_seconds"`
+	MaxActiveSessions        int `json:"max_active_sessions"`
 	TemporaryPasswordTTLDays int `json:"temporary_password_ttl_days"`
 	MinPasswordLength        int `json:"min_password_length"`
 	BcryptCost               int `json:"bcrypt_cost"`

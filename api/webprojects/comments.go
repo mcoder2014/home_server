@@ -57,6 +57,7 @@ func commentContext(c *gin.Context) {
 		result["display_name"] = "用户 " + strconv.FormatInt(p.UserID, 10)
 		if accounts.DatabaseMode() {
 			if u, e := accounts.GetByID(c.Request.Context(), p.UserID); e == nil && u != nil {
+				result["avatar_url"] = accounts.DisplayUser(u).AvatarURL
 				if u.DisplayName != "" {
 					result["display_name"] = u.DisplayName
 				} else {

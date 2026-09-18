@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 const (
 	AccountActive         = "active"
@@ -22,6 +25,8 @@ type UserAccount struct {
 	Username           string     `gorm:"column:username" json:"user_name"`
 	UsernameKey        string     `gorm:"column:username_key" json:"-"`
 	DisplayName        string     `gorm:"column:display_name" json:"display_name"`
+	AvatarVersion      int64      `gorm:"column:avatar_version" json:"avatar_version"`
+	AvatarURL          string     `gorm:"-" json:"avatar_url"`
 	ContactEmail       string     `gorm:"column:contact_email" json:"contact_email"`
 	ContactMobile      string     `gorm:"column:contact_mobile" json:"contact_mobile"`
 	PasswordHash       string     `gorm:"column:password_hash" json:"-"`
@@ -44,6 +49,30 @@ type UserAccount struct {
 	UpdateTime         time.Time  `gorm:"column:update_time" json:"update_time"`
 }
 
+// AccountAvatarURL derives an authorized, versioned address without reading image bytes.
+func AccountAvatarURL(user *UserAccount) string {
+	if user == nil || user.Status != AccountActive || user.MustChangePassword || user.AvatarVersion <= 0 {
+		return ""
+	}
+	return "/api/account/avatars/" + strconv.FormatInt(user.ID, 10) + "/" + strconv.FormatInt(user.AvatarVersion, 10)
+}
+
+type UserDisplay struct {
+	UserID      int64  `json:"user_id,string"`
+	UserName    string `json:"user_name"`
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url"`
+}
+
+type UserAvatar struct {
+	UserID      int64     `gorm:"column:user_id;primaryKey" json:"-"`
+	Version     int64     `gorm:"column:version" json:"-"`
+	ContentType string    `gorm:"column:content_type" json:"-"`
+	ContentBlob []byte    `gorm:"column:content_blob" json:"-"`
+	ByteSize    uint32    `gorm:"column:byte_size" json:"-"`
+	UpdateTime  time.Time `gorm:"column:update_time" json:"-"`
+}
+
 type LoginAlias struct {
 	LoginKey string `gorm:"column:login_key;primaryKey"`
 	UserID   int64  `gorm:"column:user_id"`
@@ -58,6 +87,12 @@ type AccountSession struct {
 	Purpose         string    `gorm:"column:purpose" json:"-"`
 	IsExpired       int       `gorm:"column:is_expired" json:"-"`
 	AuthenticatedAt time.Time `gorm:"column:authenticated_at" json:"-"`
+	LoginIP         string    `gorm:"column:login_ip" json:"-"`
+	UserAgent       string    `gorm:"column:user_agent" json:"-"`
+	ClientName      string    `gorm:"column:client_name" json:"-"`
+	OSName          string    `gorm:"column:os_name" json:"-"`
+	DeviceType      string    `gorm:"column:device_type" json:"-"`
+	LoginSource     string    `gorm:"column:login_source" json:"-"`
 	ExpireTime      time.Time `gorm:"column:expire_time" json:"-"`
 	CreateTime      time.Time `gorm:"column:create_time" json:"-"`
 	UpdateTime      time.Time `gorm:"column:update_time" json:"-"`
@@ -81,6 +116,8 @@ type UserInvitation struct {
 	RequestID         string     `gorm:"column:request_id" json:"-"`
 	CreateTime        time.Time  `gorm:"column:create_time" json:"create_time"`
 	UsedByUserName    string     `gorm:"-" json:"used_by_user_name,omitempty"`
+
+	UsedByUser *UserDisplay `gorm:"-" json:"used_by_user,omitempty"`
 }
 
 type AdminAuditLog struct {

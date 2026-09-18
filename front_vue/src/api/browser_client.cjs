@@ -14,7 +14,8 @@ function browserHeaders(extra, getCSRF = csrfProvider) {
 
 function responseError(response) {
     const body = response && response.data || {}
-    const error = new Error(body.message || body.msg || '请求失败，请稍后重试')
+    const statusMessage = response && response.status === 413 ? '请求内容过大，请缩小文件后重试（头像最多 2 MiB）' : response && response.status === 429 ? '请求过于频繁，请稍后重试' : '请求失败，请稍后重试'
+    const error = new Error(body.message || body.msg || statusMessage)
     error.code = body.code
     error.status = response && response.status
     return error

@@ -7,6 +7,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	accountservice "github.com/mcoder2014/home_server/domain/service/accounts"
 	apperrors "github.com/mcoder2014/home_server/errors"
+	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
@@ -64,6 +65,9 @@ func changeUser(c *gin.Context, action string) {
 	var input accountservice.AdminInput
 	if !bind(c, &input, 16<<10) {
 		return
+	}
+	if action == "reset-profile" {
+		input.ActingToken = c.GetString(utils.CtxKeyLoginToken)
 	}
 	actor := currentUser(c)
 	result, err := accountservice.AdminChange(ginfmt.RPCContext(c), actor.ID, actor.AuthVersion, id, rev, action, input)

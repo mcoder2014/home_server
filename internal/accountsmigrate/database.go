@@ -151,7 +151,23 @@ func verifyStep(step Step, schema *TableSchema) (bool, error) {
 	if !strings.EqualFold(schema.Engine, "InnoDB") {
 		return false, fmt.Errorf("table %s must use InnoDB", step.Table)
 	}
-	if step.Create && (len(step.Columns) != len(schema.Columns) || len(step.Indexes) != len(schema.Indexes) || len(step.Checks) != len(schema.Checks)) {
+	expectedColumns := len(step.Columns)
+	// 已发布账号导入定义保持不变，仅接受经过审核的头像指针扩展。
+	// 不能放宽成允许所有额外列，否则会掩盖未知结构和错误定义。
+	if step.Create && step.ID == "20260913_accounts.sql:001" && step.Table == "user_account" && len(schema.Columns) == expectedColumns+1 {
+		for _, column := range schema.Columns {
+			if column.Name != "avatar_version" {
+				continue
+			}
+			zero := "0"
+			if !reflect.DeepEqual(column, Column{Name: "avatar_version", Type: "bigint", Default: &zero}) {
+				return false, errors.New("column definition conflict: user_account.avatar_version")
+			}
+			expectedColumns++
+			break
+		}
+	}
+	if step.Create && (expectedColumns != len(schema.Columns) || len(step.Indexes) != len(schema.Indexes) || len(step.Checks) != len(schema.Checks)) {
 		return false, fmt.Errorf("existing table %s has unexpected structure", step.Table)
 	}
 	complete := true

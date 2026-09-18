@@ -1,12 +1,28 @@
 package utils
 
 import (
-	"math/rand"
+	"sync"
 	"time"
 )
 
+var idGenerator struct {
+	sync.Mutex
+	last int64
+}
+
+// GenInt64ID returns positive, process-local monotonic IDs. Nanosecond time
+// fits int64 without shifting; the lock also handles concurrent calls and
+// clocks moving backwards. Exhaustion fails before returning an invalid ID.
 func GenInt64ID() int64 {
-	id := time.Now().UnixNano() << 24
-	id += rand.Int63()%(2^24) - 1
+	idGenerator.Lock()
+	defer idGenerator.Unlock()
+	id := time.Now().UnixNano()
+	if id <= idGenerator.last {
+		id = idGenerator.last + 1
+	}
+	if id <= 0 {
+		panic("positive int64 ID space exhausted")
+	}
+	idGenerator.last = id
 	return id
 }

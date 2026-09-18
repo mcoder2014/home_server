@@ -218,7 +218,7 @@ func Apply(ctx context.Context, db *sql.DB, source *Source, opts Options, planHa
 }
 
 // applyStep 先记录 started，再执行尚未完成的增量 DDL，核验结构后标记 completed；DDL 隐式提交，失败不会回滚已生效结构。
-func applyStep(ctx context.Context, db *sql.DB, database string, step Step) error {
+func applyStep(ctx context.Context, db queryer, database string, step Step) error {
 	schema, err := inspectTable(ctx, db, database, step.Table)
 	if err != nil {
 		return err
