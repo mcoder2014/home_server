@@ -102,7 +102,7 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 
 配置 `file_sharing.enabled: true` 与私有 `storage_root`，建议 `/var/lib/home_server/files`，归服务账号所有、权限0700。该路径不得与 WebDAV、网页托管、说明书或前端静态根重叠。默认单文件50MiB、每用户1000个文件和10GiB总量、保留2GiB磁盘空间；并发上传上限为每用户2个、全局4个。文件统一通过后端附件响应，不安装静态alias。
 
-安装 `config/nginx/file_sharing_locations.conf` 到 `/etc/home_server/locations/`，在Pi副本中沿用 `$cq_forwarded_proto` 和 `$cq_client_ip`，并由独立前端Nginx include。TLS网关的两个入口必须同步提供文件API，保留既有原始Host与端口、可信代理、禁缓存与关闭访问日志。实际配置分别执行 `nginx -t` 后生效。
+安装 `config/nginx/file_sharing_locations.conf` 到 `/etc/home_server/locations/`，在Pi副本中沿用 `$cq_forwarded_proto` 和 `$cq_client_ip`，并由独立前端Nginx include。TLS网关的两个入口必须同步提供文件API，保留既有原始Host与端口、可信代理、禁缓存与关闭访问日志。API入口访问 `/s/:token` 时跳转到同一主机的前端8080端口，确保SPA资源和登录回调保持在前端入口；部署使用自定义前端端口时必须同步修改该跳转。实际配置分别执行 `nginx -t` 后生效。
 
 | 验收路径 | 预期 |
 |---|---|
