@@ -58,6 +58,17 @@ manuals:
   pdf_preview_output_limit_bytes: 16777216
   pdf_preview_open_files_limit: 32
 
+file_sharing:
+  # Keep disabled until the additive migration, private directory and proxy are ready.
+  enabled: false
+  storage_root: /var/lib/home_server/files
+  max_file_bytes: 52428800
+  max_files_per_user: 1000
+  max_user_bytes: 10737418240
+  min_free_disk_bytes: 2147483648
+  max_concurrent_uploads_per_user: 2
+  max_concurrent_uploads: 4
+
 auth:
   # Enable after application tables and same-origin HTTPS proxy are installed.
   applications_enabled: false

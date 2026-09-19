@@ -8,7 +8,8 @@
           <span class="page-eyebrow">你的家庭工作台</span>
           <h1>欢迎回来，<UserIdentity v-if="$store.state.userInfo" :user="$store.state.userInfo" :size="44" /><span v-else>访客</span></h1>
           <p>收藏好书，记录想法，让实用的小工具随时可用。<br>你的家庭服务，从这里开始。</p>
-          <router-link class="welcome-link" to="/web-share">进入网页托管 <el-icon><ArrowRight /></el-icon></router-link>
+          <router-link v-if="filesAvailable" class="welcome-link" to="/files">分享一个文件 <el-icon><ArrowRight /></el-icon></router-link>
+          <router-link v-else class="welcome-link" to="/web-share">进入网页托管 <el-icon><ArrowRight /></el-icon></router-link>
         </div>
         <div class="home-illustration" aria-hidden="true">
           <div class="server-tile tile-back"><span></span><i></i><i></i></div>
@@ -23,7 +24,13 @@
         <span>一个入口，连接你的日常</span>
       </div>
       <div class="service-grid">
-        <router-link class="service-card service-featured" to="/web-share">
+        <router-link v-if="filesAvailable" class="service-card service-featured" to="/files">
+          <div class="service-top"><span class="service-icon"><el-icon :size="25"><FolderOpened /></el-icon></span><span class="service-label">FILE DELIVERY</span></div>
+          <h3>文件分享</h3>
+          <p>上传一次，创建多条独立链接。<br>限制访问人、口令、时间与次数。</p>
+          <span class="service-link">管理我的文件 <el-icon><ArrowRight /></el-icon></span>
+        </router-link>
+        <router-link class="service-card" :class="{'service-featured': !filesAvailable}" to="/web-share">
           <div class="service-top"><span class="service-icon"><el-icon :size="25"><Monitor /></el-icon></span><span class="service-label">WEB HOSTING</span></div>
           <h3>网页托管</h3>
           <p>托管 HTML 文档和静态网页。<br>上传、发布，选择谁可以访问。</p>
@@ -62,14 +69,15 @@
 <script>
 import MyHeader from '../components/MyHeader'
 import UserIdentity from '@/components/UserIdentity.vue'
-import {ArrowRight, Document, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
+import {ArrowRight, Document, FolderOpened, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
 
 export default {
   name: 'MyIndex',
-  components: {MyHeader, UserIdentity, Monitor, Plus, Reading, Document, Key, ArrowRight},
+  components: {MyHeader, UserIdentity, Monitor, Plus, Reading, Document, FolderOpened, Key, ArrowRight},
   created() { this.$store.dispatch('loadBootstrap').catch(() => {}) },
   computed: {
     libraryAvailable() { return this.$store.state.userInfo?.library_enabled && this.$store.state.userInfo?.capabilities?.library !== false },
+    filesAvailable() { return this.$store.state.modules?.file_sharing === true },
     manualsAvailable() { return this.$store.state.modules?.manuals === true && (!this.$store.state.userInfo || this.$store.state.userInfo.capabilities?.manuals !== false) },
     username() {
       return this.$store.state.userInfo?.display_name || this.$store.state.userInfo?.user_name || '访客'
@@ -98,7 +106,7 @@ export default {
 .services-heading { display: flex; align-items: center; justify-content: space-between; margin: 36px 0 18px; gap: 12px; }
 .services-heading h2 { font-size: 18px; font-weight: 650; margin: 0; }
 .services-heading > span { color: var(--text-secondary); font-size: 12px; }
-.service-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.service-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
 .service-card { display: flex; flex-direction: column; text-decoration: none; padding: 28px; border: 1px solid var(--border-color); border-radius: 16px; background: #fff; color: var(--text-primary); box-shadow: var(--card-shadow); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
 .service-card:hover { transform: translateY(-3px); border-color: #b4cdc0; box-shadow: 0 12px 28px #1d352d0a; }
 .service-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 22px; }

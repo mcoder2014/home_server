@@ -2,12 +2,14 @@
   --primary-color: #28756b;
   --primary-dark: #205d56;
   --primary-darker: #193d39;
-  --bg-color: #f5f6f4;
+  --bg-color: #f3f6f3;
   --card-bg: #ffffff;
+  --surface-muted: #f7faf7;
   --text-primary: #203330;
   --text-secondary: #687773;
   --border-color: #e2e8e4;
-  --card-shadow: 0 4px 24px rgba(29, 53, 45, 0.035);
+  --border-strong: #cfdbd4;
+  --card-shadow: 0 10px 34px rgba(29, 53, 45, 0.055);
   --header-height: 76px;
   --el-color-primary: var(--primary-color);
   --el-color-primary-light-3: #639e96;
@@ -29,11 +31,15 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: var(--bg-color);
+  background:
+    radial-gradient(circle at 5% -10%, rgba(99, 158, 150, 0.12), transparent 31rem),
+    linear-gradient(180deg, #f7f9f6 0, var(--bg-color) 32rem);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
 }
+
+::selection { background: #cfe3d9; color: var(--primary-darker); }
 
 a { color: var(--primary-color); }
 
@@ -45,13 +51,13 @@ a:focus-visible, button:focus-visible {
 .page-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 42px 28px 64px;
+  padding: 38px 28px 68px;
 }
 
 .card, .surface-card {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 18px;
   box-shadow: var(--card-shadow);
   padding: 28px;
 }
@@ -64,6 +70,8 @@ a:focus-visible, button:focus-visible {
   margin: 0 0 16px;
   letter-spacing: -0.5px;
 }
+
+h1, h2, h3 { text-wrap: balance; }
 
 .page-eyebrow {
   display: block;
@@ -97,23 +105,32 @@ a:focus-visible, button:focus-visible {
   letter-spacing: -0.7px;
 }
 
-.el-button { font-weight: 500; }
+.el-button { font-weight: 550; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.el-button:not(.is-disabled):active { transform: translateY(1px); }
 .el-button + .el-button { margin-left: 8px; }
 .el-button--primary { box-shadow: 0 2px 4px rgba(32, 93, 86, 0.08); }
-.el-input__wrapper, .el-textarea__inner { background: #fcfdfc; }
+.el-input__wrapper, .el-textarea__inner { background: #fcfdfc; transition: box-shadow .18s ease, border-color .18s ease; }
+.el-input__wrapper.is-focus, .el-textarea__inner:focus { box-shadow: 0 0 0 1px var(--primary-color) inset, 0 0 0 3px rgba(40, 117, 107, .09) !important; }
 .el-form-item__label { font-weight: 550; }
 .el-tag { border-radius: 6px; }
-.el-table { --el-table-header-bg-color: #f7f9f7; --el-table-row-hover-bg-color: #f2f7f4; }
+.el-table { --el-table-header-bg-color: #f4f7f4; --el-table-row-hover-bg-color: #f0f6f2; border-radius: 12px; }
+.el-table__inner-wrapper::before { background-color: var(--border-color); }
 .el-table th.el-table__cell { color: var(--text-secondary); font-size: 12px; font-weight: 550; padding: 14px 0; }
 .el-table td.el-table__cell { padding: 16px 0; }
-.el-dialog, .el-message-box { border-radius: 14px; max-width: calc(100vw - 32px); }
+.el-dialog, .el-message-box { border: 1px solid var(--border-color); border-radius: 16px; max-width: calc(100vw - 32px); box-shadow: 0 26px 80px rgba(25, 61, 57, .16); }
 .el-upload-dragger { border-radius: 12px; background: #f8faf8; }
+.el-empty { min-height: 190px; border-radius: 13px; background: linear-gradient(145deg, rgba(246, 249, 246, .72), rgba(251, 252, 250, .94)); }
+.el-empty__description p { color: var(--text-secondary); font-size: 13px; }
+input, textarea, select { outline: none; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { border-color: var(--primary-color) !important; box-shadow: 0 0 0 3px rgba(40, 117, 107, .1); }
 
 @media (max-width: 640px) {
-  .page-container { padding: 28px 16px 44px; }
+  .page-container { padding: 24px 16px 48px; }
   .card { border-radius: 12px; padding: 20px 16px; }
   .page-title { font-size: 22px; }
   .action-bar { gap: 16px; flex-wrap: wrap; }
+  .el-button--large { min-height: 44px; }
+  .el-message { width: calc(100% - 24px); min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

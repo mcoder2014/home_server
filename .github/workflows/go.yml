@@ -43,6 +43,7 @@ jobs:
         CREATE DATABASE home_server_analytics_test_ci;
         CREATE DATABASE home_server_readcache_test_ci;
         CREATE DATABASE home_server_manuals_test_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+        CREATE DATABASE home_server_file_sharing_test_ci CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
         CREATE USER 'home_server_ci'@'%' IDENTIFIED BY 'ci-isolated-tests';
         GRANT ALL ON home_server_accounts_http_test_ci.* TO 'home_server_ci'@'%';
         GRANT ALL ON home_server_accounts_migration_test_ci.* TO 'home_server_ci'@'%';
@@ -51,13 +52,16 @@ jobs:
         GRANT ALL ON home_server_analytics_test_ci.* TO 'home_server_ci'@'%';
         GRANT ALL ON home_server_readcache_test_ci.* TO 'home_server_ci'@'%';
         GRANT ALL ON home_server_manuals_test_ci.* TO 'home_server_ci'@'%';
+        GRANT ALL ON home_server_file_sharing_test_ci.* TO 'home_server_ci'@'%';
         SQL
 
     - name: Exercise availability-first Redis policy
       run: docker exec ${{ job.services.redis.id }} redis-cli CONFIG SET maxmemory-policy allkeys-lru
 
     - name: Check public deployment examples
-      run: python3 script/check_public_deployment.py
+      run: |
+        python3 -m unittest script.test_check_public_deployment
+        python3 script/check_public_deployment.py
 
     - name: Build
       run: go build -v ./...
@@ -75,14 +79,16 @@ jobs:
         HOME_SERVER_ANALYTICS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_analytics_test_ci?parseTime=true'
         HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
         MANUALS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_manuals_test_ci?parseTime=true'
-      run: go test -v ./config ./api/accounts ./api/webprojects ./api/manuals ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/manuals ./domain/service/webprojects ./domain/service/webcomments ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./cmd/accounts-maintain ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
+        FILE_SHARING_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_file_sharing_test_ci?parseTime=true'
+      run: go test -v ./config ./api/accounts ./api/webprojects ./api/manuals ./api/fileshare ./api/applications ./api/auth ./api/middleware ./api/passport ./api/webdav ./app/... ./domain/model ./domain/repository/... ./domain/service/accounts ./domain/service/manuals ./domain/service/fileshare ./domain/service/resourcepasswords ./domain/service/webprojects ./domain/service/webcomments ./domain/service/applications ./domain/service/passport ./domain/service/rsa ./internal/accountsmigrate ./cmd/accounts-migrate ./cmd/accounts-maintain ./utils ./utils/md ./utils/log ./utils/ginfmt ./utils/cache ./domain/service/webanalytics
 
     - name: Test isolated DAL cache bindings
       env:
         MANUALS_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_manuals_test_ci?parseTime=true'
         HOME_SERVER_TEST_REDIS_ADDR: '127.0.0.1:16389'
         HOME_SERVER_READ_CACHE_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_readcache_test_ci?parseTime=true'
-      run: go test -v ./domain/dal -run 'Test(ReadCache|Manual)' -count=1
+        FILE_SHARING_TEST_DSN: 'home_server_ci:ci-isolated-tests@tcp(127.0.0.1:3306)/home_server_file_sharing_test_ci?parseTime=true'
+      run: go test -v ./domain/dal -run 'Test(ReadCache|Manual|FileShare)' -count=1
 
     - name: Test AI API client
       run: python3 script/test_home_server_api.py -v

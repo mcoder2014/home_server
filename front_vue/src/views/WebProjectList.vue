@@ -158,13 +158,8 @@ export default {
     viewProject(project) {
       this.$router.push(`/web-share/${project.id}`)
     },
-    async openProject(project) {
-      try {
-        await webShareApi.checkBrowserSession()
-        window.location.assign(project.url)
-      } catch (error) {
-        this.handleError(error)
-      }
+    openProject(project) {
+      this.$router.push({path: '/web-share/open', query: {target: project.url, project: String(project.id)}})
     },
     handleError(error) {
       if (error.status === 401) {

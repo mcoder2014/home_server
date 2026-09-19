@@ -85,6 +85,19 @@
             </el-form>
           </section>
 
+          <section v-if="!isCreate && project.status !== 'deleted'" class="card editor-section password-section">
+            <div class="section-title-row">
+              <div><h2 class="page-title">阅读密码</h2><p class="section-desc">在当前可见范围上再加一道密码；项目所有者始终可以直接查看。</p></div>
+              <el-tag :type="passwordState.password_protected ? 'success' : 'info'">{{ passwordState.password_protected ? '已启用' : '未设置' }}</el-tag>
+            </div>
+            <div class="password-fields">
+              <el-form-item label="新的网页阅读密码"><el-input v-model="passwordDraft" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="新的网页阅读密码" placeholder="8～72 个 UTF-8 字节" /></el-form-item>
+              <el-form-item label="确认网页阅读密码"><el-input v-model="passwordConfirmation" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="确认网页阅读密码" @keyup.enter="saveProjectPassword" /></el-form-item>
+            </div>
+            <el-alert v-if="passwordNotice" :title="passwordNotice" :type="passwordNoticeType" :closable="false" show-icon class="form-alert" />
+            <div class="form-actions password-actions"><el-button type="primary" :loading="passwordSaving" @click="saveProjectPassword">{{ passwordState.password_protected ? '更新阅读密码' : '设置阅读密码' }}</el-button><el-button v-if="passwordState.password_protected" :loading="passwordSaving" @click="clearProjectPassword">清除阅读密码</el-button></div>
+          </section>
+
           <section v-if="!isCreate && project.status !== 'deleted'" class="card editor-section">
             <div class="section-title-row">
               <div>
@@ -201,6 +214,7 @@ import WebProjectStats from '@/components/WebProjectStats.vue'
 
 const {webShareApi} = require('@/api/web_projects.cjs')
 const {canPublishRelease, hasUnsavedAccessChanges} = require('@/utils/web_projects_behavior.cjs')
+const {resourcePasswordError} = require('@/utils/file_sharing_behavior.cjs')
 
 export default {
   name: 'WebShareEditor',
@@ -235,6 +249,12 @@ export default {
       uploadFile: null,
       uploadFileList: [],
       entryFile: '',
+      passwordState: {password_protected: false, version: 0},
+      passwordDraft: '',
+      passwordConfirmation: '',
+      passwordSaving: false,
+      passwordNotice: '',
+      passwordNoticeType: 'info',
       statusText: {
         draft: '草稿',
         enabled: '已发布',
@@ -272,7 +292,7 @@ export default {
     }
     await this.loadEligibleUsers()
     if (!this.isCreate) {
-      await Promise.all([this.loadProject(), this.loadReleases(true)])
+      await Promise.all([this.loadProject(), this.loadReleases(true), this.loadProjectPassword()])
     }
   },
   methods: {
@@ -304,6 +324,37 @@ export default {
       } catch (error) {
         this.handleError(error)
       }
+    },
+    async loadProjectPassword() {
+      try {
+        const state = await webShareApi.getPassword(this.$route.params.id)
+        this.passwordState = {password_protected: Boolean(state.password_protected), version: Number(state.version || 0)}
+      } catch (error) {
+        this.handleError(error)
+      }
+    },
+    async saveProjectPassword() {
+      if (this.passwordSaving) return
+      const validation = resourcePasswordError(this.passwordDraft, this.passwordConfirmation)
+      if (validation) { this.passwordNotice = validation; this.passwordNoticeType = 'error'; return }
+      await this.updateProjectPassword(this.passwordDraft)
+    },
+    async clearProjectPassword() {
+      try { await ElMessageBox.confirm('清除后，满足原可见范围的访问者无需再输入阅读密码。', '清除阅读密码', {type: 'warning', confirmButtonText: '确认清除'}) }
+      catch (_) { return }
+      await this.updateProjectPassword('')
+    },
+    async updateProjectPassword(password) {
+      this.passwordSaving = true; this.passwordNotice = ''
+      try {
+        const state = await webShareApi.setPassword(this.project.id, {password, version: this.passwordState.version})
+        this.passwordState = {password_protected: Boolean(state.password_protected), version: Number(state.version || 0)}
+        this.passwordDraft = ''; this.passwordConfirmation = ''; this.passwordNotice = state.password_protected ? '阅读密码已更新，旧解锁状态立即失效。' : '阅读密码已清除。'; this.passwordNoticeType = 'success'
+      } catch (error) {
+        if (error.status === 409) { await this.loadProjectPassword(); this.passwordNotice = '密码设置已被其他操作修改，请重新填写后保存。'; this.passwordNoticeType = 'warning' }
+        else if (error.status === 401) this.handleError(error)
+        else { this.passwordNotice = error.message || '阅读密码更新失败'; this.passwordNoticeType = 'error' }
+      } finally { this.passwordSaving = false }
     },
     async loadReleases(reset) {
       this.loadingReleases = true
@@ -459,13 +510,8 @@ export default {
         return false
       }
     },
-    async openProject() {
-      try {
-        await webShareApi.checkBrowserSession()
-        window.location.assign(this.project.url)
-      } catch (error) {
-        this.handleError(error)
-      }
+    openProject() {
+      this.$router.push({path: '/web-share/open', query: {target: this.project.url, project: String(this.project.id)}})
     },
     async copyProjectUrl() {
       try {
@@ -593,6 +639,7 @@ export default {
 .entry-file-field {
   margin-top: 20px;
 }
+.password-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.password-actions{margin-top:8px}
 
 .project-url {
   background: #f6f9f6;
@@ -657,5 +704,6 @@ export default {
     align-items: stretch;
     flex-direction: row;
   }
+  .password-fields{grid-template-columns:1fr}
 }
 </style>

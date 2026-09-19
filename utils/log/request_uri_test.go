@@ -20,4 +20,5 @@ func TestTokenEndpointHidesEveryQueryField(t *testing.T) {
 	require.NotContains(t, RedactedURI("/api/applications?foo=at_cq_synthetic"), "at_cq_synthetic")
 	require.NotContains(t, RedactedURI("/api/applications?client_id=identifier"), "identifier")
 	require.NotContains(t, RedactedURI("/p/at_cq_synthetic/"), "at_cq_synthetic")
+	require.Equal(t, "/api/file-shares/[redacted]/download", RedactedURI("/api/file-shares/unguessable-share-token/download"))
 }

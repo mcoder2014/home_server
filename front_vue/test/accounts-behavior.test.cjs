@@ -56,6 +56,13 @@ test('site-wide capability switches block navigation even for an authorized admi
     assert.equal(behavior.routeDecision(manuals, {status: 'active', capabilities: {manuals: true}}), null)
 })
 
+test('disabled modules hide their authenticated management routes', () => {
+    const files = {path: '/files', fullPath: '/files', meta: {requireAuth: true, module: 'file_sharing'}}
+    const user = {status: 'active'}
+    assert.deepEqual(behavior.routeDecision(files, user, {file_sharing: false}), {path: '/unavailable', query: {feature: 'file_sharing'}})
+    assert.equal(behavior.routeDecision(files, user, {file_sharing: true}), null)
+})
+
 test('password validation rejects NUL and follows a stronger dynamic minimum', () => {
     const value = 'long enough password' + '\u0000'
     assert.match(behavior.passwordError(value, value), /无效字符/)

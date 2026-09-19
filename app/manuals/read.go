@@ -12,6 +12,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/service/accounts"
 	service "github.com/mcoder2014/home_server/domain/service/manuals"
 	"github.com/mcoder2014/home_server/domain/service/passport"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	apperrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
 	"gorm.io/gorm"
@@ -47,12 +48,28 @@ func (application *Application) List(ctx context.Context, viewerID int64, mine b
 		page.HasMore = true
 		manualRows = manualRows[:limit]
 	}
+	manualIDs := make([]int64, 0, len(manualRows))
+	for _, manual := range manualRows {
+		manualIDs = append(manualIDs, manual.ID)
+	}
+	passwordStates, err := resourcepasswords.Default.States(ctx, resourcepasswords.ResourceManual, manualIDs)
+	if err != nil {
+		return nil, err
+	}
 	counts, covers, categories, err := listDecorations(database, manualRows)
 	if err != nil {
 		return nil, err
 	}
 	for _, manual := range manualRows {
-		page.Items = append(page.Items, manualView(manual, categories[manual.ID], counts[manual.ID], covers[manual.ID], nil, principal))
+		protected := passwordStates[manual.ID].PasswordProtected
+		view := manualView(manual, categories[manual.ID], counts[manual.ID], covers[manual.ID], nil, principal, protected)
+		if protected && viewerID != manual.OwnerUserID {
+			view.Description = ""
+			view.CoverItemID = nil
+			view.CoverURL = ""
+			view.Cover = nil
+		}
+		page.Items = append(page.Items, view)
 	}
 	if page.HasMore {
 		page.NextCursor = strconv.FormatInt(manualRows[len(manualRows)-1].ID, 10)
@@ -99,11 +116,44 @@ func (application *Application) Categories(ctx context.Context, viewerID int64, 
 	return page, nil
 }
 
-func (application *Application) Get(ctx context.Context, manualID, viewerID int64, principal *utils.Principal) (*service.ManualView, error) {
+func (application *Application) Get(ctx context.Context, manualID, viewerID int64, principal *utils.Principal, grantTokens ...string) (*service.ManualView, error) {
 	database, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
+	manual, err := findReadableManual(ctx, database, manualID, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	grantToken := ""
+	if len(grantTokens) > 0 {
+		grantToken = grantTokens[0]
+	}
+	passwordState, err := resourcepasswords.Default.Authorize(ctx, resourcepasswords.ResourceManual, manual.ID, viewerID == manual.OwnerUserID, grantToken)
+	if err != nil {
+		return nil, err
+	}
+	items, err := dal.ListManualItems(database, manual.ID, false)
+	if err != nil {
+		return nil, apperrors.ErrDependency
+	}
+	categoryRows, err := dal.ListManualCategoriesByManualIDs(database, []int64{manual.ID})
+	if err != nil {
+		return nil, apperrors.ErrDependency
+	}
+	cover := chooseDetailCover(manual.CoverItemID, items)
+	return manualView(manual, categoriesByManualID(categoryRows)[manual.ID], len(items), cover, items, principal, passwordState.PasswordProtected), nil
+}
+
+func (application *Application) ReadableManual(ctx context.Context, manualID, viewerID int64) (*model.Manual, error) {
+	database, err := database(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return findReadableManual(ctx, database, manualID, viewerID)
+}
+
+func findReadableManual(ctx context.Context, database *gorm.DB, manualID, viewerID int64) (*model.Manual, error) {
 	manual, err := dal.FindManual(database, manualID, false)
 	if err != nil {
 		return nil, apperrors.ErrDependency
@@ -118,16 +168,7 @@ func (application *Application) Get(ctx context.Context, manualID, viewerID int6
 	if !active || !service.CanReadManual(manual.AccessMode, manual.Status, manual.OwnerUserID, viewerID) {
 		return nil, apperrors.ErrNotFound
 	}
-	items, err := dal.ListManualItems(database, manual.ID, false)
-	if err != nil {
-		return nil, apperrors.ErrDependency
-	}
-	categoryRows, err := dal.ListManualCategoriesByManualIDs(database, []int64{manual.ID})
-	if err != nil {
-		return nil, apperrors.ErrDependency
-	}
-	cover := chooseDetailCover(manual.CoverItemID, items)
-	return manualView(manual, categoriesByManualID(categoryRows)[manual.ID], len(items), cover, items, principal), nil
+	return manual, nil
 }
 
 func activeOwnerIDs(ctx context.Context) ([]int64, error) {
@@ -222,11 +263,12 @@ func previewFromItem(item *model.ManualItem) *dal.ManualItemPreview {
 	return &dal.ManualItemPreview{ID: item.ID, ManualID: item.ManualID, Kind: item.Kind, Title: item.Title, TextExcerpt: excerpt(item.Text, 160), URL: item.URL, ThumbnailKey: item.ThumbnailKey, PreviewStatus: item.PreviewStatus, Position: item.Position}
 }
 
-func manualView(manual *model.Manual, categories []string, itemCount int, cover *dal.ManualItemPreview, items []*model.ManualItem, principal *utils.Principal) *service.ManualView {
+func manualView(manual *model.Manual, categories []string, itemCount int, cover *dal.ManualItemPreview, items []*model.ManualItem, principal *utils.Principal, protected ...bool) *service.ManualView {
 	if categories == nil {
 		categories = []string{}
 	}
-	view := &service.ManualView{ID: strconv.FormatInt(manual.ID, 10), Name: manual.Name, Description: manual.Description, Categories: categories, AccessMode: manual.AccessMode.String(), Status: manual.Status.String(), Revision: manual.Revision, ItemCount: itemCount, CanEdit: canEdit(manual.OwnerUserID, principal), CreateTime: manual.CreateTime, UpdateTime: manual.UpdateTime}
+	passwordProtected := len(protected) > 0 && protected[0]
+	view := &service.ManualView{ID: strconv.FormatInt(manual.ID, 10), Name: manual.Name, Description: manual.Description, Categories: categories, AccessMode: manual.AccessMode.String(), Status: manual.Status.String(), Revision: manual.Revision, ItemCount: itemCount, CanEdit: canEdit(manual.OwnerUserID, principal), PasswordProtected: passwordProtected, CreateTime: manual.CreateTime, UpdateTime: manual.UpdateTime}
 	if manual.CoverItemID != nil {
 		value := strconv.FormatInt(*manual.CoverItemID, 10)
 		view.CoverItemID = &value

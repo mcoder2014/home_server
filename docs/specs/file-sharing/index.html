@@ -1,0 +1,174 @@
+<!doctype html><html lang="zh-CN" data-hs-comment-schema="1" data-hs-page-id="file-sharing-design"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Home Server · 文件分享与密码阅读方案</title><style>*{box-sizing:border-box}body{margin:0;background:#f3f5f2;color:#243a33;font:16px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}header{padding:60px max(24px,calc((100vw - 1120px)/2));background:#123d34;color:#fff}header span{font-size:12px;letter-spacing:3px;color:#a8d3bb}header h1{font-size:42px;line-height:1.2;margin:18px 0}header p{max-width:760px;color:#ceded5}main{max-width:1120px;padding:36px 24px 80px;margin:auto}section{padding:30px;margin:20px 0;border:1px solid #dce5de;border-radius:18px;background:#fff}h1{font-size:28px}h2{font-size:23px;letter-spacing:-.5px;margin:0 0 20px}h3{font-size:18px}table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow-x:auto}th,td{padding:13px 16px;border-bottom:1px solid #e6ece8;text-align:left;vertical-align:top}th{background:#edf4ee;color:#2b5a47;white-space:nowrap}code{font-size:.88em;background:#f0f4f1;border-radius:4px;padding:2px 5px;overflow-wrap:anywhere}a{color:#23795e}svg{max-width:100%;height:auto}img{max-width:100%}footer{max-width:1120px;margin:auto;padding:24px;color:#697c73;font-size:13px}@media(max-width:640px){header{padding:36px 22px}header h1{font-size:30px}main{padding:12px 14px 40px}section{padding:20px 16px}body{font-size:15px}th,td{padding:10px}}</style></head><body><header data-hs-comment-ignore><span>HOME SERVER / PRODUCT & ENGINEERING</span><h1>一次上传，按需分享。</h1><p>文件与链接分离，用身份、密码、时间与次数控制访问。需求分析、技术设计与交付验收。</p></header><main data-hs-comment-root><section data-hs-comment-kind="text" data-hs-comment-id="overview"><h1>文件分享与密码阅读：需求及技术方案</h1>
+<p>日期：2026-09-19。代码基线：master <code>1db4129</code>。状态：功能已实现。设计经过 GPT-6 审查，独立代码审查使用 gpt-5.6-sol max；验证结果见 verification.md。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="requirements"><h2>目标与范围</h2>
+<p>面向家庭服务器的文件所有者和收件人：上传一次文件，建立多条独立分享；收件人通过不暴露存储结构的链接访问。网页托管、说明书增加密码阅读；统一全站视觉层级、表单、卡片、空状态与移动端布局。保留既有账号、应用凭证、网页评论、藏书及 WebDAV 行为。</p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>确定行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>匿名分享</td>
+<td>无密码直接下载，或输入6位大小写敏感 ASCII 字母/数字分享码；支持指定与安全随机生成</td>
+</tr>
+<tr>
+<td>登录分享</td>
+<td>所有有效登录用户或指定成员；可叠加独立分享密码（8–72 UTF-8字节），不使用账号密码</td>
+</tr>
+<tr>
+<td>有效期</td>
+<td>不限、1天、7天、30天、自定义到期时间；“1个月”在界面明确为30天</td>
+</tr>
+<tr>
+<td>次数</td>
+<td>不限、1次、自定义N次；时间与次数可同时限制，任一达到即失效</td>
+</tr>
+<tr>
+<td>文件和分享</td>
+<td>文件属于上传者；每个文件可建立多条分享，各有独立链接、策略、计数和撤销状态</td>
+</tr>
+<tr>
+<td>删除</td>
+<td>撤销分享不删除文件；删除文件让其全部分享失效；过期记录保留供查看次数</td>
+</tr>
+<tr>
+<td>密码阅读</td>
+<td>网页和说明书在原可见范围上叠加密码；所有者管理可绕过，其他访问者须同时满足身份与密码</td>
+</tr>
+<tr>
+<td>页面</td>
+<td>管理页支持上传、文件列表、分享记录和复制链接；收件页显示解锁、登录、下载与失效状态</td>
+</tr>
+</tbody>
+</table>
+<p>下载次数定义为“服务端通过全部校验，成功占用次数后开始发送文件”。中断传输不返还次数；页面打开、错误密码、HEAD、被拒绝的Range请求不计数。单次分享的下载按钮不会自动触发；不提供绕过计数的原文件预览或断点续传。没有密码的模式指无需额外验证即可点击下载。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="current-system"><h2>真实现状与方案选择</h2>
+<p><code>api/fileshare</code> 只有未注册的占位路由。网页资源统一经过 <code>api/webprojects/content.go</code>，说明书详情和原件、缩略图分别经过 <code>api/manuals/handlers.go</code> 与 <code>content.go</code>。说明书列表会生成封面和文字摘录，必须与密码保护一起处理。前端为 Vue 3 + Element Plus，后端为 Gin + GORM + MariaDB。</p>
+<p>采用独立文件与分享表，加小型密码能力。把文件直接塞进网页版本会混淆发布、解压和下载次数；重建全站统一资源平台会扩大变更范围，两者均不采用。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="data-and-access"><h2>数据与权限</h2>
+<table>
+<thead>
+<tr>
+<th>数据</th>
+<th>关键字段与约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>files</td>
+<td>id、owner_user_id、原文件名、私有storage_key、size_bytes、sha256、删除状态、创建时间；owner/id列表索引</td>
+</tr>
+<tr>
+<td>file_shares</td>
+<td>id、file_id、owner_user_id、唯一高熵token、access_mode、secret_mode、bcrypt hash、expires_at、max_downloads、download_count、revoked_at；file/id索引</td>
+</tr>
+<tr>
+<td>file_share_members</td>
+<td>share_id、user_id复合主键；指定成员必须有效</td>
+</tr>
+<tr>
+<td>resource_passwords</td>
+<td>resource_type/resource_id复合主键、password_hash、version、update_time；清除密码保留记录并增加version</td>
+</tr>
+</tbody>
+</table>
+<p>分享token使用 crypto/rand，至少24个随机字节的 URL-safe 编码。公开响应不返回路径、storage_key、密码hash；密码/分享码只在首次创建响应显示，列表不可反查明文。文件下载用服务端文件句柄直接输出附件，无静态alias、绝对路径或对象存储重定向。</p>
+<p>密码授权使用短期 Secure/HttpOnly/SameSite Cookie，绑定资源、密码版本和到期时间；最长1小时，服务重启失效可接受。每个内容请求仍重新检查所有者状态、原ACL、资源状态与密码版本。口令输入限速必须在bcrypt前执行，并限制全局并发与限速表容量。浏览器写操作沿用现有Origin/CSRF机制；密码不进入URL或日志，分享token路径须脱敏。Nginx仅对包含token的 <code>/api/file-shares/</code> 与 <code>/s/</code> 关闭访问日志和错误日志，其他路径保留错误诊断。密码错误/缺少授权返回403，避免既有前端401处理导致登出。登录回跳允许严格匹配的 <code>/s/:token</code> 与 <code>/files</code>；分享回跳通过 URL fragment 传递，避免令牌出现在登录页HTTP请求中。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="api-contract"><h2>接口契约</h2>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET/POST /api/files</td>
+<td>本人文件游标列表 / multipart上传</td>
+</tr>
+<tr>
+<td>GET/DELETE /api/files/:id</td>
+<td>本人文件详情 / 删除并让分享失效</td>
+</tr>
+<tr>
+<td>GET/POST /api/files/:id/shares</td>
+<td>分享记录 / 创建分享</td>
+</tr>
+<tr>
+<td>DELETE /api/files/:id/shares/:share_id</td>
+<td>撤销单条分享</td>
+</tr>
+<tr>
+<td>GET /api/file-shares/:token</td>
+<td>分享状态；未解锁返回通用锁状态，不含文件信息；次数为固定0、时间为空</td>
+</tr>
+<tr>
+<td>POST /api/file-shares/:token/unlock</td>
+<td>校验口令并发短期Cookie</td>
+</tr>
+<tr>
+<td>POST /api/file-shares/:token/download</td>
+<td>校验、原子计数、流式附件响应</td>
+</tr>
+<tr>
+<td>GET/PUT /api/web-share/:id/password</td>
+<td>所有者查询或设置/清除网页密码；<code>/api/web-projects</code> 为完整兼容别名</td>
+</tr>
+<tr>
+<td>POST /api/web-share/:id/unlock</td>
+<td>满足原可见性后解锁网页；<code>/api/web-projects</code> 为完整兼容别名</td>
+</tr>
+<tr>
+<td>GET/PUT /api/manuals/:id/password</td>
+<td>所有者查询或设置/清除说明书密码</td>
+</tr>
+<tr>
+<td>POST /api/manuals/:id/unlock</td>
+<td>满足原可见性后解锁说明书</td>
+</tr>
+</tbody>
+</table>
+<p>分享创建字段：access_mode(public/authenticated/members)、member_user_ids、secret_mode(none/code/password)、secret、expires_at（可空）、max_downloads（0不限）。随机分享码可由客户端安全生成并提交或由服务端生成后仅返回一次。资源密码写入使用 <code>{password,version}</code>，空字符串表示清除；查询与写入只返回 <code>{password_protected,version}</code>。密码缺失或错误固定返回 HTTP 403/code 3，旧版本写入返回 HTTP 409/code 5，限速返回 HTTP 429/code 8。网页 HTML GET 可直接返回不依赖前端构建的同源解锁页，HEAD 和子资源仍返回 403；解锁密码只进入 JSON 请求体。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="download-flow"><h2>数据流</h2>
+<svg id="my-svg" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" class="flowchart" style="max-width: 1599.16px; background-color: transparent;" viewBox="0 0 1599.15625 174" role="graphics-document document" aria-roledescription="flowchart-v2"><style>#my-svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#000000;}@keyframes edge-animation-frame{from{stroke-dashoffset:0;}}@keyframes dash{to{stroke-dashoffset:0;}}#my-svg .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}#my-svg .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}#my-svg .error-icon{fill:#552222;}#my-svg .error-text{fill:#552222;stroke:#552222;}#my-svg .edge-thickness-normal{stroke-width:1px;}#my-svg .edge-thickness-thick{stroke-width:3.5px;}#my-svg .edge-pattern-solid{stroke-dasharray:0;}#my-svg .edge-thickness-invisible{stroke-width:0;fill:none;}#my-svg .edge-pattern-dashed{stroke-dasharray:3;}#my-svg .edge-pattern-dotted{stroke-dasharray:2;}#my-svg .marker{fill:#666;stroke:#666;}#my-svg .marker.cross{stroke:#666;}#my-svg svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#my-svg p{margin:0;}#my-svg .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#000000;}#my-svg .cluster-label text{fill:#333;}#my-svg .cluster-label span{color:#333;}#my-svg .cluster-label span p{background-color:transparent;}#my-svg .label text,#my-svg span{fill:#000000;color:#000000;}#my-svg .node rect,#my-svg .node circle,#my-svg .node ellipse,#my-svg .node polygon,#my-svg .node path{fill:#eee;stroke:#999;stroke-width:1px;}#my-svg .rough-node .label text,#my-svg .node .label text,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-anchor:middle;}#my-svg .node .katex path{fill:#000;stroke:#000;stroke-width:1px;}#my-svg .rough-node .label,#my-svg .node .label,#my-svg .image-shape .label,#my-svg .icon-shape .label{text-align:center;}#my-svg .node.clickable{cursor:pointer;}#my-svg .root .anchor path{fill:#666!important;stroke-width:0;stroke:#666;}#my-svg .arrowheadPath{fill:#333333;}#my-svg .edgePath .path{stroke:#666;stroke-width:1px;}#my-svg .flowchart-link{stroke:#666;fill:none;}#my-svg .edgeLabel{background-color:white;text-align:center;}#my-svg .edgeLabel p{background-color:white;}#my-svg .edgeLabel rect{opacity:0.5;background-color:white;fill:white;}#my-svg .labelBkg{background-color:rgba(255, 255, 255, 0.5);}#my-svg .cluster rect{fill:hsl(0, 0%, 98.9215686275%);stroke:#707070;stroke-width:1px;}#my-svg .cluster text{fill:#333;}#my-svg .cluster span{color:#333;}#my-svg div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(-160, 0%, 93.3333333333%);border:1px solid #707070;border-radius:2px;pointer-events:none;z-index:100;}#my-svg .flowchartTitleText{text-anchor:middle;font-size:18px;fill:#000000;}#my-svg rect.text{fill:none;stroke-width:0;}#my-svg .icon-shape,#my-svg .image-shape{background-color:white;text-align:center;}#my-svg .icon-shape p,#my-svg .image-shape p{background-color:white;padding:2px;}#my-svg .icon-shape .label rect,#my-svg .image-shape .label rect{opacity:0.5;background-color:white;fill:white;}#my-svg .label-icon{display:inline-block;height:1em;overflow:visible;vertical-align:-0.125em;}#my-svg .node .label-icon path{fill:currentColor;stroke:revert;stroke-width:revert;}#my-svg .node .neo-node{stroke:#999;}#my-svg [data-look="neo"].node rect,#my-svg [data-look="neo"].cluster rect,#my-svg [data-look="neo"].node polygon{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].swimlane.cluster rect{filter:none;}#my-svg [data-look="neo"].node path{stroke:url(#my-svg-gradient);stroke-width:1px;}#my-svg [data-look="neo"].node .outer-path{filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].node .neo-line path{stroke:#999;filter:none;}#my-svg [data-look="neo"].node circle{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].node circle .state-start{fill:#000000;}#my-svg [data-look="neo"].icon-shape .icon{fill:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg [data-look="neo"].icon-shape .icon-neo path{stroke:url(#my-svg-gradient);filter:drop-shadow( 1px 2px 2px rgba(185,185,185,1));}#my-svg :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style><g><marker id="my-svg_flowchart-v2-pointEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="4.5" refY="5" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 5 L 10 10 L 10 0 z" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointEnd-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="11.5" refY="7" markerUnits="userSpaceOnUse" markerWidth="10.5" markerHeight="14" orient="auto"><path d="M 0 0 L 11.5 7 L 0 14 z" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-pointStart-margin" class="marker flowchart-v2" viewBox="0 0 11.5 14" refX="1" refY="7" markerUnits="userSpaceOnUse" markerWidth="11.5" markerHeight="14" orient="auto"><polygon points="0,7 11.5,14 11.5,0" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd" class="marker flowchart-v2" viewBox="0 0 10 10" refX="11" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-1" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 1; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleEnd-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refY="5" refX="12.25" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-circleStart-margin" class="marker flowchart-v2" viewBox="0 0 10 10" refX="-2" refY="5" markerUnits="userSpaceOnUse" markerWidth="14" markerHeight="14" orient="auto"><circle cx="5" cy="5" r="5" class="arrowMarkerPath" style="stroke-width: 0; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="12" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossStart" class="marker cross flowchart-v2" viewBox="0 0 11 11" refX="-1" refY="5.2" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M 1,1 l 9,9 M 10,1 l -9,9" class="arrowMarkerPath" style="stroke-width: 2; stroke-dasharray: 1, 0;"/></marker><marker id="my-svg_flowchart-v2-crossEnd-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="17.7" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5;"/></marker><marker id="my-svg_flowchart-v2-crossStart-margin" class="marker cross flowchart-v2" viewBox="0 0 15 15" refX="-3.5" refY="7.5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"><path d="M 1,1 L 14,14 M 1,14 L 14,1" class="arrowMarkerPath" style="stroke-width: 2.5; stroke-dasharray: 1, 0;"/></marker><g class="root"><g class="clusters"/><g class="edgePaths"><path d="M132,87L136.167,87C140.333,87,148.667,87,156.333,87C164,87,171,87,174.5,87L178,87" id="my-svg-L_U_F_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_U_F_0" data-points="W3sieCI6MTMyLCJ5Ijo4N30seyJ4IjoxNTcsInkiOjg3fSx7IngiOjE4MiwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M313.481,60L321.734,55.833C329.987,51.667,346.494,43.333,362.385,39.167C378.276,35,393.552,35,401.19,35L408.828,35" id="my-svg-L_F_S1_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_F_S1_0" data-points="W3sieCI6MzEzLjQ4MDc2OTIzMDc2OTIsInkiOjYwfSx7IngiOjM2MywieSI6MzV9LHsieCI6NDEyLjgyODEyNSwieSI6MzV9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M313.481,114L321.734,118.167C329.987,122.333,346.494,130.667,358.247,134.833C370,139,377,139,380.5,139L384,139" id="my-svg-L_F_S2_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_F_S2_0" data-points="W3sieCI6MzEzLjQ4MDc2OTIzMDc2OTIsInkiOjExNH0seyJ4IjozNjMsInkiOjEzOX0seyJ4IjozODgsInkiOjEzOX1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M614.328,35L622.633,35C630.938,35,647.547,35,666.047,38.927C684.547,42.854,704.937,50.708,715.132,54.635L725.327,58.562" id="my-svg-L_S1_G_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_S1_G_0" data-points="W3sieCI6NjE0LjMyODEyNSwieSI6MzV9LHsieCI6NjY0LjE1NjI1LCJ5IjozNX0seyJ4Ijo3MjkuMDYwMDk2MTUzODQ2MiwieSI6NjB9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M639.156,139L643.323,139C647.49,139,655.823,139,670.185,135.073C684.547,131.146,704.937,123.292,715.132,119.365L725.327,115.438" id="my-svg-L_S2_G_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_S2_G_0" data-points="W3sieCI6NjM5LjE1NjI1LCJ5IjoxMzl9LHsieCI6NjY0LjE1NjI1LCJ5IjoxMzl9LHsieCI6NzI5LjA2MDA5NjE1Mzg0NjIsInkiOjExNH1d" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M909.156,87L913.323,87C917.49,87,925.823,87,933.49,87C941.156,87,948.156,87,951.656,87L955.156,87" id="my-svg-L_G_O_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_G_O_0" data-points="W3sieCI6OTA5LjE1NjI1LCJ5Ijo4N30seyJ4Ijo5MzQuMTU2MjUsInkiOjg3fSx7IngiOjk1OS4xNTYyNSwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1115.156,87L1119.323,87C1123.49,87,1131.823,87,1139.49,87C1147.156,87,1154.156,87,1157.656,87L1161.156,87" id="my-svg-L_O_T_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_O_T_0" data-points="W3sieCI6MTExNS4xNTYyNSwieSI6ODd9LHsieCI6MTE0MC4xNTYyNSwieSI6ODd9LHsieCI6MTE2NS4xNTYyNSwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/><path d="M1385.156,87L1389.323,87C1393.49,87,1401.823,87,1409.49,87C1417.156,87,1424.156,87,1427.656,87L1431.156,87" id="my-svg-L_T_D_0" class="edge-thickness-normal edge-pattern-solid edge-thickness-normal edge-pattern-solid flowchart-link" style=";" data-edge="true" data-et="edge" data-id="L_T_D_0" data-points="W3sieCI6MTM4NS4xNTYyNSwieSI6ODd9LHsieCI6MTQxMC4xNTYyNSwieSI6ODd9LHsieCI6MTQzNS4xNTYyNSwieSI6ODd9XQ==" data-look="classic" marker-end="url(#my-svg_flowchart-v2-pointEnd)"/></g><g class="edgeLabels"><g class="edgeLabel"><g class="label" data-id="L_U_F_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_F_S1_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_F_S2_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_S1_G_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_S2_G_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_G_O_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_O_T_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g><g class="edgeLabel"><g class="label" data-id="L_T_D_0" transform="translate(0, 0)"><foreignObject width="0" height="0"><div xmlns="http://www.w3.org/1999/xhtml" class="labelBkg" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="edgeLabel"></span></div></foreignObject></g></g></g><g class="nodes"><g class="node default" id="my-svg-flowchart-U-0" data-look="classic" transform="translate(70, 87)"><rect class="basic label-container" style="" x="-62" y="-27" width="124" height="54"/><g class="label" style="" transform="translate(-32, -12)"><rect/><foreignObject width="64" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>上传文件</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-F-1" data-look="classic" transform="translate(260, 87)"><rect class="basic label-container" style="" x="-78" y="-27" width="156" height="54"/><g class="label" style="" transform="translate(-48, -12)"><rect/><foreignObject width="96" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>私有文件记录</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-S1-3" data-look="classic" transform="translate(513.578125, 35)"><rect class="basic label-container" style="" x="-100.75" y="-27" width="201.5" height="54"/><g class="label" style="" transform="translate(-70.75, -12)"><rect/><foreignObject width="141.5" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>分享 A：公开 + 7 天</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-S2-5" data-look="classic" transform="translate(513.578125, 139)"><rect class="basic label-container" style="" x="-125.578125" y="-27" width="251.15625" height="54"/><g class="label" style="" transform="translate(-95.578125, -12)"><rect/><foreignObject width="191.15625" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>分享 B：登录 + 密码 + 1 次</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-G-7" data-look="classic" transform="translate(799.15625, 87)"><rect class="basic label-container" style="" x="-110" y="-27" width="220" height="54"/><g class="label" style="" transform="translate(-80, -12)"><rect/><foreignObject width="160" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>身份、密码、状态校验</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-O-11" data-look="classic" transform="translate(1037.15625, 87)"><rect class="basic label-container" style="" x="-78" y="-27" width="156" height="54"/><g class="label" style="" transform="translate(-48, -12)"><rect/><foreignObject width="96" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>安全打开文件</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-T-13" data-look="classic" transform="translate(1275.15625, 87)"><rect class="basic label-container" style="" x="-110" y="-27" width="220" height="54"/><g class="label" style="" transform="translate(-80, -12)"><rect/><foreignObject width="160" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>事务内复核并占用次数</p></span></div></foreignObject></g></g><g class="node default" id="my-svg-flowchart-D-15" data-look="classic" transform="translate(1513.15625, 87)"><rect class="basic label-container" style="" x="-78" y="-27" width="156" height="54"/><g class="label" style="" transform="translate(-48, -12)"><rect/><foreignObject width="96" height="24"><div xmlns="http://www.w3.org/1999/xhtml" style="display: table-cell; white-space: nowrap; line-height: 1.5; max-width: 200px; text-align: center;"><span class="nodeLabel"><p>附件流式下载</p></span></div></foreignObject></g></g></g></g></g><defs><filter id="my-svg-drop-shadow" height="130%" width="130%"><feDropShadow dx="4" dy="4" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><defs><filter id="my-svg-drop-shadow-small" height="150%" width="150%"><feDropShadow dx="2" dy="2" stdDeviation="0" flood-opacity="0.06" flood-color="#000000"/></filter></defs><linearGradient id="my-svg-gradient" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="hsl(0, 0%, 83.3333333333%)" stop-opacity="1"/><stop offset="100%" stop-color="hsl(0, 0%, 88.9215686275%)" stop-opacity="1"/></linearGradient></svg></section><section data-hs-comment-kind="text" data-hs-comment-id="storage-and-compatibility"><h2>并发、存储与兼容</h2>
+<p>下载先验证权限并安全打开常规文件，再锁定资源/分享，重新检查撤销、到期、次数与身份快照，原子增加计数，事务提交成功后发送。计数更新必须通过行锁或条件UPDATE确保N次最多开始N次传输。撤销后已开始传输不强行中断。</p>
+<p>文件存储根独立于WebDAV、网页和说明书目录；拒绝路径穿越、符号链接和非普通文件。默认文件上限50MiB，设置每用户总量、文件数和并发上传限制；临时文件失败清理，写入前后复核权限和容量。普通文件不解压、不执行，统一附件下载。新增配置默认关闭，增量DDL显式执行，不在服务启动时自动迁移。</p>
+<p>网页门禁覆盖入口HTML、子资源、HEAD、Range、原始模式和评论读写；所有者管理/下载保持原权限。说明书门禁覆盖详情正文、文本、URL、原件、缩略图、HEAD/Range；受保护列表仅保留允许公开的标题/分类，隐藏内容摘要与封面。旧资源未设置密码时行为不变。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="interface-design"><h2>页面设计</h2>
+<p>延续现有墨绿主色，以浅色背景、清晰标题、统一间距、细边框和克制阴影组织信息。管理页将“文件”和“分享记录”分层展示；收件页以文件信息及一个主操作为中心。密码字段可显隐、随机生成/复制有明确反馈；时间和次数同时展示。覆盖320px窄屏、键盘焦点、上传进度、错误重试和失效状态；不引入新的UI框架。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="verification-and-release"><h2>验证与发布</h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>验收内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据和服务</td>
+<td>身份×密码×状态矩阵、N次并发上限、过期、撤销、删除、跨用户拒绝、错误密码限速、慢上传撤权、私有路径不可达</td>
+</tr>
+<tr>
+<td>阅读保护</td>
+<td>网页全部资源/评论与说明书详情/缩略图/列表无绕过；修改密码后旧Cookie失效</td>
+</tr>
+<tr>
+<td>浏览器</td>
+<td>上传→建多个分享→匿名/登录/成员/密码下载；网页与说明书设密/解锁；桌面及320px视觉检查</td>
+</tr>
+<tr>
+<td>回归</td>
+<td>既有Go CI包、前端行为和浏览器测试、Python技能测试、Nginx匹配与构建</td>
+</tr>
+<tr>
+<td>发布</td>
+<td>固定PR SHA；备份DB/配置；增量DDL与EXPLAIN；完整前后端release；Nginx -t；切current并健康检查</td>
+</tr>
+<tr>
+<td>回滚</td>
+<td>保留新增表与文件；已有密码记录时不能直接回旧后端，须先关闭内容访问或仅回前端，避免旧版本忽略密码</td>
+</tr>
+</tbody>
+</table>
+<p>Go编译与测试在远端隔离环境执行。发布到Pi使用明确的PR提交，不自动合并master；保留worktree待PR合并后清理。文档HTML通过网页托管owner模式发布，并验证匿名访问被拒绝。</p></section><section data-hs-comment-kind="text" data-hs-comment-id="design-review"><h2>审查结论</h2>
+<p>GPT-6 已指出并纳入：文件与分享分离、POST下载避免预取耗次数、并发原子限额、打开文件后再扣次数、说明书列表侧漏、网页评论门禁、清除密码不能重用版本、未知/撤销/过期统一响应以及代理链路必须显式接入。</p>
+<p>兼容边界：公开分享遇到已失效的浏览器登录 Cookie 按匿名处理，显式错误凭据仍被拒绝；登录或成员分享不会因此放行。网页所有者在资源停用或删除后仍可读评论历史，内容读取与非所有者访问保持原限制。</p>
+<p>参考：<a href="https://pkg.go.dev/net/http#ServeContent">Go net/http</a>、<a href="https://pkg.go.dev/golang.org/x/crypto/bcrypt">Go bcrypt</a>。</p></section></main><footer data-hs-comment-ignore>2026-09-19 · 仅项目所有者可见 · 基于真实代码与 GPT-6 独立设计审查</footer></body></html>

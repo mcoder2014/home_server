@@ -12,6 +12,7 @@ import (
 	application "github.com/mcoder2014/home_server/app/manuals"
 	"github.com/mcoder2014/home_server/config"
 	service "github.com/mcoder2014/home_server/domain/service/manuals"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	apperrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
@@ -87,7 +88,7 @@ func getManual(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	manual, err := application.Default.Get(ginfmt.RPCContext(c), manualID, principalUserID(principal), principal)
+	manual, err := application.Default.Get(ginfmt.RPCContext(c), manualID, principalUserID(principal), principal, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceManual, manualID))
 	respond(c, http.StatusOK, manual, err)
 }
 

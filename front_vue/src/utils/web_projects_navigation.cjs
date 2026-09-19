@@ -48,7 +48,9 @@ function normalizeInternalRedirect(value, inheritedHash = '') {
         && parsed.pathname !== '/web-projects'
         && !parsed.pathname.startsWith('/web-projects/')
         && parsed.pathname !== '/manuals'
-        && !/^\/manuals\/(?:new|[1-9][0-9]*(?:\/edit)?)$/.test(parsed.pathname)) {
+        && !/^\/manuals\/(?:new|[1-9][0-9]*(?:\/edit)?)$/.test(parsed.pathname)
+        && parsed.pathname !== '/files'
+        && !/^\/s\/[A-Za-z0-9_-]{32,128}$/.test(parsed.pathname)) {
         return '/'
     }
     if (inheritedHash && !value.includes('#')) {

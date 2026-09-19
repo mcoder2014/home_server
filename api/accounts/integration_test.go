@@ -122,7 +122,7 @@ func newHTTPFixture(t *testing.T, initialApplications ...bool) *httpFixture {
 		t.Fatal(err)
 	}
 	baseline := []string{strings.Replace(string(base), "use home_server;", "", 1)}
-	for _, name := range []string{"20260909_web_projects.sql", "20260912_applications.sql", "20260916_web_comments.sql"} {
+	for _, name := range []string{"20260909_web_projects.sql", "20260912_applications.sql", "20260916_web_comments.sql", "20260919_resource_passwords.sql"} {
 		raw, err := migrations.SQL.ReadFile(name)
 		if err != nil {
 			t.Fatal(err)

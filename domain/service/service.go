@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/service/applications"
+	"github.com/mcoder2014/home_server/domain/service/fileshare"
 	"github.com/mcoder2014/home_server/domain/service/manuals"
 	"github.com/mcoder2014/home_server/domain/service/passport"
 	"github.com/mcoder2014/home_server/domain/service/webdav"
@@ -22,6 +23,9 @@ func Init(conf *config.Config) error {
 		return err
 	}
 	if err := manuals.Init(&conf.Manuals, conf.WebDAV.SharePath, conf.WebProjects.StorageRoot); err != nil {
+		return err
+	}
+	if err := fileshare.Init(&conf.FileSharing, conf.WebDAV.SharePath, conf.WebProjects.StorageRoot, conf.Manuals.StorageRoot); err != nil {
 		return err
 	}
 	// Database configuration can enable web projects after startup. Storage

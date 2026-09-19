@@ -82,7 +82,7 @@ func newManualHTTPFixture(t *testing.T) *manualHTTPFixture {
 		_, err = sqlDB.Exec(ddl)
 		require.NoError(t, err)
 	}
-	for _, name := range []string{"20260913_runtime_config.sql", "20260912_applications.sql", "20260919_manuals.sql"} {
+	for _, name := range []string{"20260913_runtime_config.sql", "20260912_applications.sql", "20260919_manuals.sql", "20260919_resource_passwords.sql"} {
 		raw, readErr := migrations.SQL.ReadFile(name)
 		require.NoError(t, readErr)
 		executeManualTestDDL(t, sqlDB, string(raw))

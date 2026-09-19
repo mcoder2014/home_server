@@ -1,11 +1,14 @@
 // Only authenticated server responses can supply this identity. Menu visibility is not authorization.
-function routeDecision(route, user) {
+function routeDecision(route, user, modules = {}) {
     const meta = route.meta || {}
     if (meta.requireAuth && (!user || user.status !== 'active')) {
         return {path: '/login', query: {redirect: route.fullPath || route.path}}
     }
     if (user && user.must_change_password && route.path !== '/account/security' && route.path !== '/login') {
         return {path: '/account/security'}
+    }
+    if (meta.module && modules[meta.module] !== true) {
+        return {path: '/unavailable', query: {feature: meta.module}}
     }
     if (meta.admin && (!user || user.role !== 'admin')) {
         return {path: '/forbidden', query: {feature: 'admin'}}

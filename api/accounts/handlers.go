@@ -247,7 +247,7 @@ func publicBootstrap(c *gin.Context) {
 		return
 	}
 	runtime := config.Runtime()
-	respond(c, map[string]interface{}{"site": map[string]string{"title": runtime.SiteTitle, "notice": runtime.SiteNotice}, "registration": value, "modules": map[string]bool{"manuals": runtime.Manuals.Enabled}}, nil)
+	respond(c, map[string]interface{}{"site": map[string]string{"title": runtime.SiteTitle, "notice": runtime.SiteNotice}, "registration": value, "modules": map[string]bool{"manuals": runtime.Manuals.Enabled, "file_sharing": runtime.FileSharing.Enabled}}, nil)
 }
 
 // validateInvitation 处理 POST /api/auth/invitations/validate：在来源限流后校验邀请码，仅返回有效状态与到期时间，不消费邀请码。

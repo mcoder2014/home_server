@@ -48,6 +48,15 @@ function createWebShareApi(transport, getCSRF) {
             }
             return request({method: 'get', url: `/api/web-share/${encodeURIComponent(projectID)}/stats`, params: {days}, headers: headers()})
         },
+        getPassword(projectID) {
+            return request({method: 'get', url: `/api/web-share/${encodeURIComponent(projectID)}/password`, headers: headers()})
+        },
+        setPassword(projectID, data) {
+            return request({method: 'put', url: `/api/web-share/${encodeURIComponent(projectID)}/password`, data, headers: headers()})
+        },
+        unlockProject(projectID, password) {
+            return request({method: 'post', url: `/api/web-share/${encodeURIComponent(projectID)}/unlock`, data: {password}, headers: headers()})
+        },
         updateProject(projectID, revision, data) {
             return request({
                 method: 'patch',
