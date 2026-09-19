@@ -75,7 +75,10 @@ export default {
         else this.error = error.message || '下载失败，请稍后重试'
       } finally { this.downloading = false }
     },
-    goLogin() { this.$router.push({path: '/login', query: {redirect: this.$route.fullPath}}) },
+    goLogin() {
+      const redirect = encodeURIComponent(String(this.$route.fullPath || this.$route.path || '/'))
+      this.$router.push(`/login#redirect=${redirect}`)
+    },
     accessText(mode) { return {public: '公开分享', authenticated: '登录用户分享', members: '指定成员分享'}[mode] || '文件分享' },
     formatDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '未知时间' : date.toLocaleString('zh-CN', {hour12: false}) },
     formatBytes(bytes) { const value = Number(bytes || 0); return value < 1024 ? `${value} B` : value < 1048576 ? `${(value / 1024).toFixed(1)} KiB` : `${(value / 1048576).toFixed(1)} MiB` },

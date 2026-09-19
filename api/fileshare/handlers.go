@@ -223,7 +223,7 @@ func optionalReader(c *gin.Context) (*utils.Principal, error) {
 	if err == nil {
 		return principal, nil
 	}
-	if explicit || hasSession || errors.Is(err, service.ErrDependency) {
+	if explicit || errors.Is(err, service.ErrDependency) {
 		return nil, err
 	}
 	return nil, nil

@@ -79,6 +79,12 @@ export default {
     try { await this.$store.dispatch('loadBootstrap') } catch (error) { this.error = error.message }
   },
   methods: {
+    loginRedirect() {
+      const hash = typeof this.$route.hash === 'string' && this.$route.hash.startsWith('#') ? this.$route.hash.slice(1) : ''
+      const fragment = new URLSearchParams(hash)
+      const target = fragment.has('redirect') ? fragment.get('redirect') : this.$route.query.redirect
+      return normalizeInternalRedirect(target)
+    },
     async submitForm() {
       if (this.loading || !await this.$refs.ruleForm.validate().catch(() => false)) return
       this.loading = true
@@ -88,7 +94,7 @@ export default {
         this.$store.commit('SET_USERINFO', user)
         this.ruleForm.password = ''
         if (user.must_change_password) { await this.$router.replace('/account/security'); return }
-        const redirect = normalizeInternalRedirect(this.$route.query.redirect)
+        const redirect = this.loginRedirect()
         if (isSafeProjectTarget(redirect)) window.location.replace(redirect)
         else await this.$router.replace(redirect)
       } catch (error) { this.error = error.message || '登录失败，请稍后重试' }

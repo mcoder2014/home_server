@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
+const vm = require('node:vm')
 
 const {
     expirationValue,
@@ -10,6 +13,21 @@ const {
     secretError,
     uploadFileError,
 } = require('../src/utils/file_sharing_behavior.cjs')
+
+function viewDefinition(name) {
+    const source = fs.readFileSync(path.join(__dirname, `../src/views/${name}.vue`), 'utf8')
+    const script = source.match(/<script>([\s\S]*?)<\/script>/)[1].replace(/^import .*$/gm, '').replace('export default', 'module.exports =')
+    const box = {
+        module: {exports: {}}, User: {}, Lock: {}, URLSearchParams,
+        require(moduleName) {
+            if (moduleName === '@/api/files.cjs') return {filesApi: {}}
+            if (moduleName === '@/api/accounts.cjs') return {accountsApi: {}}
+            return require(path.join(__dirname, '../src/', moduleName.slice(2)))
+        },
+    }
+    vm.runInNewContext(script, box, {filename: `${name}.vue`})
+    return box.module.exports
+}
 
 test('random share codes use exactly six case-sensitive ASCII letters and digits without modulo bias', () => {
     const batches = [
@@ -68,4 +86,17 @@ test('download filename prefers UTF-8 Content-Disposition and rejects path compo
     assert.equal(parseDownloadName('attachment; filename="report.txt"', 'fallback.bin'), 'report.txt')
     assert.equal(parseDownloadName('attachment; filename="../secret.txt"', 'fallback.bin'), 'secret.txt')
     assert.equal(parseDownloadName('', 'fallback.bin'), 'fallback.bin')
+})
+
+test('share login keeps its token in the URL fragment and accepts legacy query redirects', () => {
+    const sharePath = '/s/AbCDef0123456789_-AbCDef01234567'
+    const routes = []
+    const receiver = viewDefinition('FileShareReceive')
+    receiver.methods.goLogin.call({$route: {fullPath: sharePath}, $router: {push: value => routes.push(value)}})
+    assert.deepEqual(routes, [`/login#redirect=${encodeURIComponent(sharePath)}`])
+
+    const login = viewDefinition('Login')
+    assert.equal(login.methods.loginRedirect.call({$route: {hash: `#redirect=${encodeURIComponent(sharePath)}`, query: {redirect: '/files'}}}), sharePath)
+    assert.equal(login.methods.loginRedirect.call({$route: {hash: '', query: {redirect: '/files'}}}), '/files')
+    assert.equal(login.methods.loginRedirect.call({$route: {hash: '#redirect=https%3A%2F%2Fevil.example', query: {redirect: '/files'}}}), '/')
 })

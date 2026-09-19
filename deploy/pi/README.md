@@ -88,7 +88,7 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 
 ## 回滚
 
-保留每次部署的旧 systemd 单元、旧后端配置、旧二进制或 release 指针，以及网关站点备份。回滚时恢复匹配的旧配置与程序，校验配置后重启对应服务；已有入口应恢复到备份记录的位置。
+保留每次部署的旧 systemd 单元、旧后端配置、旧二进制或 release 指针，以及网关站点备份。满足下文密码兼容性前提后，恢复匹配的旧配置与程序，校验配置后重启对应服务；已有入口应恢复到备份记录的位置。
 
 本次新增表和索引是兼容性增量。回滚程序时不要 DROP 新表、清空数据库或覆盖新产生的数据；数据库恢复必须单独核对业务写入时间与影响范围。前端和后端应使用匹配的 release，避免新页面请求旧接口。
 
@@ -98,11 +98,11 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 
 ## 文件分享与密码阅读
 
-文件模块使用独立的 `file_sharing` 部署配置，缺省关闭。上线前执行 `20260919_file_sharing.sql` 和 `20260919_resource_passwords.sql` 两份增量迁移；前者创建文件、分享、成员表，后者为既有网页和说明书提供密码版本记录。密码表迁移必须先于新后端切换，不能在表缺失时以“无密码”降级。
+文件模块使用独立的 `file_sharing` 部署配置，缺省关闭。旧安装必须先完成 `20260912_applications.sql` 及既有账号迁移，确认 `login_token`、`application` 两表存在；config 身份模式的容量写入锁依赖这些凭据表。上线前执行 `20260919_file_sharing.sql` 和 `20260919_resource_passwords.sql` 两份增量迁移；前者创建文件、分享、成员表，后者为既有网页和说明书提供密码版本记录。密码表迁移必须先于新后端切换，不能在表缺失时以“无密码”降级。
 
 配置 `file_sharing.enabled: true` 与私有 `storage_root`，建议 `/var/lib/home_server/files`，归服务账号所有、权限0700。该路径不得与 WebDAV、网页托管、说明书或前端静态根重叠。默认单文件50MiB、每用户1000个文件和10GiB总量、保留2GiB磁盘空间；并发上传上限为每用户2个、全局4个。文件统一通过后端附件响应，不安装静态alias。
 
-安装 `config/nginx/file_sharing_locations.conf` 到 `/etc/home_server/locations/`，在Pi副本中沿用 `$cq_forwarded_proto` 和 `$cq_client_ip`，并由独立前端Nginx include。TLS网关的两个入口必须同步提供文件API，保留既有原始Host与端口、可信代理、禁缓存与关闭访问日志。API入口访问 `/s/:token` 时跳转到同一主机的前端8080端口，确保SPA资源和登录回调保持在前端入口；部署使用自定义前端端口时必须同步修改该跳转。实际配置分别执行 `nginx -t` 后生效。
+安装 `config/nginx/file_sharing_locations.conf` 到 `/etc/home_server/locations/`，在Pi副本中沿用 `$cq_forwarded_proto` 和 `$cq_client_ip`，并由独立前端Nginx include。TLS网关的两个入口必须同步提供文件API，保留既有原始Host与端口及可信代理，并禁用缓存。仅 `/api/file-shares/` 与 `/s/` 这两个包含分享token的路径关闭访问日志和错误日志，防止upstream错误记录完整URI；其他路径保留错误日志用于诊断。API入口访问 `/s/:token` 时跳转到同一主机的前端8080端口，确保SPA资源和登录回调保持在前端入口；部署使用自定义前端端口时必须同步修改该跳转。实际配置分别执行 `nginx -t` 后生效。
 
 | 验收路径 | 预期 |
 |---|---|
@@ -112,4 +112,6 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 | 网页与说明书密码 | 旧ACL继续有效；错误密码不注销登录；修改或清除密码使旧授权失效 |
 | 内容保护 | 网页子资源与评论、说明书正文/封面/原件/缩略图均不得绕过门禁 |
 
-下载计数表示成功授权并开始传输的次数，客户端断线不会恢复额度。程序回滚时保留四张新增表及私有文件，恢复整套前后端release和对应配置；不得把数据库快照覆盖到已经产生新业务数据的库。
+下载计数表示成功授权并开始传输的次数，客户端断线不会恢复额度。程序回滚时保留四张新增表及私有文件，先核对下一段的密码兼容性条件；不得把数据库快照覆盖到已经产生新业务数据的库。
+
+回滚密码阅读后端前必须检查 `resource_passwords`：旧版本不识别新密码。如果已有非空密码，优先仅回滚前端；回滚后端前先停止相关内容对外访问，不能让密码资源退化为仅原ACL保护。自动回滚只有在确认尚无密码记录时才允许切回旧后端；无法核实则停止服务并保留新release与备份，等待恢复。

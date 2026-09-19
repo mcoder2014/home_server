@@ -59,7 +59,9 @@ jobs:
       run: docker exec ${{ job.services.redis.id }} redis-cli CONFIG SET maxmemory-policy allkeys-lru
 
     - name: Check public deployment examples
-      run: python3 script/check_public_deployment.py
+      run: |
+        python3 -m unittest script.test_check_public_deployment
+        python3 script/check_public_deployment.py
 
     - name: Build
       run: go build -v ./...

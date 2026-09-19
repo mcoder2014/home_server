@@ -127,16 +127,9 @@ func comments(c *gin.Context) {
 		ginfmt.Fail(c, err)
 		return
 	}
-	passwordState, err := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, id, p.UserID == project.OwnerUserID, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, id))
-	if err != nil {
+	if _, err := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, id, p.UserID == project.OwnerUserID, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, id)); err != nil {
 		ginfmt.Fail(c, err)
 		return
-	}
-	if passwordState.PasswordProtected && c.Request.Method == http.MethodGet && p.UserID == project.OwnerUserID {
-		if _, err := webcomments.Authorize(db.MasterDB().WithContext(c.Request.Context()), id, p, false, false); err != nil {
-			ginfmt.Fail(c, err)
-			return
-		}
 	}
 	if c.Request.Method == http.MethodPost && c.GetHeader("Authorization") == "" && c.GetHeader(middleware.HeaderKey) == "" {
 		middleware.BrowserScopedWrite("web-comments")(c)

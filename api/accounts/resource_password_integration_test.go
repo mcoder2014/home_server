@@ -41,14 +41,19 @@ func TestHTTPWebProjectPasswordProtectsContentAndComments(t *testing.T) {
 	if ownerPage := f.request(http.MethodGet, pagePath, owner, nil, nil); ownerPage.Status != http.StatusOK {
 		t.Fatalf("owner did not bypass password after ACL checks: %d", ownerPage.Status)
 	}
-	if _, err := f.database.Exec("UPDATE web_project SET status = ? WHERE id = ?", model.WebProjectStatusDisabled, id); err != nil {
-		t.Fatal(err)
-	}
-	if ownerPage := f.request(http.MethodGet, pagePath, owner, nil, nil); ownerPage.Status != http.StatusNotFound {
-		t.Fatalf("owner password bypass ignored disabled project state: %d", ownerPage.Status)
-	}
-	if ownerComments := f.request(http.MethodGet, base+"/comment-threads", owner, nil, nil); ownerComments.Status != http.StatusNotFound {
-		t.Fatalf("owner password bypass exposed disabled project comments: %d", ownerComments.Status)
+	for _, projectStatus := range []model.WebProjectStatus{model.WebProjectStatusDisabled, model.WebProjectStatusDeleted} {
+		if _, err := f.database.Exec("UPDATE web_project SET status = ? WHERE id = ?", projectStatus, id); err != nil {
+			t.Fatal(err)
+		}
+		if ownerPage := f.request(http.MethodGet, pagePath, owner, nil, nil); ownerPage.Status != http.StatusNotFound {
+			t.Fatalf("owner password bypass ignored %s project state: %d", projectStatus.String(), ownerPage.Status)
+		}
+		if ownerComments := f.request(http.MethodGet, base+"/comment-threads", owner, nil, nil); ownerComments.Status != http.StatusOK {
+			t.Fatalf("owner lost %s project comment history: %d", projectStatus.String(), ownerComments.Status)
+		}
+		if guestComments := f.request(http.MethodGet, base+"/comment-threads", guest, nil, nil); guestComments.Status != http.StatusNotFound {
+			t.Fatalf("non-owner read %s project comments: %d", projectStatus.String(), guestComments.Status)
+		}
 	}
 	if _, err := f.database.Exec("UPDATE web_project SET status = ?, moderation_status = 'blocked' WHERE id = ?", model.WebProjectStatusEnabled, id); err != nil {
 		t.Fatal(err)

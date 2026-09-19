@@ -533,6 +533,8 @@ func TestFileSharingHTTPAccessAndLifecycle(t *testing.T) {
 	codeResult := fixture.createShare(owner, fileID, map[string]interface{}{"access_mode": "public", "secret_mode": "code", "secret": "Ab12Cd"})
 	codeShare := object(codeResult["share"])
 	codeToken := codeShare["token"].(string)
+	stalePublicShare := object(fixture.createShare(owner, fileID, map[string]interface{}{"access_mode": "public", "secret_mode": "none"})["share"])
+	stalePublicToken := stalePublicShare["token"].(string)
 	if publicResult["secret"] != "" || membersResult["secret"] != "member-password" || codeResult["secret"] != "Ab12Cd" {
 		t.Fatal("create response did not obey one-time secret contract")
 	}
@@ -541,6 +543,34 @@ func TestFileSharingHTTPAccessAndLifecycle(t *testing.T) {
 	if strings.Contains(string(listed.Raw), "member-password") || strings.Contains(string(listed.Raw), "Ab12Cd") || strings.Contains(string(listed.Raw), "secret_hash") {
 		t.Fatal("share listing exposed a secret")
 	}
+
+	staleSession := fixture.login(fixture.guest)
+	staleDigest := sha256.Sum256([]byte(staleSession.Cookie.Value))
+	updated, err := fixture.database.Exec("UPDATE login_token SET is_expired=1 WHERE token_digest=? AND is_expired=0", staleDigest[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count, err := updated.RowsAffected(); err != nil || count != 1 {
+		t.Fatalf("revoking stale browser session affected %d rows: %v", count, err)
+	}
+	shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+authToken, staleSession, nil, nil), "login_required")
+	shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+membersToken, staleSession, nil, nil), "login_required")
+	shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+stalePublicToken, staleSession, nil, nil), "available")
+	if response := fixture.request(http.MethodPost, "/api/file-shares/"+stalePublicToken+"/download", staleSession, nil, nil); response.Status != http.StatusOK || !bytes.Equal(response.Raw, content) {
+		t.Fatalf("stale session blocked public download: %d %s", response.Status, response.Raw)
+	}
+	shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+codeToken, staleSession, nil, nil), "locked")
+	staleUnlock := fixture.request(http.MethodPost, "/api/file-shares/"+codeToken+"/unlock", staleSession, map[string]interface{}{"secret": "Ab12Cd"}, nil)
+	requireSuccess(t, staleUnlock)
+	staleSession.ExtraCookie = append(staleSession.ExtraCookie, fixture.grantCookie(staleUnlock))
+	shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+codeToken, staleSession, nil, nil), "available")
+	if response := fixture.request(http.MethodPost, "/api/file-shares/"+codeToken+"/download", staleSession, nil, nil); response.Status != http.StatusOK || !bytes.Equal(response.Raw, content) {
+		t.Fatalf("stale session blocked code download: %d %s", response.Status, response.Raw)
+	}
+	badAuthorization := map[string]string{"Authorization": "Bearer invalid"}
+	requireError(t, fixture.request(http.MethodGet, "/api/file-shares/"+stalePublicToken, nil, nil, badAuthorization), http.StatusUnauthorized, 403)
+	requireError(t, fixture.request(http.MethodPost, "/api/file-shares/"+codeToken+"/unlock", nil, map[string]interface{}{"secret": "Ab12Cd"}, badAuthorization), http.StatusUnauthorized, 403)
+	requireError(t, fixture.request(http.MethodPost, "/api/file-shares/"+stalePublicToken+"/download", nil, nil, badAuthorization), http.StatusUnauthorized, 403)
 
 	state := shareState(t, fixture.request(http.MethodGet, "/api/file-shares/"+publicToken, nil, nil, nil), "available")
 	if object(state["file"])["name"] != "report.bin" {

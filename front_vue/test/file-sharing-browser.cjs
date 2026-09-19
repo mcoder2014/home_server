@@ -12,6 +12,7 @@ const {chromium} = require(playwrightPath)
 const root = path.join(__dirname, '../src')
 const shareToken = 'AbCDef0123456789_-AbCDef01234567'
 let browser, server, origin
+const documentRequests = []
 const visualOutput = process.env.VISUAL_OUTPUT_DIR || '/tmp/home-server-file-sharing-visuals'
 const artifacts = {
     '/vue.js': fs.readFileSync(require.resolve('vue/dist/vue.global.prod.js')),
@@ -19,7 +20,7 @@ const artifacts = {
     '/element.css': fs.readFileSync(require.resolve('element-plus/dist/index.css')),
     '/axios.js': fs.readFileSync(require.resolve('axios/dist/axios.js')),
 }
-let script = 'const __modules={axios:window.axios};const Loading={render(){return null}};\n'
+let script = 'const __modules={axios:window.axios};const Loading={render(){return null}},User=Loading,Lock=Loading;\n'
 for (const name of ['api/browser_client.cjs', 'utils/accounts_behavior.cjs', 'utils/file_sharing_behavior.cjs', 'utils/web_projects_navigation.cjs', 'api/accounts.cjs', 'api/files.cjs', 'api/web_projects.cjs']) {
     const keys = {
         'api/browser_client.cjs': ['./browser_client.cjs', '@/api/browser_client.cjs'],
@@ -42,7 +43,7 @@ for (const name of ['UserIdentity', 'MyHeader']) {
     script += `const ${name}=(function(){const require=name=>__modules[name];${component};definition.render=new Function('Vue',${JSON.stringify(compiled.code)})(Vue);definition.__scopeId=${JSON.stringify(scope)};return definition;})();\n`
     for (const style of descriptor.styles) css += compileStyle({source: style.content, id: scope, scoped: style.scoped}).code
 }
-for (const name of ['FileShareManager', 'FileShareReceive', 'WebProjectOpen']) {
+for (const name of ['FileShareManager', 'FileShareReceive', 'WebProjectOpen', 'Login']) {
     const {descriptor} = parse(fs.readFileSync(path.join(root, 'views', name + '.vue'), 'utf8'))
     const scope = 'data-v-files-' + name.toLowerCase()
     const compiled = compileTemplate({source: descriptor.template.content, id: scope, compilerOptions: {mode: 'function'}})
@@ -52,14 +53,16 @@ for (const name of ['FileShareManager', 'FileShareReceive', 'WebProjectOpen']) {
     for (const style of descriptor.styles) css += compileStyle({source: style.content, id: scope, scoped: style.scoped}).code
 }
 script += `
-const segments=location.pathname.split('/').filter(Boolean),recipient=segments[0]==='s',webOpen=location.pathname==='/web-share/open';
-const state=Vue.reactive({userInfo:recipient?null:{id:'42',status:'active',user_name:'owner',display_name:'文件主人',csrf_token:'fixture-csrf',capabilities:{manuals:true},library_enabled:true},site:{title:'合成家庭服务'},modules:{manuals:true,file_sharing:true},sessionLoaded:true});
+const segments=location.pathname.split('/').filter(Boolean),recipient=segments[0]==='s',webOpen=location.pathname==='/web-share/open',login=location.pathname==='/login';
+const state=Vue.reactive({userInfo:recipient||login?null:{id:'42',status:'active',user_name:'owner',display_name:'文件主人',csrf_token:'fixture-csrf',capabilities:{manuals:true},library_enabled:true},site:{title:'合成家庭服务'},registration:{enabled:false},modules:{manuals:true,file_sharing:true},sessionLoaded:true});
 const store={state,commit(name,value){if(name==='REMOVE_INFO')state.userInfo=null;else if(name==='SET_USERINFO')state.userInfo=value;},dispatch(){return Promise.resolve();}};
 __modules['@/api/browser_client.cjs'].configureBrowserSession(()=>state.userInfo?.csrf_token||'',()=>store.commit('REMOVE_INFO'));
-const route=Vue.reactive({path:location.pathname,fullPath:location.pathname+location.search,hash:location.hash,params:{token:segments[1]||''},query:Object.fromEntries(new URLSearchParams(location.search))}),navigations=[];
-const router={push(value){navigations.push(value);route.path=typeof value==='string'?value:value.path;},replace(value){navigations.push(value);route.path=typeof value==='string'?value:value.path;}};
+const route=Vue.reactive({path:location.pathname,fullPath:location.pathname+location.search+location.hash,hash:location.hash,params:{token:segments[1]||''},query:Object.fromEntries(new URLSearchParams(location.search))}),navigations=[];
+function routeURL(value){if(typeof value==='string')return value;const query=value.query?'?'+new URLSearchParams(value.query):'';return value.path+query+(value.hash||'');}
+function navigate(value,replace){navigations.push(value);const target=routeURL(value);if(target.startsWith('/login')||location.pathname==='/login'){if(replace)location.replace(target);else location.assign(target);return Promise.resolve();}route.path=typeof value==='string'?value:value.path;return Promise.resolve();}
+const router={push(value){return navigate(value,false);},replace(value){return navigate(value,true);}};
 const RouterLink={props:['to'],setup(props,{slots,attrs}){return()=>Vue.h('a',{...attrs,href:typeof props.to==='string'?props.to:props.to.path},slots.default?slots.default():[])}};
-const component=recipient?FileShareReceive:webOpen?WebProjectOpen:FileShareManager;
+const component=login?Login:recipient?FileShareReceive:webOpen?WebProjectOpen:FileShareManager;
 const app=Vue.createApp({render(){return Vue.h(component,{ref:'page'});},mounted(){window.filePage=this.$refs.page;}});
 app.use(ElementPlus);app.component('RouterLink',RouterLink);Object.assign(app.config.globalProperties,{$store:store,$route:route,$router:router,$message:ElementPlus.ElMessage,$confirm:ElementPlus.ElMessageBox.confirm});app.mount('#app');
 window.fixtureStore=store;window.fixtureNavigations=navigations;
@@ -70,6 +73,7 @@ const html = '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name
 
 before(async () => {
     server = http.createServer((req, res) => {
+        documentRequests.push(req.url)
         const artifact = artifacts[req.url]
         res.setHeader('Content-Type', artifact ? req.url.endsWith('.css') ? 'text/css' : 'application/javascript' : 'text/html; charset=utf-8')
         res.end(artifact || html)
@@ -106,6 +110,7 @@ async function setup(options = {}) {
         if (options.handler && await options.handler({route, request, url, state})) return
         let data
         if (url.pathname === '/api/auth/me' && method === 'GET') data = {id: '42', status: 'active'}
+        else if (url.pathname === '/api/auth/login' && method === 'POST') { state.loggedIn = true; data = {id: '42', status: 'active', user_name: 'member', csrf_token: 'fixture-login-csrf', must_change_password: false} }
         else if (url.pathname === '/api/web-share/123/unlock' && method === 'POST') { state.projectUnlocked = true; data = {password_protected: true, version: 1} }
         else if (url.pathname === '/api/files' && method === 'GET') data = {items: state.files, next_cursor: '', has_more: false}
         else if (url.pathname === '/api/files' && method === 'POST') {
@@ -121,8 +126,9 @@ async function setup(options = {}) {
         } else if (url.pathname === '/api/files/10/shares/20' && method === 'DELETE') {
             state.writes.push({kind: 'revoke'}); state.shares[0].revoked_at = '2026-09-19T04:00:00Z'; data = {id: '20', revoked_at: state.shares[0].revoked_at}
         } else if (url.pathname === `/api/file-shares/${shareToken}` && method === 'GET') {
-            data = state.unlocked || options.open
-                ? {state: 'available', file: {name: '家庭账单.pdf', size_bytes: 1048576}, expires_at: '2026-09-26T00:00:00Z', max_downloads: 3, download_count: 1, remaining_downloads: 2, secret_mode: options.open ? 'none' : 'code', access_mode: 'public'}
+            if (options.loginRequired && !state.loggedIn) { await route.fulfill({status: 401, json: {code: 403, message: 'login required'}}); return }
+            data = state.unlocked || options.open || state.loggedIn
+                ? {state: 'available', file: {name: '家庭账单.pdf', size_bytes: 1048576}, expires_at: '2026-09-26T00:00:00Z', max_downloads: 3, download_count: 1, remaining_downloads: 2, secret_mode: options.open ? 'none' : 'code', access_mode: options.loginRequired ? 'authenticated' : 'public'}
                 : {state: 'locked', secret_mode: 'code', access_mode: 'public'}
         } else if (url.pathname === `/api/file-shares/${shareToken}/unlock`) {
             state.writes.push({kind: 'unlock', body: request.postDataJSON()}); state.unlocked = true; data = {unlocked_until: '2026-09-19T05:00:00Z'}
@@ -233,6 +239,27 @@ test('无密码分享不会自动消耗次数，点击后只下载一次并可�
         await page.getByRole('button', {name: '下载文件', exact: true}).click()
         await downloadPromise
         assert.equal(state.downloads, 1)
+    } finally { await context.close() }
+})
+
+test('登录回跳不会把分享 token 放进登录 HTTP URL，登录后回到原分享页', async () => {
+    documentRequests.length = 0
+    const state = {requests: [], writes: [], downloads: 0, unlocked: false, loggedIn: false, files: [fileFixture()], shares: []}
+    const {page, context} = await setup({path: `/s/${shareToken}`, loginRequired: true, state})
+    try {
+        await page.getByRole('button', {name: '前往登录', exact: true}).click()
+        await page.waitForURL(url => url.pathname === '/login' && url.hash.startsWith('#redirect='))
+        const loginRequests = documentRequests.filter(value => value.startsWith('/login'))
+        assert.deepEqual(loginRequests, ['/login'])
+        assert.equal(loginRequests.some(value => value.includes(shareToken)), false)
+        assert.equal(new URL(page.url()).search, '')
+
+        await page.getByLabel('用户名').fill('member')
+        await page.getByLabel('密码').fill('a sufficiently long password')
+        await page.getByRole('button', {name: '登录', exact: true}).click()
+        await page.waitForURL(url => url.pathname === `/s/${shareToken}`)
+        await page.getByRole('button', {name: '下载文件', exact: true}).waitFor()
+        assert.equal(new URL(page.url()).pathname, `/s/${shareToken}`)
     } finally { await context.close() }
 })
 
