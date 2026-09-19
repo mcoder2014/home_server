@@ -46,7 +46,9 @@ function normalizeInternalRedirect(value, inheritedHash = '') {
         && parsed.pathname !== '/web-share'
         && !parsed.pathname.startsWith('/web-share/')
         && parsed.pathname !== '/web-projects'
-        && !parsed.pathname.startsWith('/web-projects/')) {
+        && !parsed.pathname.startsWith('/web-projects/')
+        && parsed.pathname !== '/manuals'
+        && !/^\/manuals\/(?:new|[1-9][0-9]*(?:\/edit)?)$/.test(parsed.pathname)) {
         return '/'
     }
     if (inheritedHash && !value.includes('#')) {

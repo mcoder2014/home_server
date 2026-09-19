@@ -37,6 +37,8 @@ func TestRuntimeSnapshotIsCompleteImmutableAndMonotonic(t *testing.T) {
 	conf := Config{}
 	conf.Auth.SiteOrigins = []string{"https://home.example.com"}
 	conf.WebProjects.StorageRoot = "/private/example"
+	conf.Manuals.Enabled = true
+	conf.Manuals.StorageRoot = "/private/manuals"
 	values := DefaultRuntimeValues(conf)
 	revisions := map[string]int64{}
 	for name := range values {
@@ -52,7 +54,7 @@ func TestRuntimeSnapshotIsCompleteImmutableAndMonotonic(t *testing.T) {
 	snapshot.Auth.SiteOrigins[0] = "https://attacker.example"
 	snapshot.Revisions["site"] = 99
 	loaded := Runtime()
-	if loaded.Auth.SiteOrigins[0] != "https://home.example.com" || loaded.Revisions["site"] != 1 || loaded.WebProjects.StorageRoot != "/private/example" {
+	if loaded.Auth.SiteOrigins[0] != "https://home.example.com" || loaded.Revisions["site"] != 1 || loaded.WebProjects.StorageRoot != "/private/example" || !loaded.Manuals.Enabled || loaded.Manuals.StorageRoot != "/private/manuals" {
 		t.Fatal("snapshot retained mutable data or discarded bootstrap path")
 	}
 	loaded.Auth.SiteOrigins[0] = "https://mutated.example"

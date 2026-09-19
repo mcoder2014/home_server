@@ -4,6 +4,7 @@
     <nav class="header-nav" aria-label="主导航" v-if="!user?.must_change_password">
       <router-link to="/" :class="{active: $route.path === '/'}">首页</router-link>
       <router-link to="/web-share" :class="{active: /^\/(web-share|web-projects)/.test($route.path)}">网页托管</router-link>
+      <router-link v-if="manualsAvailable" to="/manuals" :class="{active: $route.path.startsWith('/manuals')}">说明书管理</router-link>
       <router-link v-if="user?.library_enabled && user?.capabilities?.library !== false" to="/book/list" :class="{active: $route.path.startsWith('/book/')}">家庭藏书</router-link>
       <router-link to="/applications" :class="{active: $route.path === '/applications'}">应用凭证</router-link>
       <router-link v-if="user?.role === 'admin'" to="/admin/users" :class="{active: $route.path.startsWith('/admin')}">管理中心</router-link>
@@ -27,6 +28,7 @@ export default {
   data() { return {loggingOut: false} },
   computed: {
     user() { return this.$store.state.userInfo },
+    manualsAvailable() { return this.$store.state.modules?.manuals === true && (!this.user || this.user.capabilities?.manuals !== false) },
     displayName() { return this.user?.display_name || this.user?.user_name || '用户' },
   },
   methods: {

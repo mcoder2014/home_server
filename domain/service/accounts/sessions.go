@@ -21,6 +21,7 @@ import (
 	"github.com/mileusna/useragent"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 )
 
 const SessionWarningThreshold = 10
@@ -156,6 +157,45 @@ func actingSessionTx(tx *gorm.DB, token string, lock, admin bool) (*model.UserAc
 		return nil, nil, now, apperrors.ErrForbidden
 	}
 	return user, session, now, nil
+}
+
+// RequireUserSessionTx revalidates and locks the exact acting user session for
+// a downstream write transaction. The token user must match the resource owner.
+func RequireUserSessionTx(tx *gorm.DB, token string, userID int64) (*model.UserAccount, error) {
+	if tx == nil {
+		return nil, apperrors.ErrDependency
+	}
+	if userID <= 0 || len(token) < 16 || len(token) > 256 {
+		return nil, apperrors.ErrUnauthorized
+	}
+	digest := sha256.Sum256([]byte(token))
+	// The resource owner is already known. Lock it before any consistent read so
+	// quota queries after this check observe writes committed by the prior owner.
+	user, err := dal.QueryAccount(tx, userID, true)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, apperrors.ErrUnauthorized
+	}
+	var session model.AccountSession
+	err = tx.Session(&gorm.Session{Logger: logger.Discard}).Table(dal.TableUserToken).
+		Select(dal.AccountSessionColumns).
+		Where("user_id = ? AND token_digest = ?", userID, digest[:]).
+		Clauses(clause.Locking{Strength: "UPDATE"}).Take(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, apperrors.ErrUnauthorized
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !sessionUsableAt(user, &session, time.Now()) {
+		return nil, apperrors.ErrUnauthorized
+	}
+	if user.MustChangePassword || session.Purpose != model.SessionUser {
+		return nil, apperrors.ErrForbidden
+	}
+	return user, nil
 }
 
 type SessionFilter struct {

@@ -10,6 +10,9 @@ import ScanCodePage from "../views/ScanCodePage"
 import WebShareEditor from '@/views/WebProjectEditor'
 import WebShareList from '@/views/WebProjectList'
 import WebShareOpen from '@/views/WebProjectOpen'
+import ManualList from '@/views/ManualList'
+import ManualEditor from '@/views/ManualEditor'
+import ManualDetail from '@/views/ManualDetail'
 
 const routes = [
     {path: '/register', name: 'Register', component: () => import('@/views/Register.vue'), meta: {title: '受邀注册'}},
@@ -93,6 +96,30 @@ const routes = [
             capability: 'applications',
             requireAuth: true
         }
+    },
+    {
+        path: '/manuals',
+        name: 'ManualList',
+        component: ManualList,
+        meta: {title: '家庭说明书', requireAuth: false}
+    },
+    {
+        path: '/manuals/new',
+        name: 'ManualCreate',
+        component: ManualEditor,
+        meta: {title: '新建说明书', capability: 'manuals', requireAuth: true}
+    },
+    {
+        path: '/manuals/:id/edit',
+        name: 'ManualEdit',
+        component: ManualEditor,
+        meta: {title: '编辑说明书', capability: 'manuals', requireAuth: true}
+    },
+    {
+        path: '/manuals/:id',
+        name: 'ManualDetail',
+        component: ManualDetail,
+        meta: {title: '说明书详情', requireAuth: false}
     },
     {
         path: '/web-share',

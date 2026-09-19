@@ -311,6 +311,12 @@ func UserIdentity(user *model.UserAccount) *model.UserIdentity {
 // EnabledTx 从配置文件或事务内的配置行读取布尔开关；数据库配置需通过版本、摘要和字段校验。
 func EnabledTx(tx *gorm.DB, namespace, key string, lock bool) (bool, error) {
 	conf := config.Global()
+	if namespace == "manuals" {
+		if key != "enabled" {
+			return false, apperrors.ErrDependency
+		}
+		return conf.Manuals.Enabled, nil
+	}
 	if conf.ConfigSource != "database" {
 		value, ok := config.DefaultRuntimeValues(conf)[namespace][key].(bool)
 		if !ok {
@@ -342,6 +348,9 @@ func EnabledTx(tx *gorm.DB, namespace, key string, lock bool) (bool, error) {
 }
 
 func ModuleEnabled(ctx context.Context, namespace string) (bool, error) {
+	if namespace == "manuals" {
+		return config.Global().Manuals.Enabled, nil
+	}
 	key := "enabled"
 	if namespace == "auth" {
 		key = "applications_enabled"

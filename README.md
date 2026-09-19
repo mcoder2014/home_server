@@ -68,6 +68,21 @@ cq_ddns_client -conf /etc/home_server/client_config.yaml -dry-run
 
 回滚时停用新服务，再启动原 `home_client.service`。切换验证完成前保留旧二进制、配置和 unit。
 
+## 说明书管理
+
+说明书将同一设备的 PDF、图片、文字和链接放在一起，支持每份说明书归属多个个人单层分类、名称包含关键词检索和缩略图列表。新建默认仅自己可见，也可选择登录用户或所有人可见；仅所有者可以编辑和删除。
+
+| 操作 | 行为 |
+| --- | --- |
+| 批量录入 | 图片可多选并多次追加，PDF、文字和 URL 可同时录入；上传失败保留成功项，重新选择或重试失败项 |
+| 查阅 | 按分类和名称组合筛选，点击封面进入有序资料列表；PDF 可打开或下载，URL 打开原站 |
+| 分享 | 分享说明书地址，访问者按当前可见范围鉴权；缩略图和原件受相同权限控制 |
+| 删除 | 逻辑删除后立即停止访问，原始文件保留并继续占用存储空间 |
+
+系统相册是否支持一次跨相册选择取决于手机；页面会保留多次选择的队列。图片支持 JPEG、PNG、GIF、WebP，HEIC/HEIF 需要先转换。PDF 预览使用 `pdftoppm`；无法生成预览时保留原件并显示占位状态。URL 只保存地址，需要长期归档的内容应上传文件。
+
+设计、接口与默认限额见 [说明书管理技术方案](docs/specs/manual-management/design.md)，安装及回滚见 [Pi 部署说明](deploy/pi/README.md)。AI 操作入口包含在 [home-server-web-share skill](skills/home-server-web-share/SKILL.md) 中，使用独立的 `manuals:read` / `manuals:write` scope；旧凭证不会自动扩大权限。
+
 ## 网页托管
 
 ### 使用方式

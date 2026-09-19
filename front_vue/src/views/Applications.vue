@@ -210,6 +210,8 @@ export default {
         {name: 'web-projects:write', resource: 'web-projects', action: 'write', label: '网页托管 · 写入', description: '可发布、修改和删除托管内容'},
         {name: 'library:read', resource: 'library', action: 'read', label: '家庭藏书 · 读取', description: '查看图书信息'},
         {name: 'library:write', resource: 'library', action: 'write', label: '家庭藏书 · 写入', description: '可新增、修改和删除图书'},
+        {name: 'manuals:read', resource: 'manuals', action: 'read', label: '说明书管理 · 读取', description: '查看有权访问的说明书与资料'},
+        {name: 'manuals:write', resource: 'manuals', action: 'write', label: '说明书管理 · 写入', description: '可新增、修改和删除自己的说明书'},
         {name: 'webdav:read', resource: 'webdav', action: 'read', label: 'WebDAV · 读取', description: '读取 WebDAV 文件'},
         {name: 'webdav:write', resource: 'webdav', action: 'write', label: 'WebDAV · 写入', description: '可新增、覆盖和删除文件'},
       ],
@@ -224,6 +226,7 @@ export default {
       return this.scopeOptions.filter(option => {
         if (this.form.scopes.includes(option.name)) return true
         if (option.resource === 'library') return user?.library_enabled && user?.capabilities?.library !== false
+        if (option.resource === 'manuals') return this.$store.state.modules?.manuals === true && user?.capabilities?.manuals !== false
         if (option.resource === 'webdav') return user?.webdav_permission !== 'none' && user?.capabilities?.webdav !== false && (option.action === 'read' || user?.webdav_permission === 'write')
         return true
       })

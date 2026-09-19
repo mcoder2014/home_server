@@ -10,13 +10,15 @@ const {
 } = require('../src/utils/applications_behavior.cjs')
 
 test('write scopes always include the matching read scope in stable order', () => {
-    assert.deepEqual(normalizeScopes(['library:write', 'web-comments:write', 'web-projects:write', 'library:write']), [
+    assert.deepEqual(normalizeScopes(['library:write', 'manuals:write', 'web-comments:write', 'web-projects:write', 'library:write']), [
         'web-comments:read',
         'web-comments:write',
         'web-projects:read',
         'web-projects:write',
         'library:read',
         'library:write',
+        'manuals:read',
+        'manuals:write',
     ])
 })
 

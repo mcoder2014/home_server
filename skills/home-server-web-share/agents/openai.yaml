@@ -1,4 +1,4 @@
 interface:
-  display_name: "Home Server 网页托管"
-  short_description: "上传、更新和下架托管网页，管理可见范围并支持内外网调用"
-  default_prompt: "使用 $home-server-web-share 上传这个静态网页并设为仅自己可见。"
+  display_name: "Home Server 网页与说明书"
+  short_description: "管理托管网页、评论和设备说明书，支持私有内外网入口"
+  default_prompt: "使用 $home-server-web-share 把这些资料整理成仅自己可见的设备说明书。"

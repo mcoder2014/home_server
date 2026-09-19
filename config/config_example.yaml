@@ -39,6 +39,25 @@ web_projects:
   max_concurrent_extracts: 4
   delete_retention_days: 7
 
+manuals:
+  # Keep disabled until the migration and private storage directory are ready.
+  enabled: false
+  storage_root: /var/lib/home_server/manuals
+  max_file_bytes: 52428800
+  max_items_per_manual: 100
+  max_manual_bytes: 524288000
+  max_manuals_per_user: 1000
+  max_user_bytes: 10737418240
+  min_free_disk_bytes: 2147483648
+  pdftoppm_path: /usr/bin/pdftoppm
+  prlimit_path: /usr/bin/prlimit
+  pdf_preview_timeout_seconds: 10
+  max_concurrent_pdf_previews: 1
+  pdf_preview_memory_limit_bytes: 536870912
+  pdf_preview_cpu_seconds: 10
+  pdf_preview_output_limit_bytes: 16777216
+  pdf_preview_open_files_limit: 32
+
 auth:
   # Enable after application tables and same-origin HTTPS proxy are installed.
   applications_enabled: false

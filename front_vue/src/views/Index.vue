@@ -35,6 +35,12 @@
           <p>整理纸质书与电子书，<br>让每一本好书都有迹可寻。</p>
           <span class="service-link">查看图书 <el-icon><ArrowRight /></el-icon></span>
         </router-link>
+        <router-link v-if="manualsAvailable" class="service-card" to="/manuals">
+          <div class="service-top"><span class="service-icon manuals-icon"><el-icon :size="25"><Document /></el-icon></span><span class="service-label">MANUALS</span></div>
+          <h3>说明书管理</h3>
+          <p>收好设备照片、PDF 和网页，<br>需要时按名称与分类查找。</p>
+          <span class="service-link">查看说明书 <el-icon><ArrowRight /></el-icon></span>
+        </router-link>
         <router-link v-if="libraryAvailable" class="service-card" to="/book/add">
           <div class="service-top"><span class="service-icon add-icon"><el-icon :size="25"><Plus /></el-icon></span><span class="service-label">QUICK ADD</span></div>
           <h3>录入图书</h3>
@@ -56,14 +62,15 @@
 <script>
 import MyHeader from '../components/MyHeader'
 import UserIdentity from '@/components/UserIdentity.vue'
-import {ArrowRight, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
+import {ArrowRight, Document, Key, Monitor, Plus, Reading} from '@element-plus/icons-vue'
 
 export default {
   name: 'MyIndex',
-  components: {MyHeader, UserIdentity, Monitor, Plus, Reading, Key, ArrowRight},
+  components: {MyHeader, UserIdentity, Monitor, Plus, Reading, Document, Key, ArrowRight},
   created() { this.$store.dispatch('loadBootstrap').catch(() => {}) },
   computed: {
     libraryAvailable() { return this.$store.state.userInfo?.library_enabled && this.$store.state.userInfo?.capabilities?.library !== false },
+    manualsAvailable() { return this.$store.state.modules?.manuals === true && (!this.$store.state.userInfo || this.$store.state.userInfo.capabilities?.manuals !== false) },
     username() {
       return this.$store.state.userInfo?.display_name || this.$store.state.userInfo?.user_name || '访客'
     },

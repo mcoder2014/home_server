@@ -11,6 +11,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/service/accounts"
 	myErrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils"
+	"gorm.io/gorm"
 )
 
 const (
@@ -91,6 +92,32 @@ func DeleteToken(ctx context.Context, token string) error {
 		return nil
 	}
 	return dal.ExpireToken(tokenEntity.ID)
+}
+
+// RequireConfigSessionTx locks and revalidates the exact legacy session in the
+// caller's write transaction. Database-backed identities use accounts instead.
+func RequireConfigSessionTx(ctx context.Context, tx *gorm.DB, token string, userID, authVersion int64) error {
+	if token == "" {
+		return myErrors.ErrUnauthorized
+	}
+	if tx == nil {
+		return myErrors.ErrDependency
+	}
+	session, err := dal.QueryByTokenTx(tx, token, true)
+	if err != nil {
+		return myErrors.ErrDependency
+	}
+	if session == nil || session.UserID != userID || session.IsExpired == model.UserTokenExpired || !session.ExpireTime.After(time.Now()) {
+		return myErrors.ErrUnauthorized
+	}
+	identity, err := GetByID(ctx, userID)
+	if err != nil {
+		return myErrors.ErrDependency
+	}
+	if identity == nil || identity.ID != userID || identity.AuthVersion != authVersion {
+		return myErrors.ErrUnauthorized
+	}
+	return nil
 }
 
 func BuildUserToken(userID int64, expireTime time.Duration) *model.UserToken {
