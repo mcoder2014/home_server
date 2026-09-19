@@ -70,21 +70,22 @@ type ItemView struct {
 }
 
 type ManualView struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Categories  []string    `json:"categories"`
-	AccessMode  string      `json:"access_mode"`
-	Status      string      `json:"status"`
-	Revision    int64       `json:"revision"`
-	CoverItemID *string     `json:"cover_item_id"`
-	CoverURL    string      `json:"cover_url"`
-	Cover       *CoverView  `json:"cover"`
-	ItemCount   int         `json:"item_count"`
-	CanEdit     bool        `json:"can_edit"`
-	CreateTime  time.Time   `json:"create_time"`
-	UpdateTime  time.Time   `json:"update_time"`
-	Items       []*ItemView `json:"items,omitempty"`
+	ID                string      `json:"id"`
+	Name              string      `json:"name"`
+	Description       string      `json:"description"`
+	Categories        []string    `json:"categories"`
+	AccessMode        string      `json:"access_mode"`
+	Status            string      `json:"status"`
+	Revision          int64       `json:"revision"`
+	CoverItemID       *string     `json:"cover_item_id"`
+	CoverURL          string      `json:"cover_url"`
+	Cover             *CoverView  `json:"cover"`
+	ItemCount         int         `json:"item_count"`
+	CanEdit           bool        `json:"can_edit"`
+	PasswordProtected bool        `json:"password_protected"`
+	CreateTime        time.Time   `json:"create_time"`
+	UpdateTime        time.Time   `json:"update_time"`
+	Items             []*ItemView `json:"items,omitempty"`
 }
 
 type ManualPage struct {

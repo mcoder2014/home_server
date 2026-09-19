@@ -11,6 +11,7 @@ if (!playwrightPath) {
 const {chromium} = require(playwrightPath)
 const root = path.join(__dirname, '../src')
 let browser, server, origin
+const visualOutput = process.env.VISUAL_OUTPUT_DIR || '/tmp/home-server-file-sharing-visuals'
 const artifacts = {
     '/vue.js': fs.readFileSync(require.resolve('vue/dist/vue.global.prod.js')),
     '/element.js': fs.readFileSync(require.resolve('element-plus/dist/index.full.js')),
@@ -18,15 +19,14 @@ const artifacts = {
     '/axios.js': fs.readFileSync(require.resolve('axios/dist/axios.js')),
 }
 let script = 'const __modules={axios:window.axios};\n'
-for (const name of ['api/browser_client.cjs', 'utils/manuals_behavior.cjs', 'api/manuals.cjs']) {
-    const key = name === 'api/browser_client.cjs' ? './browser_client.cjs' : name === 'api/manuals.cjs' ? '@/api/manuals.cjs' : '@/utils/manuals_behavior.cjs'
+for (const name of ['api/browser_client.cjs', 'utils/accounts_behavior.cjs', 'utils/manuals_behavior.cjs', 'utils/file_sharing_behavior.cjs', 'api/accounts.cjs', 'api/manuals.cjs']) {
+    const key = name === 'api/browser_client.cjs' ? './browser_client.cjs' : `@/${name}`
     script += `(function(){const module={exports:{}};const require=name=>__modules[name];\n${fs.readFileSync(path.join(root, name), 'utf8')}\n__modules[${JSON.stringify(key)}]=module.exports;})();\n`
 }
 script += "__modules['@/api/browser_client.cjs']=__modules['./browser_client.cjs'];\n"
-script += "const MyHeader={template:'<header class=\"fixture-header\"><a href=\"/\">CQ</a><nav><a href=\"/manuals\">说明书</a></nav></header>'};\n"
 let css = fs.readFileSync(path.join(root, 'assets/global.css'), 'utf8')
-for (const name of ['ManualList', 'ManualEditor', 'ManualDetail']) {
-    const {descriptor} = parse(fs.readFileSync(path.join(root, 'views', name + '.vue'), 'utf8'))
+for (const [folder, name] of [['components', 'UserIdentity'], ['components', 'MyHeader'], ['views', 'ManualList'], ['views', 'ManualEditor'], ['views', 'ManualDetail']]) {
+    const {descriptor} = parse(fs.readFileSync(path.join(root, folder, name + '.vue'), 'utf8'))
     const scope = 'data-v-manual-' + name.toLowerCase()
     const compiled = compileTemplate({source: descriptor.template.content, id: scope, compilerOptions: {mode: 'function'}})
     assert.deepEqual(compiled.errors, [])
@@ -37,12 +37,12 @@ for (const name of ['ManualList', 'ManualEditor', 'ManualDetail']) {
 script += `
 const params=new URLSearchParams(location.search);
 const user=params.get('as')==='owner'?{id:'42',status:'active',user_name:'owner',csrf_token:'fixture-csrf',capabilities:{manuals:true}}:null;
-const state=Vue.reactive({userInfo:user,site:{title:'合成家庭服务'},modules:{manuals:true},sessionLoaded:true});
+const state=Vue.reactive({userInfo:user,site:{title:'合成家庭服务'},modules:{manuals:true,file_sharing:true},sessionLoaded:true});
 const store={state,commit(name,value){if(name==='REMOVE_INFO')state.userInfo=null;else if(name==='SET_USERINFO')state.userInfo=value;},dispatch(){return Promise.resolve();}};
 __modules['@/api/browser_client.cjs'].configureBrowserSession(()=>state.userInfo?.csrf_token||'',()=>store.commit('REMOVE_INFO'));
 const segments=location.pathname.split('/').filter(Boolean),route=Vue.reactive({path:location.pathname,fullPath:location.pathname+location.search,params:{id:segments[1]==='new'?'':segments[1]||''},query:{}});
 const navigations=[];const router={push(value){navigations.push(value);route.path=typeof value==='string'?value:value.path;},replace(value){navigations.push(value);route.path=typeof value==='string'?value:value.path;}};
-const RouterLink={props:['to'],setup(props,{slots}){return()=>Vue.h('a',{href:typeof props.to==='string'?props.to:props.to.path},slots.default?slots.default():[])}};
+const RouterLink={props:['to'],setup(props,{slots,attrs}){return()=>Vue.h('a',{...attrs,href:typeof props.to==='string'?props.to:props.to.path},slots.default?slots.default():[])}};
 let page=ManualList;if(location.pathname==='/manuals/new'||location.pathname.endsWith('/edit'))page=ManualEditor;else if(segments.length===2)page=ManualDetail;
 const app=Vue.createApp({render(){return Vue.h(page,{ref:'page'});},mounted(){window.manualPage=this.$refs.page;}});
 app.use(ElementPlus);app.component('RouterLink',RouterLink);Object.assign(app.config.globalProperties,{$store:store,$route:route,$router:router,$message:ElementPlus.ElMessage,$confirm:ElementPlus.ElMessageBox.confirm});app.mount('#app');window.fixtureStore=store;window.fixtureRoute=route;window.fixtureNavigations=navigations;
@@ -88,6 +88,7 @@ async function setup(options = {}) {
             const handled = await options.handler({route, request, url, state})
             if (handled) return
         }
+        if (/^\/api\/manuals\/[^/]+\/password$/.test(url.pathname) && request.method() === 'GET') return route.fulfill({json: {code: 0, data: {password_protected: false, version: 0}}})
         if (url.pathname === '/api/manuals/categories') return route.fulfill({json: {code: 0, data: {items: ['厨房']}}})
         if (url.pathname === '/api/manuals') {
             const filtered = url.searchParams.get('q') === '咖啡' && url.searchParams.get('category') === '厨房'
@@ -135,6 +136,61 @@ test('匿名访问新建和编辑路由会回到登录页', async () => {
             assert.equal(navigation.query.redirect, target)
         } finally { await context.close() }
     }
+})
+
+test('匿名说明书详情在403时以1440和320展示通用解锁卡，解锁后才加载真实内容', async () => {
+    let unlocked = false
+    const state = {requests: [], writes: [], uploads: [], uploadAttempts: new Map(), revision: 1}
+    const handler = async ({route, request, url}) => {
+        if (url.pathname === '/api/manuals/200/unlock' && request.method() === 'POST') {
+            state.writes.push(request.postDataJSON()); unlocked = true
+            await route.fulfill({json: {code: 0, data: {password_protected: true, version: 2}}}); return true
+        }
+        if (url.pathname === '/api/manuals/200' && request.method() === 'GET') {
+            if (!unlocked) { await route.fulfill({status: 403, json: {code: 3, message: '需要阅读密码'}}); return true }
+            await route.fulfill({json: {code: 0, data: baseManual({items: [{id: '1', kind: 'text', title: '快速入门', text: '解锁后的正文', position: 1}]})}}); return true
+        }
+        return false
+    }
+    const {page, context}=await setup({path: '/manuals/200', width: 1440, state, handler})
+    try {
+        await page.getByText('这份说明书受密码保护', {exact: true}).waitFor()
+        assert.equal(await page.getByText('咖啡机', {exact: true}).count(), 0)
+        fs.mkdirSync(visualOutput, {recursive: true})
+        await page.screenshot({path: path.join(visualOutput, 'manual-password-desktop-1440.png'), fullPage: true})
+        await page.setViewportSize({width: 320, height: 820})
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+        await page.screenshot({path: path.join(visualOutput, 'manual-password-mobile-320.png'), fullPage: true})
+        await page.getByLabel('说明书阅读密码').fill('说明书密码')
+        await page.getByRole('button', {name: '解锁说明书', exact: true}).click()
+        await page.getByText('解锁后的正文', {exact: true}).waitFor()
+        assert.deepEqual(state.writes, [{password: '说明书密码'}])
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    } finally { await context.close() }
+})
+
+test('说明书所有者用独立版本设置与清除阅读密码', async () => {
+    const state = {requests: [], writes: [], uploads: [], uploadAttempts: new Map(), revision: 4}
+    const handler = async ({route, request, url}) => {
+        if (url.pathname === '/api/manuals/categories') { await route.fulfill({json: {code: 0, data: {items: []}}}); return true }
+        if (url.pathname === '/api/manuals/200' && request.method() === 'GET') { await route.fulfill({json: {code: 0, data: baseManual({can_edit: true, items: [{id: '1', kind: 'text', title: '正文', text: '内容', position: 1}]})}}); return true }
+        if (url.pathname === '/api/manuals/200/password' && request.method() === 'GET') { await route.fulfill({json: {code: 0, data: {password_protected: false, version: 0}}}); return true }
+        if (url.pathname === '/api/manuals/200/password' && request.method() === 'PUT') { const body=request.postDataJSON();state.writes.push(body);await route.fulfill({json:{code:0,data:{password_protected:Boolean(body.password),version:body.version+1}}});return true }
+        return false
+    }
+    const {page, context}=await setup({path: '/manuals/200/edit?as=owner', width: 390, state, handler})
+    try {
+        await page.getByText('尚未设置阅读密码', {exact: true}).waitFor()
+        await page.getByLabel('新的说明书阅读密码').fill('说明书密码')
+        await page.getByLabel('确认说明书阅读密码').fill('说明书密码')
+        await page.getByRole('button', {name: '设置阅读密码', exact: true}).click()
+        await page.getByText('已启用阅读密码', {exact: true}).waitFor()
+        assert.deepEqual(state.writes[0], {password: '说明书密码', version: 0})
+        await page.getByRole('button', {name: '清除阅读密码', exact: true}).click()
+        await page.getByRole('button', {name: '确认清除', exact: true}).click()
+        await page.getByText('尚未设置阅读密码', {exact: true}).waitFor()
+        assert.deepEqual(state.writes[1], {password: '', version: 1})
+    } finally { await context.close() }
 })
 
 test('多次选图按稳定队列追加，部分失败仅重试失败项并使用原幂等 key', async () => {

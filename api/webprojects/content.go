@@ -20,7 +20,9 @@ import (
 	application "github.com/mcoder2014/home_server/app/webprojects"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
+	"github.com/mcoder2014/home_server/utils"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
 
@@ -39,18 +41,26 @@ func serveProjectContent(c *gin.Context) {
 		return
 	}
 	userID := int64(0)
+	var principal *utils.Principal
 	explicitCredentials := c.GetHeader("Authorization") != "" || c.GetHeader(middleware.HeaderKey) != ""
-	if project.AccessMode != service.AccessModePublic || explicitCredentials {
-		principal, loginErr := middleware.ResolveIdentity(c, "web-projects:read", true, false)
+	hasBrowserSession := utils.BrowserSessionToken(c.Request) != ""
+	if project.AccessMode != service.AccessModePublic || explicitCredentials || hasBrowserSession {
+		resolved, loginErr := middleware.ResolveIdentity(c, "web-projects:read", true, false)
 		if loginErr == nil {
-			userID = principal.UserID
+			principal = resolved
+			userID = resolved.UserID
 		} else {
-			if errors.Is(loginErr, service.ErrDependency) {
-				ginfmt.Fail(c, loginErr)
+			if project.AccessMode == service.AccessModePublic && !explicitCredentials && !errors.Is(loginErr, service.ErrDependency) {
+				principal = nil
+				userID = 0
 			} else {
-				contentNotFound(c)
+				if errors.Is(loginErr, service.ErrDependency) {
+					ginfmt.Fail(c, loginErr)
+				} else {
+					contentNotFound(c)
+				}
+				return
 			}
-			return
 		}
 	}
 	isMember := false
@@ -63,6 +73,21 @@ func serveProjectContent(c *gin.Context) {
 	}
 	if !service.CanReadProject(project.AccessMode, project.OwnerUserID, userID, isMember) {
 		contentNotFound(c)
+		return
+	}
+	requested := strings.TrimPrefix(c.Param("path"), "/")
+	if requested == "" {
+		requested = release.EntryFile
+	}
+	_, passwordErr := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, project.ID, principal != nil && principal.UserID == project.OwnerUserID, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, project.ID))
+	if passwordErr != nil {
+		c.Header("X-Resource-Password", "required")
+		c.Header("X-Resource-ID", strconv.FormatInt(project.ID, 10))
+		if errors.Is(passwordErr, resourcepasswords.ErrPasswordRequired) && c.Request.Method == http.MethodGet && passwordHTMLRequest(c, requested) {
+			servePasswordUnlockPage(c, project.ID)
+		} else {
+			ginfmt.Fail(c, passwordErr)
+		}
 		return
 	}
 	if c.GetHeader("Service-Worker") != "" {
@@ -83,10 +108,6 @@ func serveProjectContent(c *gin.Context) {
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
-	}
-	requested := strings.TrimPrefix(c.Param("path"), "/")
-	if requested == "" {
-		requested = release.EntryFile
 	}
 	isEntry := requested == release.EntryFile
 	filePath, err := service.ResolveContentPath(contentRoot, requested)
@@ -132,6 +153,22 @@ func serveProjectContent(c *gin.Context) {
 	if visitor != "" && isAnalyticsDocument(c.Request, requested, c.Writer.Status()) {
 		runtime.Analytics.Record(project.ID, runtime.VisitorHash(project.ID, visitor), time.Now())
 	}
+}
+
+func passwordHTMLRequest(c *gin.Context, requested string) bool {
+	extension := strings.ToLower(filepath.Ext(requested))
+	return c.Param("path") == "" || extension == ".html" || extension == ".htm" || strings.Contains(strings.ToLower(c.GetHeader("Accept")), "text/html")
+}
+
+func servePasswordUnlockPage(c *gin.Context, projectID int64) {
+	endpoint := "/api/web-share/" + strconv.FormatInt(projectID, 10) + "/unlock"
+	html := `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>密码阅读</title><style>body{margin:0;background:#f3f7f5;color:#173f35;font:16px system-ui,sans-serif}.card{box-sizing:border-box;width:min(92vw,430px);margin:12vh auto;padding:28px;background:#fff;border:1px solid #d8e4df;border-radius:18px;box-shadow:0 14px 40px #173f3514}h1{margin:0 0 8px;font-size:24px}p{color:#55736b}input,button{box-sizing:border-box;width:100%;height:46px;border-radius:10px;font:inherit}input{padding:0 12px;border:1px solid #a9beb7}button{margin-top:12px;border:0;background:#176c55;color:#fff;font-weight:650;cursor:pointer}button:disabled{opacity:.65}.error{min-height:22px;color:#b42318;font-size:14px}</style></head><body><main class="card"><h1>此网页受密码保护</h1><p>输入分享者提供的阅读密码。</p><form id="unlock"><input id="password" type="password" autocomplete="current-password" required autofocus><button id="submit" type="submit">解锁网页</button><p class="error" id="error" role="alert"></p></form></main><script>document.getElementById('unlock').addEventListener('submit',async function(e){e.preventDefault();const button=document.getElementById('submit'),error=document.getElementById('error');button.disabled=true;error.textContent='';try{const response=await fetch('` + endpoint + `',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('password').value})});if(!response.ok)throw new Error();location.reload()}catch(_){error.textContent='密码错误或尝试过于频繁';button.disabled=false}})</script></body></html>`
+	c.Header("Cache-Control", "no-store")
+	c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	c.Header("Referrer-Policy", "no-referrer")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Frame-Options", "DENY")
+	c.Data(http.StatusForbidden, "text/html; charset=utf-8", []byte(html))
 }
 
 // downloadRelease 处理 GET /api/web-share/:id/releases/:release_id/download 及兼容入口：确认本人版本归属后生成下载包。

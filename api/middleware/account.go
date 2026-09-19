@@ -204,6 +204,8 @@ func AuthorizeCapability(ctx context.Context, principal *utils.Principal, scope 
 		module = "web_projects"
 	} else if strings.HasPrefix(scope, "manuals:") {
 		module = "manuals"
+	} else if strings.HasPrefix(scope, "files:") {
+		module = "file_sharing"
 	}
 	if module == "" {
 		return nil

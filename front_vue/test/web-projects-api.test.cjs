@@ -89,3 +89,23 @@ test('owner statistics use the authenticated project API and only supported day 
     assert.throws(() => api.getStats('12', 14), /7.*30.*90/)
     assert.equal(transport.calls.length, 2)
 })
+
+test('resource password setting and unlocking use independent endpoints and versions', async () => {
+    const transport = createTransport({code: 0, data: {password_protected: true, version: 3}})
+    const api = createWebShareApi(transport, () => 'csrf')
+    await api.getPassword('9223372036854775807')
+    await api.setPassword('9223372036854775807', {password: '家庭访问密码', version: 2})
+    await api.unlockProject('9223372036854775807', '家庭访问密码')
+
+    assert.deepEqual(transport.calls[0], {
+        method: 'get', url: '/api/web-share/9223372036854775807/password', headers: {'X-CSRF-Token': 'csrf'},
+    })
+    assert.deepEqual(transport.calls[1], {
+        method: 'put', url: '/api/web-share/9223372036854775807/password',
+        data: {password: '家庭访问密码', version: 2}, headers: {'X-CSRF-Token': 'csrf'},
+    })
+    assert.deepEqual(transport.calls[2], {
+        method: 'post', url: '/api/web-share/9223372036854775807/unlock',
+        data: {password: '家庭访问密码'}, headers: {'X-CSRF-Token': 'csrf'},
+    })
+})

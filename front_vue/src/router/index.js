@@ -13,6 +13,8 @@ import WebShareOpen from '@/views/WebProjectOpen'
 import ManualList from '@/views/ManualList'
 import ManualEditor from '@/views/ManualEditor'
 import ManualDetail from '@/views/ManualDetail'
+import FileShareManager from '@/views/FileShareManager'
+import FileShareReceive from '@/views/FileShareReceive'
 
 const routes = [
     {path: '/register', name: 'Register', component: () => import('@/views/Register.vue'), meta: {title: '受邀注册'}},
@@ -86,6 +88,18 @@ const routes = [
             library: true,
             requireAuth: true
         }
+    },
+    {
+        path: '/files',
+        name: 'FileShareManager',
+        component: FileShareManager,
+        meta: {title: '文件分享', requireAuth: true, module: 'file_sharing'}
+    },
+    {
+        path: '/s/:token',
+        name: 'FileShareReceive',
+        component: FileShareReceive,
+        meta: {title: '接收文件', requireAuth: false}
     },
     {
         path: '/applications',

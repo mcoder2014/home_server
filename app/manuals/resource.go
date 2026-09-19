@@ -5,28 +5,25 @@ import (
 
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/model"
-	service "github.com/mcoder2014/home_server/domain/service/manuals"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	apperrors "github.com/mcoder2014/home_server/errors"
 )
 
-func (application *Application) ResourceItem(ctx context.Context, manualID, itemID, viewerID int64, thumbnail bool) (*model.ManualItem, error) {
+func (application *Application) ResourceItem(ctx context.Context, manualID, itemID, viewerID int64, thumbnail bool, grantTokens ...string) (*model.ManualItem, error) {
 	database, err := database(ctx)
 	if err != nil {
 		return nil, err
 	}
-	manual, err := dal.FindManual(database, manualID, false)
-	if err != nil {
-		return nil, apperrors.ErrDependency
-	}
-	if manual == nil {
-		return nil, apperrors.ErrNotFound
-	}
-	active, err := ownerActive(ctx, manual.OwnerUserID)
+	manual, err := findReadableManual(ctx, database, manualID, viewerID)
 	if err != nil {
 		return nil, err
 	}
-	if !active || !service.CanReadManual(manual.AccessMode, manual.Status, manual.OwnerUserID, viewerID) {
-		return nil, apperrors.ErrNotFound
+	grantToken := ""
+	if len(grantTokens) > 0 {
+		grantToken = grantTokens[0]
+	}
+	if _, err := resourcepasswords.Default.Authorize(ctx, resourcepasswords.ResourceManual, manual.ID, viewerID == manual.OwnerUserID, grantToken); err != nil {
+		return nil, err
 	}
 	item, err := dal.FindManualItem(database, manualID, itemID, false)
 	if err != nil {

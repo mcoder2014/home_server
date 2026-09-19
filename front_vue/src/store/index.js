@@ -9,6 +9,7 @@ for (const key of ['token', 'user_name']) localStorage.removeItem(key)
 sessionStorage.removeItem('userInfo')
 let pendingSession = null
 let pendingSessionEpoch = -1
+let pendingBootstrap = null
 let accountUpdates = null
 
 const store = createStore({
@@ -19,7 +20,8 @@ const store = createStore({
         sessionEpoch: 0,
         site: {title: 'CQ Home Server', notice: ''},
         registration: {enabled: false, monthly_limit: 3, ttl_days: 7},
-        modules: {manuals: false},
+        modules: {manuals: false, file_sharing: false},
+        bootstrapLoaded: false,
         isbn: '',
     },
     mutations: {
@@ -36,6 +38,7 @@ const store = createStore({
             state.site = value.site || state.site
             state.registration = value.registration || state.registration
             state.modules = value.modules || state.modules
+            state.bootstrapLoaded = true
         },
         REMOVE_INFO(state) {
             state.sessionEpoch++
@@ -64,9 +67,14 @@ const store = createStore({
             return pendingSession
         },
         async loadBootstrap({commit}) {
-            const value = await accountsApi.bootstrap()
-            commit('SET_BOOTSTRAP', value)
-            return value
+            if (!pendingBootstrap) {
+                const request = accountsApi.bootstrap().then(value => {
+                    commit('SET_BOOTSTRAP', value)
+                    return value
+                }).finally(() => { if (pendingBootstrap === request) pendingBootstrap = null })
+                pendingBootstrap = request
+            }
+            return pendingBootstrap
         },
     },
 })

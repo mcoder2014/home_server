@@ -12,11 +12,15 @@ import (
 )
 
 func InitRouter() error {
+	read := middleware.RequireIdentity("manuals:read", false)
 	write := middleware.RequireIdentity("manuals:write", false)
 	data.AddRoute(http.MethodGet, "/api/manuals", requireModule, listManuals)
 	data.AddRoute(http.MethodGet, "/api/manuals/categories", requireModule, listCategories)
 	data.AddRoute(http.MethodPost, "/api/manuals", requireModule, write, createManual)
 	data.AddRoute(http.MethodGet, "/api/manuals/:id", requireModule, getManual)
+	data.AddRoute(http.MethodGet, "/api/manuals/:id/password", requireModule, read, getManualPassword)
+	data.AddRoute(http.MethodPut, "/api/manuals/:id/password", requireModule, write, putManualPassword)
+	data.AddRoute(http.MethodPost, "/api/manuals/:id/unlock", requireModule, unlockManual)
 	data.AddRoute(http.MethodPatch, "/api/manuals/:id", requireModule, write, updateManual)
 	data.AddRoute(http.MethodDelete, "/api/manuals/:id", requireModule, write, deleteManual)
 	data.AddRoute(http.MethodPost, "/api/manuals/:id/items", requireModule, write, addInlineItem)

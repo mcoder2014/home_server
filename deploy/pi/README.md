@@ -95,3 +95,21 @@ sudo systemctl enable home_server.target home_server.service home_server_fronten
 ## 多个受信任域名
 
 网关 `server_name` 可以列出主域名和内部域名，例如 `home.example.com home.internal.example.com`。证书必须包含所有域名，DNS 地址在私有配置中维护。后端保留 `auth.site_origin` 作为原入口，通过 `auth.site_origins` 添加完整的额外 HTTPS Origin；不要添加通配域或设置共享 Cookie Domain。两个域名使用相同账号和数据库，但浏览器登录状态分别保存。
+
+## 文件分享与密码阅读
+
+文件模块使用独立的 `file_sharing` 部署配置，缺省关闭。上线前执行 `20260919_file_sharing.sql` 和 `20260919_resource_passwords.sql` 两份增量迁移；前者创建文件、分享、成员表，后者为既有网页和说明书提供密码版本记录。密码表迁移必须先于新后端切换，不能在表缺失时以“无密码”降级。
+
+配置 `file_sharing.enabled: true` 与私有 `storage_root`，建议 `/var/lib/home_server/files`，归服务账号所有、权限0700。该路径不得与 WebDAV、网页托管、说明书或前端静态根重叠。默认单文件50MiB、每用户1000个文件和10GiB总量、保留2GiB磁盘空间；并发上传上限为每用户2个、全局4个。文件统一通过后端附件响应，不安装静态alias。
+
+安装 `config/nginx/file_sharing_locations.conf` 到 `/etc/home_server/locations/`，在Pi副本中沿用 `$cq_forwarded_proto` 和 `$cq_client_ip`，并由独立前端Nginx include。TLS网关的两个入口必须同步提供文件API，保留既有原始Host与端口、可信代理、禁缓存与关闭访问日志。实际配置分别执行 `nginx -t` 后生效。
+
+| 验收路径 | 预期 |
+|---|---|
+| `/files`、`/s/:token` | 前端管理和收件页；登录回跳不丢分享目标 |
+| `/api/files` | 未登录不能管理，已登录仅本人文件；上传受应用与代理双重大小限制 |
+| `/api/file-shares/:token/download` | 仅POST；身份、密码、时间、次数全部通过才发送；HEAD与Range不消耗次数 |
+| 网页与说明书密码 | 旧ACL继续有效；错误密码不注销登录；修改或清除密码使旧授权失效 |
+| 内容保护 | 网页子资源与评论、说明书正文/封面/原件/缩略图均不得绕过门禁 |
+
+下载计数表示成功授权并开始传输的次数，客户端断线不会恢复额度。程序回滚时保留四张新增表及私有文件，恢复整套前后端release和对应配置；不得把数据库快照覆盖到已经产生新业务数据的库。

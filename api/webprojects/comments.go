@@ -11,6 +11,7 @@ import (
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/service/accounts"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	"github.com/mcoder2014/home_server/domain/service/webcomments"
 	service "github.com/mcoder2014/home_server/domain/service/webprojects"
 	"github.com/mcoder2014/home_server/utils"
@@ -45,6 +46,10 @@ func commentContext(c *gin.Context) {
 	}
 	if identityErr != nil {
 		utils.ClearBrowserSession(c)
+	}
+	if _, err := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, id, p != nil && p.UserID == project.OwnerUserID, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, id)); err != nil {
+		ginfmt.Fail(c, err)
+		return
 	}
 	release, err := dal.QueryWebProjectRelease(id, *project.CurrentReleaseID)
 	if err != nil || release == nil {
@@ -103,12 +108,35 @@ func comments(c *gin.Context) {
 		}
 		// Resolve visibility as anonymous before returning an identity error. This
 		// keeps private, missing and disabled projects indistinguishable as 404.
-		if _, visibleErr := webcomments.Authorize(db.MasterDB().WithContext(c.Request.Context()), id, nil, false, false); visibleErr != nil {
+		_, visibleErr := webcomments.Authorize(db.MasterDB().WithContext(c.Request.Context()), id, nil, false, c.Request.Method == http.MethodGet)
+		if visibleErr != nil {
 			ginfmt.Fail(c, visibleErr)
 			return
 		}
+		if !explicitCommentCredentials(c) {
+			if _, passwordErr := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, id, false, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, id)); passwordErr != nil {
+				ginfmt.Fail(c, passwordErr)
+				return
+			}
+		}
 		ginfmt.Fail(c, identityErr)
 		return
+	}
+	project, err := webcomments.Authorize(db.MasterDB().WithContext(c.Request.Context()), id, p, false, c.Request.Method == http.MethodGet)
+	if err != nil {
+		ginfmt.Fail(c, err)
+		return
+	}
+	passwordState, err := resourcepasswords.Default.Authorize(ginfmt.RPCContext(c), resourcepasswords.ResourceWebProject, id, p.UserID == project.OwnerUserID, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceWebProject, id))
+	if err != nil {
+		ginfmt.Fail(c, err)
+		return
+	}
+	if passwordState.PasswordProtected && c.Request.Method == http.MethodGet && p.UserID == project.OwnerUserID {
+		if _, err := webcomments.Authorize(db.MasterDB().WithContext(c.Request.Context()), id, p, false, false); err != nil {
+			ginfmt.Fail(c, err)
+			return
+		}
 	}
 	if c.Request.Method == http.MethodPost && c.GetHeader("Authorization") == "" && c.GetHeader(middleware.HeaderKey) == "" {
 		middleware.BrowserScopedWrite("web-comments")(c)
@@ -183,4 +211,8 @@ func comments(c *gin.Context) {
 		status = http.StatusCreated
 	}
 	ginfmt.Success(c, status, result)
+}
+
+func explicitCommentCredentials(c *gin.Context) bool {
+	return c.GetHeader("Authorization") != "" || c.GetHeader(middleware.HeaderKey) != ""
 }

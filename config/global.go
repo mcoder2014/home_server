@@ -51,6 +51,7 @@ type Config struct {
 	} `json:"webdav" yaml:"webdav"`
 	WebProjects WebProjectsConfig `json:"web_projects" yaml:"web_projects"`
 	Manuals     ManualsConfig     `json:"manuals" yaml:"manuals"`
+	FileSharing FileSharingConfig `json:"file_sharing" yaml:"file_sharing"`
 	Auth        AuthConfig        `json:"auth" yaml:"auth"`
 }
 
@@ -108,6 +109,20 @@ type ManualsConfig struct {
 	PDFPreviewCPUSeconds       int    `json:"pdf_preview_cpu_seconds" yaml:"pdf_preview_cpu_seconds"`
 	PDFPreviewOutputLimitBytes int64  `json:"pdf_preview_output_limit_bytes" yaml:"pdf_preview_output_limit_bytes"`
 	PDFPreviewOpenFilesLimit   int    `json:"pdf_preview_open_files_limit" yaml:"pdf_preview_open_files_limit"`
+}
+
+// FileSharingConfig contains private storage and bounded upload settings. The
+// module is bootstrap-configured like manuals; storage paths are never editable
+// through the runtime configuration API.
+type FileSharingConfig struct {
+	Enabled                     bool   `json:"enabled" yaml:"enabled"`
+	StorageRoot                 string `json:"storage_root" yaml:"storage_root"`
+	MaxFileBytes                int64  `json:"max_file_bytes" yaml:"max_file_bytes"`
+	MaxFilesPerUser             int    `json:"max_files_per_user" yaml:"max_files_per_user"`
+	MaxUserBytes                int64  `json:"max_user_bytes" yaml:"max_user_bytes"`
+	MinFreeDiskBytes            int64  `json:"min_free_disk_bytes" yaml:"min_free_disk_bytes"`
+	MaxConcurrentUploadsPerUser int    `json:"max_concurrent_uploads_per_user" yaml:"max_concurrent_uploads_per_user"`
+	MaxConcurrentUploads        int    `json:"max_concurrent_uploads" yaml:"max_concurrent_uploads"`
 }
 
 // 全局配置

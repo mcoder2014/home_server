@@ -6,6 +6,6 @@
 <style>
 #app {
   min-height: 100vh;
-  background-color: var(--bg-color);
+  background: transparent;
 }
 </style>

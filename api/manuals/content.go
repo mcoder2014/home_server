@@ -10,6 +10,7 @@ import (
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	service "github.com/mcoder2014/home_server/domain/service/manuals"
+	"github.com/mcoder2014/home_server/domain/service/resourcepasswords"
 	apperrors "github.com/mcoder2014/home_server/errors"
 	"github.com/mcoder2014/home_server/utils/ginfmt"
 )
@@ -31,7 +32,7 @@ func serveItemResource(c *gin.Context) {
 		return
 	}
 	thumbnail := strings.HasSuffix(c.FullPath(), "/thumbnail")
-	item, err := application.Default.ResourceItem(ginfmt.RPCContext(c), manualID, itemID, principalUserID(principal), thumbnail)
+	item, err := application.Default.ResourceItem(ginfmt.RPCContext(c), manualID, itemID, principalUserID(principal), thumbnail, resourcepasswords.GrantToken(c.Request, resourcepasswords.ResourceManual, manualID))
 	if err != nil {
 		ginfmt.Fail(c, err)
 		return
