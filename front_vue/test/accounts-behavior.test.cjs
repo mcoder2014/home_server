@@ -50,6 +50,10 @@ test('site-wide capability switches block navigation even for an authorized admi
     assert.equal(behavior.routeDecision(page, {status: 'active', role: 'admin', capabilities: {applications: false}})?.query.feature, 'applications')
     const books = {path: '/book/list', meta: {requireAuth: true, library: true}}
     assert.equal(behavior.routeDecision(books, {status: 'active', library_enabled: true, capabilities: {library: false}})?.query.reason, 'disabled')
+    const manuals = {path: '/manuals/new', fullPath: '/manuals/new', meta: {requireAuth: true, capability: 'manuals'}}
+    assert.equal(behavior.routeDecision(manuals, null)?.path, '/login')
+    assert.equal(behavior.routeDecision(manuals, {status: 'active', capabilities: {manuals: false}})?.query.feature, 'manuals')
+    assert.equal(behavior.routeDecision(manuals, {status: 'active', capabilities: {manuals: true}}), null)
 })
 
 test('password validation rejects NUL and follows a stronger dynamic minimum', () => {

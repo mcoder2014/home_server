@@ -8,6 +8,7 @@
     "lint": "vue-cli-service lint",
     "test:frontend": "node --test test/*.test.cjs",
     "test:account-center-browser": "node --test test/account-center-browser.cjs",
+    "test:manuals-browser": "node --test test/manuals-browser.cjs",
     "test:web-projects": "node --test test/web-projects-*.test.cjs"
   },
   "dependencies": {

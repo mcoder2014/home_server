@@ -34,6 +34,8 @@ const (
 	ScopeLibraryWrite     = "library:write"
 	ScopeWebDAVRead       = "webdav:read"
 	ScopeWebDAVWrite      = "webdav:write"
+	ScopeManualsRead      = "manuals:read"
+	ScopeManualsWrite     = "manuals:write"
 
 	StatusEnabledName  = "enabled"
 	StatusDisabledName = "disabled"
@@ -54,6 +56,8 @@ var orderedScopes = []string{
 	ScopeLibraryWrite,
 	ScopeWebDAVRead,
 	ScopeWebDAVWrite,
+	ScopeManualsRead,
+	ScopeManualsWrite,
 }
 
 var readForWrite = map[string]string{
@@ -61,6 +65,7 @@ var readForWrite = map[string]string{
 	ScopeWebProjectsWrite: ScopeWebProjectsRead,
 	ScopeLibraryWrite:     ScopeLibraryRead,
 	ScopeWebDAVWrite:      ScopeWebDAVRead,
+	ScopeManualsWrite:     ScopeManualsRead,
 }
 
 type Repository interface {

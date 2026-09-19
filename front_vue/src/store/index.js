@@ -19,6 +19,7 @@ const store = createStore({
         sessionEpoch: 0,
         site: {title: 'CQ Home Server', notice: ''},
         registration: {enabled: false, monthly_limit: 3, ttl_days: 7},
+        modules: {manuals: false},
         isbn: '',
     },
     mutations: {
@@ -34,6 +35,7 @@ const store = createStore({
         SET_BOOTSTRAP(state, value) {
             state.site = value.site || state.site
             state.registration = value.registration || state.registration
+            state.modules = value.modules || state.modules
         },
         REMOVE_INFO(state) {
             state.sessionEpoch++

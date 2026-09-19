@@ -113,7 +113,7 @@ type accountView struct {
 
 func view(user *model.UserAccount, token string) accountView {
 	runtime := config.Runtime()
-	return accountView{UserAccount: user, CSRFToken: middleware.CSRFToken(token), Capabilities: map[string]bool{"library": user.LibraryEnabled && runtime.LibraryEnabled, "webdav": user.WebDAVPermission != model.WebDAVNone && runtime.WebDAVEnabled, "applications": runtime.Auth.ApplicationsEnabled, "web_projects": runtime.WebProjects.Enabled}, PasswordPolicy: map[string]int{"min_length": runtime.AccountPolicy.MinPasswordLength}, ApplicationPolicy: map[string]int{"default_credential_ttl_days": runtime.Auth.DefaultCredentialTTLDays, "max_credential_ttl_days": runtime.Auth.MaxCredentialTTLDays, "max_applications_per_user": runtime.Auth.MaxApplicationsPerUser}, SessionPolicy: map[string]int{"max_active_sessions": runtime.AccountPolicy.MaxActiveSessions}}
+	return accountView{UserAccount: user, CSRFToken: middleware.CSRFToken(token), Capabilities: map[string]bool{"library": user.LibraryEnabled && runtime.LibraryEnabled, "webdav": user.WebDAVPermission != model.WebDAVNone && runtime.WebDAVEnabled, "applications": runtime.Auth.ApplicationsEnabled, "web_projects": runtime.WebProjects.Enabled, "manuals": runtime.Manuals.Enabled}, PasswordPolicy: map[string]int{"min_length": runtime.AccountPolicy.MinPasswordLength}, ApplicationPolicy: map[string]int{"default_credential_ttl_days": runtime.Auth.DefaultCredentialTTLDays, "max_credential_ttl_days": runtime.Auth.MaxCredentialTTLDays, "max_applications_per_user": runtime.Auth.MaxApplicationsPerUser}, SessionPolicy: map[string]int{"max_active_sessions": runtime.AccountPolicy.MaxActiveSessions}}
 }
 
 // login 处理 POST /api/auth/login：验证用户名和密码，建立 HttpOnly 浏览器会话并返回本人资料与 CSRF 信息。
@@ -247,7 +247,7 @@ func publicBootstrap(c *gin.Context) {
 		return
 	}
 	runtime := config.Runtime()
-	respond(c, map[string]interface{}{"site": map[string]string{"title": runtime.SiteTitle, "notice": runtime.SiteNotice}, "registration": value}, nil)
+	respond(c, map[string]interface{}{"site": map[string]string{"title": runtime.SiteTitle, "notice": runtime.SiteNotice}, "registration": value, "modules": map[string]bool{"manuals": runtime.Manuals.Enabled}}, nil)
 }
 
 // validateInvitation 处理 POST /api/auth/invitations/validate：在来源限流后校验邀请码，仅返回有效状态与到期时间，不消费邀请码。

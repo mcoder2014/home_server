@@ -50,6 +50,7 @@ type Config struct {
 		SharePath string `json:"share_path" yaml:"share_path"`
 	} `json:"webdav" yaml:"webdav"`
 	WebProjects WebProjectsConfig `json:"web_projects" yaml:"web_projects"`
+	Manuals     ManualsConfig     `json:"manuals" yaml:"manuals"`
 	Auth        AuthConfig        `json:"auth" yaml:"auth"`
 }
 
@@ -85,6 +86,28 @@ type WebProjectsConfig struct {
 	MaxConcurrentUploadsPerUser int    `json:"max_concurrent_uploads_per_user" yaml:"max_concurrent_uploads_per_user"`
 	MaxConcurrentExtracts       int    `json:"max_concurrent_extracts" yaml:"max_concurrent_extracts"`
 	DeleteRetentionDays         int    `json:"delete_retention_days" yaml:"delete_retention_days"`
+}
+
+// ManualsConfig contains deployment and capacity boundaries for private
+// manual files. It is intentionally absent from the database configuration
+// registry so existing complete snapshots remain valid.
+type ManualsConfig struct {
+	Enabled                    bool   `json:"enabled" yaml:"enabled"`
+	StorageRoot                string `json:"storage_root" yaml:"storage_root"`
+	MaxFileBytes               int64  `json:"max_file_bytes" yaml:"max_file_bytes"`
+	MaxItemsPerManual          int    `json:"max_items_per_manual" yaml:"max_items_per_manual"`
+	MaxManualBytes             int64  `json:"max_manual_bytes" yaml:"max_manual_bytes"`
+	MaxManualsPerUser          int    `json:"max_manuals_per_user" yaml:"max_manuals_per_user"`
+	MaxUserBytes               int64  `json:"max_user_bytes" yaml:"max_user_bytes"`
+	MinFreeDiskBytes           int64  `json:"min_free_disk_bytes" yaml:"min_free_disk_bytes"`
+	PDFToPPMPath               string `json:"pdftoppm_path" yaml:"pdftoppm_path"`
+	PRLimitPath                string `json:"prlimit_path" yaml:"prlimit_path"`
+	PDFPreviewTimeoutSeconds   int    `json:"pdf_preview_timeout_seconds" yaml:"pdf_preview_timeout_seconds"`
+	MaxConcurrentPDFPreviews   int    `json:"max_concurrent_pdf_previews" yaml:"max_concurrent_pdf_previews"`
+	PDFPreviewMemoryLimitBytes int64  `json:"pdf_preview_memory_limit_bytes" yaml:"pdf_preview_memory_limit_bytes"`
+	PDFPreviewCPUSeconds       int    `json:"pdf_preview_cpu_seconds" yaml:"pdf_preview_cpu_seconds"`
+	PDFPreviewOutputLimitBytes int64  `json:"pdf_preview_output_limit_bytes" yaml:"pdf_preview_output_limit_bytes"`
+	PDFPreviewOpenFilesLimit   int    `json:"pdf_preview_open_files_limit" yaml:"pdf_preview_open_files_limit"`
 }
 
 // 全局配置

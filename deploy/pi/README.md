@@ -41,11 +41,28 @@
 
 仓库静态回归命令为 `node --test front_vue/test/web-projects-nginx.test.cjs`，覆盖新增路径、请求体上限、转发头、禁缓存、双入口和 WebDAV 规则。安装现场仍须对实际配置执行独立前端 Nginx 的 `-t -c /etc/home_server/frontend-nginx.conf` 及网关的 `nginx -t`，再验证两个入口下的 `/api/site/bootstrap`、已登录个人中心、管理员配置请求，以及原有 WebDAV Basic 访问。
 
+## 说明书模块
+
+说明书的部署配置独立于数据库中的动态 namespace，缺省关闭。启用前先执行精确的 `domain/dal/migrations/20260919_manuals.sql` 增量建表，检查配置与数据备份，然后在服务配置中设置 `manuals.enabled` 和 `manuals.storage_root`。存储目录建议 `/var/lib/home_server/manuals`，权限 0700、归服务用户所有，不能位于 WebDAV、网页托管或前端静态目录中。
+
+安装 `config/nginx/manuals_locations.conf` 到 `/etc/home_server/locations/`，在 Pi 副本中将 `$scheme` / `$remote_addr` 转为现有的 `$cq_forwarded_proto` / `$cq_client_ip`，并让独立前端 Nginx include 该文件。API 根路径限制 512 KiB，子路径允许 52 MiB 以容纳 50 MiB 文件和 multipart 元数据；后端仍按请求类型独立限制大小。两份网关模板也增加了 `/api/manuals` 精确匹配与 `/api/manuals/` 优先前缀，保留原有目标端口及 TLS 头。
+
+| 检查 | 要求 |
+| --- | --- |
+| PDF 预览 | 核对 `pdftoppm` 与外部进程资源限制工具可用，使用服务账号验证首页缩略图；缺工具或转换失败不得让 PDF 上传状态冒充预览成功 |
+| 私有存储 | 目录可写、容量及保留空间满足限制；禁止为原件或缩略图增加静态 alias |
+| 数据与搜索 | 自动封面查询使用窗口函数，已核对环境为 MariaDB 10.11；其他数据库版本需先核对窗口函数兼容性；新表精确增量创建；在隔离数据中检查列表、分类及名字匹配 SQL 的 EXPLAIN |
+| 身份 | 应用凭证显式加入 `manuals:read/write`；保持原应用其他 scopes，不提取用户会话替代应用授权 |
+| 升级 | 构建匹配的前后端 release、记录源码 SHA 与产物哈希，Nginx 校验通过后切 current 并重启 |
+| 回滚 | 切回完整旧 release 和旧配置；保留新增表及全部说明书文件，不在程序回滚时 DROP 或覆盖数据 |
+
+部署后除 `/ping` 外，还需验证公开目录、私有说明书未登录拒绝、原件/缩略图鉴权、PDF Range、图片多选和名称＋分类过滤，以及原网页托管、登录、藏书与 WebDAV 入口。真实手机相册的交互应记录实际验收设备，不能以桌面文件选择测试冒充。
+
 ## 安装顺序
 
 1. 核对并备份既有数据库、配置、服务单元和二进制；备份含凭据，只保存在目标服务器的私有目录。
 2. 核对表结构与索引，再执行缺失的增量 DDL。首次启用运行 `20260909_web_projects.sql` 与 `20260912_applications.sql`；已有 token 索引时跳过重复创建。已有旧网页表时按其真实结构选择升级脚本，不混用首次建表与旧表升级。
-3. 从指定 master revision 构建 release，记录源码 revision、构建参数及产物 SHA-256；不要覆盖正在执行的二进制文件内容。
+3. 从通过验证的指定 revision 构建 release（未合并功能使用明确的 PR 提交 SHA），记录源码 revision、构建参数及产物 SHA-256；不要覆盖正在执行的二进制文件内容。
 4. 安装后端配置、前端配置与三个 systemd 文件，运行 `systemd-analyze verify` 和独立 Nginx 配置检查，再切换 `current` 链接。
 5. `systemctl daemon-reload`，启用前后端与 target，再启动或重启。通过 `.10:18081` 检查 SPA、同源 API 和静态资源。
 6. 备份网关原站点文件，将两个网关模板安装到对应站点的实际目标文件；`nginx -t` 成功后 reload。通过域名 SNI 验证 TLS、登录入口、API 和原始路径防护。

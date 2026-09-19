@@ -202,6 +202,8 @@ func AuthorizeCapability(ctx context.Context, principal *utils.Principal, scope 
 		module = "webdav"
 	} else if strings.HasPrefix(scope, "web-projects:") || strings.HasPrefix(scope, "web-comments:") {
 		module = "web_projects"
+	} else if strings.HasPrefix(scope, "manuals:") {
+		module = "manuals"
 	}
 	if module == "" {
 		return nil

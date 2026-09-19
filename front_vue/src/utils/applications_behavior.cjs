@@ -5,6 +5,8 @@ const SCOPES = [
     'web-projects:write',
     'library:read',
     'library:write',
+    'manuals:read',
+    'manuals:write',
     'webdav:read',
     'webdav:write',
 ]

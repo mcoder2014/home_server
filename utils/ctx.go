@@ -54,5 +54,6 @@ func GetTokenFromCtx(ctx context.Context) string {
 	if v == nil {
 		return ""
 	}
-	return v.(string)
+	token, _ := v.(string)
+	return token
 }

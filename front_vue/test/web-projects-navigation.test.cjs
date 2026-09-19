@@ -41,8 +41,14 @@ test('limits login redirects to known application pages and project content path
         '/web-projects/open?target=%2Fp%2Freport%2F',
     )
     assert.equal(normalizeInternalRedirect('/p/report/'), '/p/report/')
+    assert.equal(normalizeInternalRedirect('/manuals'), '/manuals')
+    assert.equal(normalizeInternalRedirect('/manuals/new'), '/manuals/new')
+    assert.equal(normalizeInternalRedirect('/manuals/9223372036854775807?from=search'), '/manuals/9223372036854775807?from=search')
+    assert.equal(normalizeInternalRedirect('/manuals/9223372036854775807/edit'), '/manuals/9223372036854775807/edit')
 
     assert.equal(normalizeInternalRedirect('/web-projects-evil'), '/')
+    assert.equal(normalizeInternalRedirect('/manuals-evil'), '/')
+    assert.equal(normalizeInternalRedirect('/manuals/1/unknown'), '/')
     assert.equal(normalizeInternalRedirect('/web-share-evil'), '/')
     assert.equal(normalizeInternalRedirect('//evil.example'), '/')
     assert.equal(normalizeInternalRedirect('https://evil.example'), '/')

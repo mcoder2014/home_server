@@ -35,6 +35,12 @@ func TestCreateGeneratesOpaqueCredentialsAndStoresOnlyDigest(t *testing.T) {
 	require.Empty(t, stored.LastIssuedAt)
 }
 
+func TestManualsWriteScopeIncludesReadScope(t *testing.T) {
+	scopes, err := normalizeScopes([]string{ScopeManualsWrite}, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{ScopeManualsRead, ScopeManualsWrite}, scopes)
+}
+
 func TestOwnerIsolationAndRevisionProtection(t *testing.T) {
 	service, repo, now := testService()
 	application, _, err := service.Create(context.Background(), 101, CreateInput{Name: "owner app", Scopes: []string{ScopeLibraryRead}})

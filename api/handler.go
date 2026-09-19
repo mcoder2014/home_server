@@ -6,6 +6,7 @@ import (
 	"github.com/mcoder2014/home_server/api/applications"
 	"github.com/mcoder2014/home_server/api/auth"
 	"github.com/mcoder2014/home_server/api/library"
+	"github.com/mcoder2014/home_server/api/manuals"
 	"github.com/mcoder2014/home_server/api/middleware"
 	"github.com/mcoder2014/home_server/api/passport"
 	"github.com/mcoder2014/home_server/api/webdav"
@@ -35,6 +36,7 @@ func InitRouter() error {
 			webdav.InitRouter,
 			// 静态网页托管相关接口
 			webprojects.InitRouter,
+			manuals.InitRouter,
 			auth.InitRouter,
 			applications.InitRouter,
 		} {

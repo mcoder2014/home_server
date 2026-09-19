@@ -20,6 +20,7 @@ type AccountPolicyConfig struct {
 type RuntimeConfig struct {
 	Auth                                                               AuthConfig
 	WebProjects                                                        WebProjectsConfig
+	Manuals                                                            ManualsConfig
 	RegistrationEnabled, LibraryEnabled, WebDAVEnabled, CleanupEnabled bool
 	SiteTitle, SiteNotice                                              string
 	AccountPolicy                                                      AccountPolicyConfig
@@ -46,7 +47,7 @@ func BuildRuntimeSnapshot(conf Config, generation int64, revisions map[string]in
 		}
 		validated[schema.Namespace] = v
 	}
-	result := RuntimeConfig{Auth: conf.Auth, WebProjects: conf.WebProjects, Generation: generation, Revisions: revisions}
+	result := RuntimeConfig{Auth: conf.Auth, WebProjects: conf.WebProjects, Manuals: conf.Manuals, Generation: generation, Revisions: revisions}
 	for namespace, target := range map[string]interface{}{"auth": &result.Auth, "web_projects": &result.WebProjects, "account_policy": &result.AccountPolicy} {
 		data, err := json.Marshal(validated[namespace])
 		if err != nil {
