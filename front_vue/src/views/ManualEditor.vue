@@ -197,10 +197,10 @@ export default {
     editableQueueItem(item) { return !this.saving && !this.uploading && ['waiting', 'failed'].includes(item.status) },
     editableQueueContent(item) { return !this.saving && !this.uploading && item.status === 'waiting' && !item.attempted },
     queueStatus(status) { return {waiting: '等待上传', uploading: '上传中', success: '已成功', failed: '上传失败'}[status] || status },
-    queueKind(item) { return {image: '图片', file: item.file?.name?.toLowerCase().endsWith('.txt') ? 'TXT 文本' : item.file?.name?.toLowerCase().endsWith('.pdf') ? 'PDF' : '文件', pdf: 'PDF', text: '文本', url: '网页链接'}[item.kind] || '资料' },
+    queueKind(item) { return {image: '图片', file: item.file?.name?.toLowerCase().endsWith('.txt') ? 'TXT 文本' : String(item.file?.type || '').toLowerCase() === 'application/pdf' || item.file?.name?.toLowerCase().endsWith('.pdf') ? 'PDF' : '文件', pdf: 'PDF', text: '文本', url: '网页链接'}[item.kind] || '资料' },
     isQueuePDF(item) {
       if (item?.kind === 'pdf') return true
-      return Boolean(item?.file?.name?.toLowerCase().endsWith('.pdf'))
+      return String(item?.file?.type || '').toLowerCase() === 'application/pdf'
     },
     pdfPreviewURL(value) {
       if (!value) return ''

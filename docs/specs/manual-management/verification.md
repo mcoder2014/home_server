@@ -13,7 +13,7 @@
 | 独立文件边界 | pi 实际 pdftoppm 与格式解码 | PDF 预览最长边 ≤480、损坏 PNG 拒绝且无最终目录、损坏 PDF 保留原件并标记不可预览、超限文件拒绝均通过 |
 | 上传预留并发 | 32 路并发、10 轮 | 每轮 1 成功、31 限流；该项与数据库配额测试分别验证 |
 | 前端行为 | macOS，`npm run test:frontend` | 92/92 通过 |
-| 说明书浏览器 | 实际 Vue 页面与 Chrome，`npm run test:manuals-browser` | 9/9 通过，覆盖 320 px、多次选图追加、上传及排序缩略图、object URL 释放、内嵌 PDF 阅读、慢上传期间写互斥、部分失败重试、409、revision 类型及混合资料阅读 |
+| 说明书浏览器 | 实际 Vue 页面与 Chrome，`npm run test:manuals-browser` | 9/9 通过，覆盖 320 px、多次选图追加、上传及排序缩略图、object URL 释放、伪 PDF 脚本隔离、生产同款 CSP 下的内嵌 PDF 阅读、慢上传期间写互斥、部分失败重试、409、revision 类型及混合资料阅读 |
 | 账号浏览器回归 | Chrome，`npm run test:account-center-browser` | 6/6 通过 |
 | 前端构建与语法 | 变更文件 ESLint；`VUE_APP_API_BASE_URL=/ npm run build` | 通过；保留既有 bundle 大小及 caniuse-lite 警告 |
 | Python 与 skill | 实际本机合成 HTTPS fixture，`test_manuals_skill`、`test_web_hosting_skill`、`test_home_server_api` | 33/33 通过：新 skill 5 项、旧 skill 15 项、客户端 13 项 |
@@ -21,7 +21,7 @@
 | 网关候选配置 | 实际 TLS 网关，备份原配置并对候选配置执行 `nginx -t` | 通过；提交前未替换生效配置或 reload |
 | 文档与差异 | mmdc + Chrome、公开部署模板检查、`git diff --check` | 1 张 Mermaid 成功渲染，模板与格式检查通过 |
 
-本次交互调整先运行新增浏览器用例并观察到 2 项预期失败：编辑器不存在缩略图节点，详情页不存在弱化元信息和 PDF iframe。实现后说明书浏览器测试 9/9 通过；完整前端 Node 测试 92/92 通过；变更文件 ESLint 通过；生产构建成功，只有既有 caniuse-lite 和 bundle 大小提示。全仓 `npm run lint` 仍会在未修改的 `Common.vue`、`AddBook.vue` 和 `ScanCodePage.vue` 报告 4 个基线错误，因此不把全仓 lint 记为通过。
+本次交互调整先运行新增浏览器用例并观察到 2 项预期失败：编辑器不存在缩略图节点，详情页不存在弱化元信息和 PDF iframe。独立审查随后发现仅凭 `.pdf` 后缀预览会把 HTML MIME 的 blob 放进同源 iframe；新增主动脚本载荷后旧实现为 8/9，通过按 `application/pdf` MIME 决定本地 PDF 预览关闭该链路，同时覆盖无扩展名的合法 PDF。有效 PDF fixture 返回与生产一致的 `Content-Security-Policy: sandbox`，测试确认 Chrome 内置 PDF 阅读器 frame 已加载；另用真实 Chrome 独立截图确认文档页实际可见。最终说明书浏览器测试 9/9 通过；完整前端 Node 测试 92/92 通过；变更文件 ESLint 通过；生产构建成功，只有既有 caniuse-lite 和 bundle 大小提示。全仓 `npm run lint` 仍会在未修改的 `Common.vue`、`AddBook.vue` 和 `ScanCodePage.vue` 报告 4 个基线错误，因此不把全仓 lint 记为通过。
 
 完整主测试覆盖 DB 与 legacy/config 会话撤销、重复创建回放、上传中撤销、重复上传时撤销或删除、同说明书条目配额、跨说明书用户字节配额、分类二页游标、真实 pdftoppm PDF 最长边不超过 480 px，以及超过 4 KiB 的 APP1 EXIF 方向处理。测试中的真实权限矩阵同时检查原件、缩略图、HEAD、Range、所有者禁用和草稿/删除状态。
 
