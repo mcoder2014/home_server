@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `front_vue/test/manuals-browser.cjs`
 
-- [ ] **Step 1: Add a failing editor browser test**
+- [x] **Step 1: Add a failing editor browser test**
 
 Add a test that opens `/manuals/500/edit?as=owner` with saved image and PDF items, selects one local PNG and one local PDF, then asserts:
 
@@ -27,7 +27,7 @@ await page.locator('.upload-queue-item').filter({hasText: 'local.pdf'}).getByRol
 assert.match(await page.locator('.upload-queue-item').first().innerText(), /local\.pdf/)
 ```
 
-- [ ] **Step 2: Extend the detail browser test and verify RED**
+- [x] **Step 2: Extend the detail browser test and verify RED**
 
 Assert that the PDF item contains one `iframe.pdf-viewer`, its `src` is the protected `content_url`, the metadata uses `.item-meta`, and the former circular index selector is absent.
 
@@ -45,19 +45,19 @@ Expected: FAIL because the preview and viewer selectors do not exist.
 - Modify: `front_vue/src/views/ManualEditor.vue`
 - Test: `front_vue/test/manuals-browser.cjs`
 
-- [ ] **Step 1: Render previews without changing queue semantics**
+- [x] **Step 1: Render previews without changing queue semantics**
 
 Add a preview block before each queue item's fields. Local images use an `img`; local PDFs use a lazy, non-interactive iframe. Saved image/PDF items use `thumbnail_url`; missing thumbnails render a type placeholder. Text and URL items keep compact type placeholders.
 
-- [ ] **Step 2: Manage local object URLs**
+- [x] **Step 2: Manage local object URLs**
 
 After `appendFileItems`, assign an object URL only to accepted image/PDF queue items. Revoke it when an item is removed, after a fully successful upload clears the queue, and in `beforeUnmount`. Moving an item must preserve its URL and identity.
 
-- [ ] **Step 3: Add responsive styling**
+- [x] **Step 3: Add responsive styling**
 
 Use a fixed thumbnail column on desktop and a full-width preview above metadata below 640 px. Preview failures must not disable move, remove, upload, cover selection, or delete actions.
 
-- [ ] **Step 4: Run the browser test and verify GREEN**
+- [x] **Step 4: Run the browser test and verify GREEN**
 
 Run the Task 1 command. Expected: all manuals browser tests pass.
 
@@ -67,11 +67,11 @@ Run the Task 1 command. Expected: all manuals browser tests pass.
 - Modify: `front_vue/src/views/ManualDetail.vue`
 - Test: `front_vue/test/manuals-browser.cjs`
 
-- [ ] **Step 1: Replace the prominent item heading**
+- [x] **Step 1: Replace the prominent item heading**
 
 Render `资料 N · 类型` as muted metadata. Render an explicit custom title as a modest heading and show `original_name` as small secondary text, avoiding duplicate title/filename output.
 
-- [ ] **Step 2: Add the native PDF viewer**
+- [x] **Step 2: Add the native PDF viewer**
 
 Render:
 
@@ -81,7 +81,7 @@ Render:
 
 Keep the existing new-window and download links directly below it. Preserve the preview-unavailable notice and mobile fallback layout.
 
-- [ ] **Step 3: Run focused tests and verify GREEN**
+- [x] **Step 3: Run focused tests and verify GREEN**
 
 Run the Task 1 command. Expected: all manuals browser tests pass, including mobile width and link-safety assertions.
 
@@ -91,11 +91,11 @@ Run the Task 1 command. Expected: all manuals browser tests pass, including mobi
 - Modify: `docs/specs/manual-management/implementation.md`
 - Modify: `docs/specs/manual-management/verification.md`
 
-- [ ] **Step 1: Record final behavior and verification evidence**
+- [x] **Step 1: Record final behavior and verification evidence**
 
 Update the existing implementation and verification documents with the editor thumbnails, embedded PDF reader, metadata hierarchy, exact commands, and observed results.
 
-- [ ] **Step 2: Run the full frontend verification**
+- [x] **Step 2: Run the full frontend verification**
 
 Run from `front_vue` with the main checkout's dependency directory on `NODE_PATH`/`PATH`:
 

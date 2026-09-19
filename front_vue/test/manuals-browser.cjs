@@ -50,12 +50,15 @@ app.use(ElementPlus);app.component('RouterLink',RouterLink);Object.assign(app.co
 artifacts['/manuals.js'] = Buffer.from(script)
 artifacts['/manuals.css'] = Buffer.from(css)
 artifacts['/content/front.png'] = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+artifacts['/thumb/saved-image.png'] = artifacts['/content/front.png']
+artifacts['/thumb/saved-pdf.png'] = artifacts['/content/front.png']
+artifacts['/content/guide.pdf'] = Buffer.from('%PDF-1.4\n%%EOF\n')
 const html = '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/element.css"><link rel="stylesheet" href="/manuals.css"><body><div id="app"></div><script src="/vue.js"></script><script src="/element.js"></script><script src="/axios.js"></script><script src="/manuals.js"></script></body></html>'
 
 before(async () => {
     server = http.createServer((req, res) => {
         const artifact = artifacts[req.url]
-        const contentType = req.url.endsWith('.css') ? 'text/css' : req.url.endsWith('.png') ? 'image/png' : 'application/javascript'
+        const contentType = req.url.endsWith('.css') ? 'text/css' : req.url.endsWith('.png') ? 'image/png' : req.url.endsWith('.pdf') ? 'application/pdf' : 'application/javascript'
         res.setHeader('Content-Type', artifact ? contentType : 'text/html; charset=utf-8')
         res.end(artifact || html)
     })
@@ -367,10 +370,51 @@ test('删除资料和说明书的真实请求体保持数字 revision', async ()
     } finally { await context.close() }
 })
 
+test('编辑器为待上传和已保存文件显示缩略图，排序保持预览对应并释放移除项 URL', async () => {
+    const savedImage = {id: 'image-1', kind: 'image', title: '正面', original_name: 'front.png', position: 1, thumbnail_url: '/thumb/saved-image.png', preview_status: 'ready'}
+    const savedPDF = {id: 'pdf-1', kind: 'pdf', title: '完整手册', original_name: 'guide.pdf', position: 2, thumbnail_url: '/thumb/saved-pdf.png', preview_status: 'ready'}
+    const handler = async ({route, request, url}) => {
+        if (url.pathname === '/api/manuals/categories') { await route.fulfill({json: {code: 0, data: {items: []}}}); return true }
+        if (url.pathname === '/api/manuals/500' && request.method() === 'GET') {
+            await route.fulfill({json: {code: 0, data: baseManual({id: '500', can_edit: true, items: [savedImage, savedPDF], item_count: 2})}}); return true
+        }
+        return false
+    }
+    const {page, context} = await setup({path: '/manuals/500/edit?as=owner', width: 320, handler})
+    try {
+        await page.evaluate(() => {
+            window.__revokedManualPreviewURLs = []
+            const revoke = URL.revokeObjectURL.bind(URL)
+            URL.revokeObjectURL = value => { window.__revokedManualPreviewURLs.push(value); revoke(value) }
+        })
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+        await page.getByLabel('选择图片').setInputFiles({name: 'local.png', mimeType: 'image/png', buffer: png})
+        await page.getByLabel('选择 PDF 或 TXT').setInputFiles({name: 'local.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF\n')})
+
+        assert.equal(await page.locator('.queue-preview-image').count(), 1)
+        assert.match(await page.locator('.queue-preview-image').getAttribute('src'), /^blob:/)
+        assert.equal(await page.locator('.queue-preview-pdf').count(), 1)
+        assert.match(await page.locator('.queue-preview-pdf').getAttribute('src'), /^blob:/)
+        assert.equal(await page.locator('.saved-thumbnail').count(), 2)
+        const savedPDFCard = page.locator('.saved-item').filter({hasText: '完整手册'})
+        await savedPDFCard.getByRole('button', {name: '上移', exact: true}).click()
+        assert.match(await page.locator('.saved-item').first().locator('.saved-thumbnail').getAttribute('src'), /saved-pdf\.png$/)
+
+        const pdfCard = page.locator('.upload-queue-item').filter({hasText: 'local.pdf'})
+        const pdfPreview = await pdfCard.locator('.queue-preview-pdf').getAttribute('src')
+        await pdfCard.getByRole('button', {name: '上移', exact: true}).click()
+        assert.match(await page.locator('.upload-queue-item').first().innerText(), /local\.pdf/)
+        assert.equal(await page.locator('.upload-queue-item').first().locator('.queue-preview-pdf').getAttribute('src'), pdfPreview)
+        await page.locator('.upload-queue-item').first().getByRole('button', {name: '移除', exact: true}).click()
+        assert.equal(await page.evaluate(() => window.__revokedManualPreviewURLs.length), 1)
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    } finally { await context.close() }
+})
+
 test('匿名详情按顺序安全展示图片、PDF、纯文本和 HTTP(S) 链接', async () => {
     const manual = baseManual({items: [
         {id: '1', kind: 'image', title: '正面', content_url: '/content/front.png', thumbnail_url: '/thumb/front.png', preview_status: 'ready'},
-        {id: '2', kind: 'pdf', title: '完整手册', content_url: '/content/guide.pdf', preview_status: 'ready'},
+        {id: '2', kind: 'pdf', title: '完整手册', original_name: 'guide.pdf', content_url: '/content/guide.pdf', preview_status: 'ready'},
         {id: '3', kind: 'text', title: '保养', text: '<script>window.__manualXSS=1</script>\n用清水冲洗'},
         {id: '4', kind: 'url', title: '官网支持', url: 'https://example.com/help'},
         {id: '5', kind: 'url', title: '无效链接', url: 'javascript:alert(1)'},
@@ -391,6 +435,13 @@ test('匿名详情按顺序安全展示图片、PDF、纯文本和 HTTP(S) 链�
         assert.match(await external.getAttribute('rel'), /noopener/)
         assert.match(await external.getAttribute('rel'), /noreferrer/)
         assert.equal(await page.getByRole('link', {name: '打开无效链接'}).count(), 0)
+        const pdfCard = page.locator('.manual-item').filter({hasText: '完整手册'})
+        assert.equal(await pdfCard.locator('.item-meta').textContent(), '资料 2 · PDF')
+        assert.equal(await pdfCard.locator('.item-filename').textContent(), 'guide.pdf')
+        assert.equal(await page.locator('.item-heading > span').count(), 0)
+        assert.equal(await pdfCard.locator('iframe.pdf-viewer').count(), 1)
+        assert.match(await pdfCard.locator('iframe.pdf-viewer').getAttribute('src'), /\/content\/guide\.pdf$/)
+        assert.equal(await pdfCard.locator('iframe.pdf-viewer').getAttribute('title'), '完整手册 PDF 阅读器')
         assert.equal(await page.getByRole('link', {name: '打开 PDF'}).getAttribute('target'), '_blank')
         assert.match(await page.getByRole('link', {name: '下载 PDF'}).getAttribute('href'), /download=1/)
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
