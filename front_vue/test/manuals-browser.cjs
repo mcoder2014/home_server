@@ -11,6 +11,26 @@ if (!playwrightPath) {
 const {chromium} = require(playwrightPath)
 const root = path.join(__dirname, '../src')
 let browser, server, origin
+
+function fixturePDF() {
+    const stream = 'BT /F1 24 Tf 28 100 Td (Manual preview) Tj ET\n'
+    const objects = [
+        '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+        '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+        '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 240 180] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n',
+        `4 0 obj\n<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}endstream\nendobj\n`,
+        '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+    ]
+    let body = '%PDF-1.4\n'
+    const offsets = [0]
+    for (const object of objects) { offsets.push(Buffer.byteLength(body)); body += object }
+    const xref = Buffer.byteLength(body)
+    body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+    for (const offset of offsets.slice(1)) body += `${String(offset).padStart(10, '0')} 00000 n \n`
+    body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+    return Buffer.from(body)
+}
+
 const artifacts = {
     '/vue.js': fs.readFileSync(require.resolve('vue/dist/vue.global.prod.js')),
     '/element.js': fs.readFileSync(require.resolve('element-plus/dist/index.full.js')),
@@ -50,13 +70,20 @@ app.use(ElementPlus);app.component('RouterLink',RouterLink);Object.assign(app.co
 artifacts['/manuals.js'] = Buffer.from(script)
 artifacts['/manuals.css'] = Buffer.from(css)
 artifacts['/content/front.png'] = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+artifacts['/thumb/saved-image.png'] = artifacts['/content/front.png']
+artifacts['/thumb/saved-pdf.png'] = artifacts['/content/front.png']
+artifacts['/content/guide.pdf'] = fixturePDF()
 const html = '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/element.css"><link rel="stylesheet" href="/manuals.css"><body><div id="app"></div><script src="/vue.js"></script><script src="/element.js"></script><script src="/axios.js"></script><script src="/manuals.js"></script></body></html>'
 
 before(async () => {
     server = http.createServer((req, res) => {
         const artifact = artifacts[req.url]
-        const contentType = req.url.endsWith('.css') ? 'text/css' : req.url.endsWith('.png') ? 'image/png' : 'application/javascript'
+        const contentType = req.url.endsWith('.css') ? 'text/css' : req.url.endsWith('.png') ? 'image/png' : req.url.endsWith('.pdf') ? 'application/pdf' : 'application/javascript'
         res.setHeader('Content-Type', artifact ? contentType : 'text/html; charset=utf-8')
+        if (req.url.endsWith('.pdf')) {
+            res.setHeader('Content-Disposition', 'inline; filename="manual.pdf"')
+            res.setHeader('Content-Security-Policy', 'sandbox')
+        }
         res.end(artifact || html)
     })
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -367,10 +394,56 @@ test('删除资料和说明书的真实请求体保持数字 revision', async ()
     } finally { await context.close() }
 })
 
+test('编辑器为待上传和已保存文件显示缩略图，排序保持预览对应并释放移除项 URL', async () => {
+    const savedImage = {id: 'image-1', kind: 'image', title: '正面', original_name: 'front.png', position: 1, thumbnail_url: '/thumb/saved-image.png', preview_status: 'ready'}
+    const savedPDF = {id: 'pdf-1', kind: 'pdf', title: '完整手册', original_name: 'guide.pdf', position: 2, thumbnail_url: '/thumb/saved-pdf.png', preview_status: 'ready'}
+    const handler = async ({route, request, url}) => {
+        if (url.pathname === '/api/manuals/categories') { await route.fulfill({json: {code: 0, data: {items: []}}}); return true }
+        if (url.pathname === '/api/manuals/500' && request.method() === 'GET') {
+            await route.fulfill({json: {code: 0, data: baseManual({id: '500', can_edit: true, items: [savedImage, savedPDF], item_count: 2})}}); return true
+        }
+        return false
+    }
+    const {page, context} = await setup({path: '/manuals/500/edit?as=owner', width: 320, handler})
+    try {
+        await page.evaluate(() => {
+            window.__revokedManualPreviewURLs = []
+            const revoke = URL.revokeObjectURL.bind(URL)
+            URL.revokeObjectURL = value => { window.__revokedManualPreviewURLs.push(value); revoke(value) }
+        })
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+        await page.getByLabel('选择图片').setInputFiles({name: 'local.png', mimeType: 'image/png', buffer: png})
+        await page.getByLabel('选择 PDF 或 TXT').setInputFiles({name: 'local-manual', mimeType: 'application/pdf', buffer: fixturePDF()})
+        await page.getByLabel('选择 PDF 或 TXT').setInputFiles({name: 'attack.pdf', mimeType: 'text/html', buffer: Buffer.from('<script>parent.__manualEditorXSS = true</script>')})
+
+        assert.equal(await page.locator('.queue-preview-image').count(), 1)
+        assert.match(await page.locator('.queue-preview-image').getAttribute('src'), /^blob:/)
+        const localPDFCard = page.locator('.upload-queue-item').filter({hasText: 'local-manual'})
+        assert.equal(await localPDFCard.locator('.queue-preview-pdf').count(), 1)
+        assert.match(await localPDFCard.locator('.queue-preview-pdf').getAttribute('src'), /^blob:/)
+        const attackPDFCard = page.locator('.upload-queue-item').filter({hasText: 'attack.pdf'})
+        assert.equal(await attackPDFCard.locator('.queue-preview-pdf').count(), 0)
+        assert.equal(await page.evaluate(() => window.__manualEditorXSS), undefined)
+        assert.equal(await page.locator('.saved-thumbnail').count(), 2)
+        const savedPDFCard = page.locator('.saved-item').filter({hasText: '完整手册'})
+        await savedPDFCard.getByRole('button', {name: '上移', exact: true}).click()
+        assert.match(await page.locator('.saved-item').first().locator('.saved-thumbnail').getAttribute('src'), /saved-pdf\.png$/)
+
+        const pdfCard = page.locator('.upload-queue-item').filter({hasText: 'local-manual'})
+        const pdfPreview = await pdfCard.locator('.queue-preview-pdf').getAttribute('src')
+        await pdfCard.getByRole('button', {name: '上移', exact: true}).click()
+        assert.match(await page.locator('.upload-queue-item').first().innerText(), /local-manual/)
+        assert.equal(await page.locator('.upload-queue-item').first().locator('.queue-preview-pdf').getAttribute('src'), pdfPreview)
+        await page.locator('.upload-queue-item').first().getByRole('button', {name: '移除', exact: true}).click()
+        assert.equal(await page.evaluate(() => window.__revokedManualPreviewURLs.length), 1)
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+    } finally { await context.close() }
+})
+
 test('匿名详情按顺序安全展示图片、PDF、纯文本和 HTTP(S) 链接', async () => {
     const manual = baseManual({items: [
         {id: '1', kind: 'image', title: '正面', content_url: '/content/front.png', thumbnail_url: '/thumb/front.png', preview_status: 'ready'},
-        {id: '2', kind: 'pdf', title: '完整手册', content_url: '/content/guide.pdf', preview_status: 'ready'},
+        {id: '2', kind: 'pdf', title: '完整手册', original_name: 'guide.pdf', content_url: '/content/guide.pdf', preview_status: 'ready'},
         {id: '3', kind: 'text', title: '保养', text: '<script>window.__manualXSS=1</script>\n用清水冲洗'},
         {id: '4', kind: 'url', title: '官网支持', url: 'https://example.com/help'},
         {id: '5', kind: 'url', title: '无效链接', url: 'javascript:alert(1)'},
@@ -391,6 +464,16 @@ test('匿名详情按顺序安全展示图片、PDF、纯文本和 HTTP(S) 链�
         assert.match(await external.getAttribute('rel'), /noopener/)
         assert.match(await external.getAttribute('rel'), /noreferrer/)
         assert.equal(await page.getByRole('link', {name: '打开无效链接'}).count(), 0)
+        const pdfCard = page.locator('.manual-item').filter({hasText: '完整手册'})
+        assert.equal(await pdfCard.locator('.item-meta').textContent(), '资料 2 · PDF')
+        assert.equal(await pdfCard.locator('.item-filename').textContent(), 'guide.pdf')
+        assert.equal(await page.locator('.item-heading > span').count(), 0)
+        assert.equal(await pdfCard.locator('iframe.pdf-viewer').count(), 1)
+        assert.match(await pdfCard.locator('iframe.pdf-viewer').getAttribute('src'), /\/content\/guide\.pdf$/)
+        assert.equal(await pdfCard.locator('iframe.pdf-viewer').getAttribute('title'), '完整手册 PDF 阅读器')
+        if (!page.frames().some(frame => frame.url().startsWith('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/'))) {
+            await page.waitForEvent('framenavigated', {predicate: frame => frame.url().startsWith('chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/')})
+        }
         assert.equal(await page.getByRole('link', {name: '打开 PDF'}).getAttribute('target'), '_blank')
         assert.match(await page.getByRole('link', {name: '下载 PDF'}).getAttribute('href'), /download=1/)
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)

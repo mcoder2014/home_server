@@ -46,17 +46,26 @@
 
           <div class="upload-queue" aria-live="polite">
             <article v-for="(item, index) in queue" :key="item.local_id" class="upload-queue-item">
-              <div class="queue-heading"><div><strong>{{ index + 1 }}. {{ queueKind(item) }}</strong><small v-if="item.file">{{ item.file.name }}·{{ formatBytes(item.file.size) }}</small></div><span class="queue-status" :class="`status-${item.status}`">{{ queueStatus(item.status) }}</span></div>
-              <label><span>标题（可选）</span><input v-model="item.title" :aria-label="`第 ${index + 1} 项标题`" maxlength="200" :disabled="!editableQueueContent(item)"></label>
-              <label v-if="item.kind === 'text'"><span>纯文本</span><textarea v-model="item.text" :aria-label="`第 ${index + 1} 项文本`" maxlength="100000" rows="5" :disabled="!editableQueueContent(item)"></textarea></label>
-              <label v-if="item.kind === 'url'"><span>HTTP(S) 网址</span><input v-model="item.url" type="url" :aria-label="`第 ${index + 1} 项网址`" maxlength="2048" placeholder="https://example.com/manual" :disabled="!editableQueueContent(item)"></label>
-              <p v-if="item.duplicate" class="duplicate-note">这个文件与队列中的名称、大小和修改时间相同，仍已保留。</p>
-              <progress v-if="item.status === 'uploading'" :value="item.progress" max="100">{{ item.progress }}%</progress>
-              <p v-if="item.error" class="queue-error">{{ item.error }}</p>
-              <div class="queue-actions">
-                <el-button :disabled="index === 0 || !editableQueueItem(item)" @click="moveQueue(index, -1)">上移</el-button>
-                <el-button :disabled="index === queue.length - 1 || !editableQueueItem(item)" @click="moveQueue(index, 1)">下移</el-button>
-                <el-button v-if="item.status === 'waiting' || item.status === 'failed'" type="danger" plain :disabled="saving || uploading" @click="removeQueue(index)">移除</el-button>
+              <div class="queue-item-layout">
+                <div class="queue-preview">
+                  <img v-if="item.kind === 'image' && item.preview_url" class="queue-preview-image" :src="item.preview_url" :alt="`${item.file?.name || '待上传图片'}缩略图`">
+                  <iframe v-else-if="isQueuePDF(item) && item.preview_url" class="queue-preview-pdf" :src="pdfPreviewURL(item.preview_url)" :title="`${item.file?.name || '待上传 PDF'}首页预览`" loading="lazy" tabindex="-1"></iframe>
+                  <span v-else>{{ queueKind(item) }}</span>
+                </div>
+                <div class="queue-content">
+                  <div class="queue-heading"><div><strong>{{ index + 1 }}. {{ queueKind(item) }}</strong><small v-if="item.file">{{ item.file.name }} · {{ formatBytes(item.file.size) }}</small></div><span class="queue-status" :class="`status-${item.status}`">{{ queueStatus(item.status) }}</span></div>
+                  <label><span>标题（可选）</span><input v-model="item.title" :aria-label="`第 ${index + 1} 项标题`" maxlength="200" :disabled="!editableQueueContent(item)"></label>
+                  <label v-if="item.kind === 'text'"><span>纯文本</span><textarea v-model="item.text" :aria-label="`第 ${index + 1} 项文本`" maxlength="100000" rows="5" :disabled="!editableQueueContent(item)"></textarea></label>
+                  <label v-if="item.kind === 'url'"><span>HTTP(S) 网址</span><input v-model="item.url" type="url" :aria-label="`第 ${index + 1} 项网址`" maxlength="2048" placeholder="https://example.com/manual" :disabled="!editableQueueContent(item)"></label>
+                  <p v-if="item.duplicate" class="duplicate-note">这个文件与队列中的名称、大小和修改时间相同，仍已保留。</p>
+                  <progress v-if="item.status === 'uploading'" :value="item.progress" max="100">{{ item.progress }}%</progress>
+                  <p v-if="item.error" class="queue-error">{{ item.error }}</p>
+                  <div class="queue-actions">
+                    <el-button :disabled="index === 0 || !editableQueueItem(item)" @click="moveQueue(index, -1)">上移</el-button>
+                    <el-button :disabled="index === queue.length - 1 || !editableQueueItem(item)" @click="moveQueue(index, 1)">下移</el-button>
+                    <el-button v-if="item.status === 'waiting' || item.status === 'failed'" type="danger" plain :disabled="saving || uploading" @click="removeQueue(index)">移除</el-button>
+                  </div>
+                </div>
               </div>
             </article>
           </div>
@@ -71,6 +80,10 @@
           <fieldset class="cover-field" :disabled="saving || uploading"><legend>封面</legend><label><input v-model="coverSelection" type="radio" value="auto" name="cover" @change="coverDirty = true"><span>自动选择（新添图片可自动成为封面）</span></label></fieldset>
           <div class="saved-list">
             <article v-for="(item, index) in manual.items" :key="item.id" class="saved-item">
+              <div class="saved-preview">
+                <img v-if="item.thumbnail_url" class="saved-thumbnail" :src="item.thumbnail_url" :alt="`${item.title || item.original_name || queueKind(item)}缩略图`" loading="lazy">
+                <span v-else>{{ queueKind(item) }}</span>
+              </div>
               <label class="cover-choice"><input v-model="coverSelection" type="radio" :value="String(item.id)" name="cover" :disabled="saving || uploading" @change="coverDirty = true"><span>选为封面</span></label>
               <div class="saved-summary"><strong>{{ index + 1 }}. {{ item.title || item.original_name || queueKind(item) }}</strong><small>{{ queueKind(item) }}</small></div>
               <div class="saved-actions"><el-button :disabled="saving || uploading || index === 0" @click="moveSaved(index, -1)">上移</el-button><el-button :disabled="saving || uploading || index === manual.items.length - 1" @click="moveSaved(index, 1)">下移</el-button><el-button type="danger" plain :disabled="saving || uploading || (manual.status === 'active' && manual.items.length <= 1)" @click="deleteSavedItem(item)">删除</el-button></div>
@@ -130,6 +143,9 @@ export default {
       this.fatalError = error.message || '编辑器加载失败'
     } finally { this.loading = false }
   },
+  beforeUnmount() {
+    this.releaseQueuePreviews()
+  },
   methods: {
     requireAccess() {
       const user = this.$store.state.userInfo
@@ -156,7 +172,9 @@ export default {
     },
     appendFiles(event) {
       if (this.saving || this.uploading) { if (event?.target) event.target.value = ''; return }
+      const existing = new Set(this.queue.map(item => item.local_id))
       const result = appendFileItems(this.queue, event.target.files, this.manual?.items?.length || 0)
+      result.items.filter(item => !existing.has(item.local_id)).forEach(item => this.createQueuePreview(item))
       this.queue = result.items
       event.target.value = ''
       if (result.errors.length) this.showNotice(result.errors.join('；'), 'error')
@@ -169,12 +187,39 @@ export default {
       if (result.errors.length) this.showNotice(result.errors.join('；'), 'error')
     },
     moveQueue(index, offset) { if (this.saving || this.uploading) return; this.queue = moveItem(this.queue, index, offset) },
-    removeQueue(index) { if (this.saving || this.uploading) return; this.queue.splice(index, 1); this.updateInterruptedMarker() },
+    removeQueue(index) {
+      if (this.saving || this.uploading) return
+      const [removed] = this.queue.splice(index, 1)
+      this.releaseQueuePreview(removed)
+      this.updateInterruptedMarker()
+    },
     moveSaved(index, offset) { if (this.saving || this.uploading) return; this.manual.items = moveItem(this.manual.items, index, offset) },
     editableQueueItem(item) { return !this.saving && !this.uploading && ['waiting', 'failed'].includes(item.status) },
     editableQueueContent(item) { return !this.saving && !this.uploading && item.status === 'waiting' && !item.attempted },
     queueStatus(status) { return {waiting: '等待上传', uploading: '上传中', success: '已成功', failed: '上传失败'}[status] || status },
-    queueKind(item) { return {image: '图片', file: item.file?.name?.toLowerCase().endsWith('.txt') ? 'TXT 文本' : item.file?.name?.toLowerCase().endsWith('.pdf') ? 'PDF' : '文件', pdf: 'PDF', text: '文本', url: '网页链接'}[item.kind] || '资料' },
+    queueKind(item) { return {image: '图片', file: item.file?.name?.toLowerCase().endsWith('.txt') ? 'TXT 文本' : String(item.file?.type || '').toLowerCase() === 'application/pdf' || item.file?.name?.toLowerCase().endsWith('.pdf') ? 'PDF' : '文件', pdf: 'PDF', text: '文本', url: '网页链接'}[item.kind] || '资料' },
+    isQueuePDF(item) {
+      if (item?.kind === 'pdf') return true
+      return String(item?.file?.type || '').toLowerCase() === 'application/pdf'
+    },
+    pdfPreviewURL(value) {
+      if (!value) return ''
+      return `${value}#page=1&view=FitH&toolbar=0&navpanes=0&scrollbar=0`
+    },
+    createQueuePreview(item) {
+      if (!item?.file || (item.kind !== 'image' && !this.isQueuePDF(item)) || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return
+      try { item.preview_url = URL.createObjectURL(item.file) }
+      catch { item.preview_url = '' }
+    },
+    releaseQueuePreview(item) {
+      if (!item?.preview_url || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return
+      URL.revokeObjectURL(item.preview_url)
+      item.preview_url = ''
+    },
+    releaseQueuePreviews(items = this.queue) {
+      if (!items?.length) return
+      items.forEach(item => this.releaseQueuePreview(item))
+    },
     formatBytes(bytes) { const size = Number(bytes || 0); return size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KiB` : `${(size / 1024 / 1024).toFixed(1)} MiB` },
     showNotice(message, type = 'info') { this.notice = message; this.noticeType = type },
     validateBeforeSave() {
@@ -258,6 +303,7 @@ export default {
         const publishing = this.manual.status === 'draft'
         if (publishing) await this.applyPatch(this.patchPayload(itemIDs, true))
         else await this.applyPatch(this.patchPayload(itemIDs, false))
+        this.releaseQueuePreviews()
         this.queue = []
         this.clearInterruptedMarkers()
         this.showNotice(publishing ? '说明书已发布' : '资料已上传，设置与顺序已保存', 'success')
@@ -302,6 +348,7 @@ export default {
       try {
         await manualsApi.deleteItem(this.manual.id, String(item.id), Number(this.manual.revision))
         const latest = await manualsApi.getManual(this.manual.id)
+        this.queue.filter(queueItem => String(queueItem.server_item?.id || '') === String(item.id)).forEach(queueItem => this.releaseQueuePreview(queueItem))
         this.queue = this.queue.filter(queueItem => String(queueItem.server_item?.id || '') !== String(item.id))
         this.applyManual(latest)
         this.form = draft
@@ -330,4 +377,8 @@ export default {
 
 <style scoped>
 .manual-editor-page{max-width:940px}.editor-loading{min-height:240px;padding:80px;text-align:center;color:var(--text-secondary)}.editor-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:26px}.editor-heading h1{margin:0;font-size:clamp(26px,5vw,36px);overflow-wrap:anywhere}.editor-heading p{margin:10px 0 0;color:var(--text-secondary);font-size:14px}.detail-link{flex-shrink:0;text-decoration:none}.editor-alert{margin:0 0 18px}.editor-section{margin-bottom:22px}.editor-section>h2,.conflict-card h2{margin:0 0 20px;font-size:19px}.metadata-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.45fr);gap:18px}.metadata-grid label,.upload-queue-item label{display:block;min-width:0}.metadata-grid label>span,.upload-queue-item label>span{display:block;margin-bottom:7px;color:var(--text-secondary);font-size:13px;font-weight:600}.wide-field{grid-column:1/-1}.category-field .el-select{width:100%}.metadata-grid input,.metadata-grid textarea,.upload-queue-item input,.upload-queue-item textarea{width:100%;min-height:44px;border:1px solid var(--border-color);border-radius:9px;background:#fcfdfc;color:var(--text-primary);font:inherit;padding:10px 12px;resize:vertical}.access-field,.cover-field{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:22px 0 0;border:0;padding:0}.access-field legend,.cover-field legend{grid-column:1/-1;margin-bottom:8px;font-size:14px;font-weight:650}.access-field label,.cover-field label{display:flex;align-items:flex-start;gap:9px;border:1px solid var(--border-color);border-radius:9px;padding:12px}.access-field input,.cover-field input{width:18px;height:18px;flex-shrink:0}.access-field strong,.access-field small{display:block}.access-field small{margin-top:3px;color:var(--text-secondary);line-height:1.5}.section-actions{display:flex;justify-content:flex-end;margin-top:20px}.section-title{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}.section-title h2{margin:0;font-size:19px}.section-title p{margin:5px 0 0;color:var(--text-secondary);font-size:13px}.section-title>span{flex-shrink:0;color:var(--text-secondary);font-size:13px}.source-actions{display:flex;flex-wrap:wrap;gap:10px}.source-actions .el-button{margin-left:0;min-height:44px}.file-picker{display:inline-flex;min-height:44px;align-items:center;border:1px solid #9abdaf;border-radius:8px;background:#f0f6f2;color:var(--primary-dark);cursor:pointer;font-size:14px;font-weight:600;padding:0 15px}.file-picker.disabled{cursor:not-allowed;filter:grayscale(.35);opacity:.6}.file-picker input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}.format-note{margin:14px 0;color:var(--text-secondary);font-size:12px}.upload-queue{display:grid;gap:14px}.upload-queue-item{min-width:0;border:1px solid var(--border-color);border-radius:12px;background:#fbfcfa;padding:16px}.queue-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:13px}.queue-heading strong,.queue-heading small{display:block;overflow-wrap:anywhere}.queue-heading small{margin-top:3px;color:var(--text-secondary)}.queue-status{flex-shrink:0;border-radius:999px;background:#e8efea;color:var(--text-secondary);font-size:12px;padding:3px 9px}.status-success{background:#e4f3e9;color:#277044}.status-failed{background:#fff0eb;color:#a2432c}.status-uploading{background:#e7f1f5;color:#2e6579}.upload-queue-item label+label{margin-top:13px}.upload-queue-item progress{width:100%;margin-top:13px}.duplicate-note{color:#956b2d}.queue-error{color:#a2432c;overflow-wrap:anywhere}.queue-actions,.saved-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.queue-actions .el-button,.saved-actions .el-button{min-height:40px;margin-left:0}.primary-actions{display:flex;justify-content:flex-end;margin-top:20px}.primary-actions .el-button{min-height:46px}.cover-field{grid-template-columns:1fr}.saved-list{display:grid;gap:10px;margin-top:14px}.saved-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:14px;border-top:1px solid var(--border-color);padding:14px 0}.cover-choice{display:flex;align-items:center;gap:6px;font-size:12px}.cover-choice input{width:18px;height:18px}.saved-summary{min-width:0}.saved-summary strong,.saved-summary small{display:block;overflow-wrap:anywhere}.saved-summary small{color:var(--text-secondary)}.saved-actions{margin-top:0}.conflict-card{margin-bottom:20px;border-color:#e6bf7f;background:#fffaf0}.conflict-card p{color:#795b2b}.conflict-card dl{display:grid;grid-template-columns:100px minmax(0,1fr);gap:8px;font-size:13px}.conflict-card dd{margin:0;overflow-wrap:anywhere}.danger-zone{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:34px;border:1px solid #efd2c9;border-radius:14px;background:#fff8f5;padding:20px}.danger-zone h2{margin:0;font-size:17px}.danger-zone p{margin:5px 0 0;color:#8c584a;font-size:13px}@media(max-width:640px){.editor-heading{align-items:stretch;flex-direction:column}.metadata-grid{grid-template-columns:minmax(0,1fr)}.wide-field{grid-column:auto}.access-field{grid-template-columns:1fr}.source-actions>*{width:100%;justify-content:center}.saved-item{grid-template-columns:minmax(0,1fr)}.saved-actions,.queue-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.saved-actions .el-button,.queue-actions .el-button{width:100%}.cover-choice{min-height:40px}.primary-actions .el-button,.section-actions .el-button{width:100%;min-height:46px}.danger-zone{align-items:stretch;flex-direction:column}.danger-zone .el-button{width:100%;min-height:44px}.editor-section{padding:20px 14px}.conflict-card dl{grid-template-columns:1fr}.conflict-card dt{font-weight:650}.conflict-card .el-button{width:100%;white-space:normal;height:auto;min-height:44px}}
+</style>
+
+<style scoped>
+.queue-item-layout{display:grid;grid-template-columns:132px minmax(0,1fr);gap:16px}.queue-content{min-width:0}.queue-preview{display:grid;width:132px;height:104px;overflow:hidden;place-items:center;border:1px solid #dde7e1;border-radius:10px;background:#f1f5f2;color:var(--text-secondary);font-size:12px;font-weight:650}.queue-preview-image,.queue-preview-pdf{display:block;width:100%;height:100%;border:0;background:#fff}.queue-preview-image{object-fit:contain}.queue-preview-pdf{pointer-events:none}.saved-item{grid-template-columns:92px auto minmax(0,1fr) auto}.saved-preview{display:grid;width:92px;height:70px;overflow:hidden;place-items:center;border:1px solid #dde7e1;border-radius:9px;background:#f1f5f2;color:var(--text-secondary);font-size:12px;font-weight:650}.saved-thumbnail{display:block;width:100%;height:100%;object-fit:cover}@media(max-width:640px){.queue-item-layout{grid-template-columns:minmax(0,1fr)}.queue-preview{width:100%;height:170px}.saved-item{grid-template-columns:minmax(0,1fr)}.saved-preview{width:100%;height:150px}.saved-thumbnail{object-fit:contain}}
 </style>
