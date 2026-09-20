@@ -25,7 +25,7 @@ page-id/comment-id 采用 1～96 位小写语义标识，正则 `^[a-z][a-z0-9]*
 
 嵌套目标选择最接近的显式 comment-id。ignore 的优先级最高，任何父目标的文本/摘要都不得包含其内容。preserve 区域只暴露外层模块和 label，不读取内层动态文本；祖先 text 目标也须跳过该子树。父/子目标均参与时，不能将同一次选择重复绑定两个目标。
 
-页面若声明 Content Security Policy，`script-src 'self'` 可以加载同源容器脚本。只允许 nonce/hash 且不允许同源脚本的策略会阻止运行时注入；生成页面时应显式允许同源 `/api/web-share/container.js`，不能通过关闭 CSP 规避。无法调整的页面使用原始页面模式。
+页面若声明 Content Security Policy，应允许同源容器脚本、同源 API 请求与容器样式。`script-src 'self'` 可允许同源脚本，但其他更具体指令和 strict-dynamic 仍需核对；平台脚本没有 nonce/integrity，样式为 Shadow DOM 内的 style 元素。不能通过关闭 CSP 规避。无法调整的页面使用原始页面模式；上传前运行 [兼容性检查](html-upload-check.md)。
 
 ## 3. 最小结构示例
 

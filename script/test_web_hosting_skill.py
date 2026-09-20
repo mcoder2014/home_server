@@ -14,6 +14,7 @@ import time
 import unittest
 from unittest import mock
 import urllib.parse
+import zipfile
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -274,12 +275,22 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
                 self.assertEqual(base64.b64decode(encoded), f"{ACCESS_KEY}:{SECRET_KEY}".encode())
                 return token_response()
             self.assertEqual(request["headers"].get("authorization"), f"Bearer {ACCESS_TOKEN}")
-            return success({"operation": f"{request['method']} {parsed.path}"}, 201 if parsed.path.endswith("/releases") and request["method"] == "POST" else 200)
+            result = {"operation": f"{request['method']} {parsed.path}"}
+            if request["method"] == "GET" and parsed.path == "/api/web-share/12":
+                result["container_mode"] = "enhanced"
+            return success(result, 201 if parsed.path.endswith("/releases") and request["method"] == "POST" else 200)
 
         with LocalHTTPSServer(self.server_certificate, self.server_key, responder) as server:
             config = self.write_config(server.origin, endpoint="internal")
             upload = self.fixture_root / "site.zip"
-            upload.write_bytes(b"PK\x03\x04offline-site-marker")
+            with zipfile.ZipFile(upload, "w") as archive:
+                archive.writestr(
+                    "public/index.html",
+                    '<!doctype html><html data-hs-page-id="fixture-page"><head><meta charset="utf-8">'
+                    '<title>Fixture</title></head><body><main data-hs-comment-root>'
+                    '<section data-hs-comment-id="fixture-section" data-hs-comment-kind="text">'
+                    'offline-site-marker</section></main></body></html>',
+                )
             cases = [
                 (("--endpoint", "internal", "list", "--cursor", "11", "--limit", "7", "--status", "enabled"), "GET /api/web-share"),
                 (("--endpoint", "internal", "show", "12"), "GET /api/web-share/12"),
@@ -298,7 +309,21 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
             for arguments, operation in cases:
                 with self.subTest(command=arguments[-1] if arguments else ""):
                     completed = self.run_cli(config, *arguments)
-                    self.assert_success(completed, "internal", server.origin, {"operation": operation})
+                    expected = {"operation": operation}
+                    if operation == "GET /api/web-share/12":
+                        expected["container_mode"] = "enhanced"
+                    if operation != "POST /api/web-share/12/releases":
+                        self.assert_success(completed, "internal", server.origin, expected)
+                        continue
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stderr, "")
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(payload["endpoint"], "internal")
+                    self.assertEqual(payload["origin"], server.origin)
+                    self.assertEqual(payload["result"], expected)
+                    self.assertEqual(payload["html_check"]["status"], "passed")
+                    self.assertEqual(payload["html_check"]["mode"], "enhanced")
+                    self.assertEqual(payload["html_check"]["errors"], 0)
 
         business = [call for call in server.calls if call["path"] != "/api/auth/token"]
         self.assertEqual(len([call for call in server.calls if call["path"] == "/api/auth/token"]), len(cases))
@@ -316,24 +341,26 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
             "member_user_ids": [],
             "client_request_id": "create-1",
         })
-        self.assertEqual(business[5]["headers"].get("idempotency-key"), "upload-1")
-        self.assertIn(b'name="entry_file"\r\n\r\npublic/index.html', business[5]["body"])
-        self.assertIn(b'name="file"; filename="site.zip"', business[5]["body"])
-        self.assertIn(b"PK\x03\x04offline-site-marker", business[5]["body"])
-        self.assertEqual(business[6]["headers"].get("if-match"), "2")
-        self.assertEqual(json.loads(business[6]["body"]), {"release_id": "31"})
-        self.assertEqual(business[7]["headers"].get("if-match"), "3")
-        self.assertEqual(json.loads(business[7]["body"]), {
+        self.assertEqual(business[5]["method"], "GET")
+        self.assertEqual(business[5]["path"], "/api/web-share/12")
+        self.assertEqual(business[6]["headers"].get("idempotency-key"), "upload-1")
+        self.assertIn(b'name="entry_file"\r\n\r\npublic/index.html', business[6]["body"])
+        self.assertIn(b'name="file"; filename="site.zip"', business[6]["body"])
+        self.assertIn(b"offline-site-marker", business[6]["body"])
+        self.assertEqual(business[7]["headers"].get("if-match"), "2")
+        self.assertEqual(json.loads(business[7]["body"]), {"release_id": "31"})
+        self.assertEqual(business[8]["headers"].get("if-match"), "3")
+        self.assertEqual(json.loads(business[8]["body"]), {
             "access_mode": "members",
             "member_user_ids": ["201", "202"],
         })
-        self.assertEqual(business[8]["headers"].get("if-match"), "4")
-        self.assertEqual(business[8]["body"], b"")
+        self.assertEqual(business[9]["headers"].get("if-match"), "4")
+        self.assertEqual(business[9]["body"], b"")
         for index, mode, revision in (
-            (9, "owner", "5"),
-            (10, "authenticated", "6"),
-            (11, "public", "7"),
-            (12, "members", "8"),
+            (10, "owner", "5"),
+            (11, "authenticated", "6"),
+            (12, "public", "7"),
+            (13, "members", "8"),
         ):
             with self.subTest(visibility=mode):
                 self.assertEqual(business[index]["method"], "PATCH")

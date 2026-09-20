@@ -1,4 +1,4 @@
 interface:
   display_name: "Home Server 网页与说明书"
-  short_description: "管理托管网页、评论和设备说明书，支持私有内外网入口"
+  short_description: "上传前检查 HTML，管理托管网页、评论和设备说明书"
   default_prompt: "使用 $home-server-web-share 把这些资料整理成仅自己可见的设备说明书。"
