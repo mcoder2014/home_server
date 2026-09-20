@@ -312,7 +312,18 @@ class WebHostingSkillEndToEndTest(unittest.TestCase):
                     expected = {"operation": operation}
                     if operation == "GET /api/web-share/12":
                         expected["container_mode"] = "enhanced"
-                    self.assert_success(completed, "internal", server.origin, expected)
+                    if operation != "POST /api/web-share/12/releases":
+                        self.assert_success(completed, "internal", server.origin, expected)
+                        continue
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stderr, "")
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(payload["endpoint"], "internal")
+                    self.assertEqual(payload["origin"], server.origin)
+                    self.assertEqual(payload["result"], expected)
+                    self.assertEqual(payload["html_check"]["status"], "passed")
+                    self.assertEqual(payload["html_check"]["mode"], "enhanced")
+                    self.assertEqual(payload["html_check"]["errors"], 0)
 
         business = [call for call in server.calls if call["path"] != "/api/auth/token"]
         self.assertEqual(len([call for call in server.calls if call["path"] == "/api/auth/token"]), len(cases))
