@@ -3,6 +3,7 @@
     <router-link class="header-logo" to="/" aria-label="网站首页"><span class="brand-mark" aria-hidden="true">CQ</span><span class="logo-text">{{ $store.state.site.title }}</span></router-link>
     <nav class="header-nav" aria-label="主导航" v-if="!user?.must_change_password">
       <router-link to="/" :class="{active: $route.path === '/'}">首页</router-link>
+      <router-link v-if="filesAvailable" to="/files" :class="{active: $route.path === '/files'}">文件分享</router-link>
       <router-link to="/web-share" :class="{active: /^\/(web-share|web-projects)/.test($route.path)}">网页托管</router-link>
       <router-link v-if="manualsAvailable" to="/manuals" :class="{active: $route.path.startsWith('/manuals')}">说明书管理</router-link>
       <router-link v-if="user?.library_enabled && user?.capabilities?.library !== false" to="/book/list" :class="{active: $route.path.startsWith('/book/')}">家庭藏书</router-link>
@@ -28,6 +29,7 @@ export default {
   data() { return {loggingOut: false} },
   computed: {
     user() { return this.$store.state.userInfo },
+    filesAvailable() { return this.$store.state.modules?.file_sharing === true },
     manualsAvailable() { return this.$store.state.modules?.manuals === true && (!this.user || this.user.capabilities?.manuals !== false) },
     displayName() { return this.user?.display_name || this.user?.user_name || '用户' },
   },
@@ -53,8 +55,9 @@ export default {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(250, 252, 250, 0.88);
   border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(16px) saturate(130%);
 }
 .header-inner {
   display: flex;
@@ -76,8 +79,9 @@ export default {
 .account-trigger :deep(.identity-name) { font-size: 13px; color: var(--text-secondary); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 820px) {
   .header-inner { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 14px 20px 10px; }
-  .header-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); grid-row: 2; grid-column: 1 / -1; margin-top: 12px; width: 100%; }
-  .header-nav a { min-width: 0; padding-left: 6px; padding-right: 6px; }
+  .header-nav { display: flex; grid-row: 2; grid-column: 1 / -1; width: calc(100% + 40px); margin: 11px -20px 0; padding: 0 20px 3px; overflow-x: auto; scrollbar-width: none; }
+  .header-nav::-webkit-scrollbar { display: none; }
+  .header-nav a { min-width: max-content; padding-left: 11px; padding-right: 11px; }
   .header-user { grid-column: 2; grid-row: 1; }
 }
 @media (max-width: 480px) {
@@ -86,8 +90,8 @@ export default {
   .account-trigger :deep(.identity-text) { display: none; }
   .user-avatar { width: 26px; height: 26px; }
   .header-user { gap: 6px; }
-  .header-nav { gap: 2px; }
-  .header-nav a { font-size: 12px; gap: 0; padding-left: 3px; padding-right: 3px; }
+  .header-nav { width: calc(100% + 32px); margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; gap: 3px; }
+  .header-nav a { font-size: 12px; gap: 0; padding-left: 10px; padding-right: 10px; }
   .header-nav a .el-icon { display: none; }
 }
 </style>

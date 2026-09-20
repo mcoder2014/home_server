@@ -11,6 +11,7 @@ if (!playwrightPath) {
 const {chromium} = require(playwrightPath)
 const root = path.join(__dirname, '../src')
 let browser, server, origin
+const visualOutput = process.env.VISUAL_OUTPUT_DIR || '/tmp/home-server-file-sharing-visuals'
 const artifacts = {
   '/vue.js': fs.readFileSync(require.resolve('vue/dist/vue.global.prod.js')),
   '/element.js': fs.readFileSync(require.resolve('element-plus/dist/index.full.js')),
@@ -114,6 +115,10 @@ async function setup(options = {}) {
 test('昵称清空只提交昵称，跨标签更新保留已编辑草稿，320px页面没有水平溢出',async()=>{
   const {page,context,state}=await setup({width:320})
   try {
+    await page.getByLabel('昵称',{exact:true}).waitFor()
+    fs.mkdirSync(visualOutput,{recursive:true})
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
+    await page.screenshot({path:path.join(visualOutput,'account-center-mobile-320.png'),fullPage:true})
     await page.getByLabel('昵称',{exact:true}).fill('😀'.repeat(64))
     assert.equal(await page.getByLabel('昵称',{exact:true}).inputValue(),'😀'.repeat(64))
     await page.getByLabel('昵称',{exact:true}).fill('')

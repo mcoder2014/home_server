@@ -5,6 +5,7 @@ import (
 
 	"github.com/mcoder2014/home_server/api/applications"
 	"github.com/mcoder2014/home_server/api/auth"
+	"github.com/mcoder2014/home_server/api/fileshare"
 	"github.com/mcoder2014/home_server/api/library"
 	"github.com/mcoder2014/home_server/api/manuals"
 	"github.com/mcoder2014/home_server/api/middleware"
@@ -37,6 +38,7 @@ func InitRouter() error {
 			// 静态网页托管相关接口
 			webprojects.InitRouter,
 			manuals.InitRouter,
+			fileshare.InitRouter,
 			auth.InitRouter,
 			applications.InitRouter,
 		} {

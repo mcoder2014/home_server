@@ -8,10 +8,16 @@ import (
 
 var credentialValue = regexp.MustCompile(`(?:ak|sk|at)_cq_[A-Za-z0-9_-]+`)
 
+// Redact the first path segment even when it is malformed or shorter than a
+// valid token. Rejected requests are still logged and may contain a secret the
+// server does not recognize.
+var fileShareTokenPath = regexp.MustCompile(`(/api/file-shares/|/s/)[^/?#]+`)
+
 // RedactedURI protects even rejected requests: credentials in a query are never
 // a supported auth mechanism, but the access logger still sees their original URI.
 func RedactedURI(value string) string {
 	value = credentialValue.ReplaceAllString(value, "[redacted]")
+	value = fileShareTokenPath.ReplaceAllString(value, "${1}[redacted]")
 	parts := strings.SplitN(value, "?", 2)
 	if len(parts) != 2 {
 		return value

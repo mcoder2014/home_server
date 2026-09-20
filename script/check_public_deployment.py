@@ -9,6 +9,9 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 DOCUMENT_NETS = tuple(ipaddress.ip_network(cidr) for cidr in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "2001:db8::/32"))
 EXAMPLE_DOMAIN = re.compile(r"(?:[a-zA-Z0-9*-]+\.)*example\.(?:com|net|org)")
+SAFE_NGINX_HOST_REDIRECT = re.compile(
+    r"\s*return\s+(?:302|307)\s+https://\$host:([1-9]\d{0,4})\$request_uri;\s*"
+)
 
 
 def is_example_address(value):
@@ -17,6 +20,17 @@ def is_example_address(value):
     except ValueError:
         return False
     return address.is_loopback or address.is_unspecified or any(address in network for network in DOCUMENT_NETS)
+
+
+def has_forbidden_deployment_url(line):
+    redirect = SAFE_NGINX_HOST_REDIRECT.fullmatch(line)
+    if redirect and int(redirect.group(1)) <= 65535:
+        return False
+    for url in re.findall(r"https?://[^\s\"'`<>]+", line):
+        parsed = urlsplit(url.rstrip(").,;]"))
+        if parsed.username or parsed.password or (parsed.hostname and parsed.hostname != "localhost" and not is_example_address(parsed.hostname) and not EXAMPLE_DOMAIN.fullmatch(parsed.hostname)):
+            return True
+    return False
 
 
 # 逐行检查公开部署示例中的地址、个人目录、凭证和服务账号，返回带文件位置的违规项；只读取文件。
@@ -50,11 +64,8 @@ def check_file(path):
         fixture_domain = re.search(r'(?:Domain:\s*|GetAllDNSRecord\([^\n]*,\s*)"([^"/]+\.[^"/]+)"', line)
         if fixture_domain and not EXAMPLE_DOMAIN.fullmatch(fixture_domain.group(1)):
             reason = "DNS test fixtures must use reserved example domains"
-        if path.is_relative_to(ROOT / "deploy") or path.is_relative_to(ROOT / "config/systemd"):
-            for url in re.findall(r"https?://[^\s\"'`<>]+", line):
-                parsed = urlsplit(url.rstrip(").,;]"))
-                if parsed.username or parsed.password or (parsed.hostname and parsed.hostname != "localhost" and not is_example_address(parsed.hostname) and not EXAMPLE_DOMAIN.fullmatch(parsed.hostname)):
-                    reason = "deployment example URLs must use reserved domains without credentials"
+        if (path.is_relative_to(ROOT / "deploy") or path.is_relative_to(ROOT / "config/systemd")) and has_forbidden_deployment_url(line):
+            reason = "deployment example URLs must use reserved domains without credentials"
         if reason:
             errors.append(f"{path.relative_to(ROOT)}:{number}: {reason}")
     return errors

@@ -75,6 +75,15 @@ function createManualsApi(transport, getCSRF) {
         getManual(manualID) {
             return request({method: 'get', url: manualURL(manualID), headers: headers()})
         },
+        getPassword(manualID) {
+            return request({method: 'get', url: manualURL(manualID, '/password'), headers: headers()})
+        },
+        setPassword(manualID, data) {
+            return request({method: 'put', url: manualURL(manualID, '/password'), data, headers: headers()})
+        },
+        unlockManual(manualID, password) {
+            return request({method: 'post', url: manualURL(manualID, '/unlock'), data: {password}, headers: headers()})
+        },
         updateManual(manualID, data) {
             return request({method: 'patch', url: manualURL(manualID), data, headers: headers()})
         },
