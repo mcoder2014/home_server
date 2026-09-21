@@ -139,8 +139,8 @@ func TestHTTPFourBytePolicyAndQueryPasswordGate(t *testing.T) {
 	id := project["id"].(string)
 	base := "/api/web-share/" + id
 	queryPath := "/p/http-private-fixture/index.html?code=1234&view=wide"
-	if response := f.request("GET", queryPath, nil, nil, nil); response.Status != http.StatusNotFound {
-		t.Fatal("query password bypassed private ACL")
+	if response := f.request("GET", queryPath, nil, nil, map[string]string{"Accept": "text/html"}); response.Status != http.StatusNotFound || !strings.Contains(string(response.Raw), "history.replaceState") || response.Header.Get("Referrer-Policy") != "no-referrer" {
+		t.Fatal("private page must retain 404 while clearing the query password")
 	}
 	requireSuccess(t, f.request("PATCH", base, owner, map[string]interface{}{"access_mode": "public", "container_mode": "raw"}, map[string]string{"If-Match": strconv.FormatInt(number(project["revision"]), 10)}))
 	if response := f.request("PUT", base+"/password", owner, map[string]interface{}{"password": "123", "version": 0}, nil); response.Status != http.StatusBadRequest {

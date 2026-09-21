@@ -37,3 +37,15 @@ for (const code of ['1234', 'wrong', '']) {
         await page.close()
     })
 }
+
+test('unavailable page keeps 404 while removing code before its home link can forward a referrer', async () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../api/webprojects/container.go'), 'utf8')
+    const notFound = source.match(/`(<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>404[\s\S]*?)`/)[1]
+    const page = await browser.newPage()
+    await page.route('https://home.example.com/**', route => route.fulfill({status: 404, contentType: 'text/html', headers: {'Referrer-Policy': 'no-referrer'}, body: notFound}))
+    const response = await page.goto('https://home.example.com/p/private/?code=1234&view=wide#section')
+    assert.equal(response.status(), 404)
+    assert.equal(page.url(), 'https://home.example.com/p/private/?view=wide#section')
+    await page.getByRole('heading', {name: '404'}).waitFor()
+    await page.close()
+})

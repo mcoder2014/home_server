@@ -74,13 +74,13 @@ test('a config publish conflict retains the draft and revision for explicit revi
     assert.equal(view.pendingRequest, null)
 })
 
-test('legacy account policy rollback fills the additive session limit without modifying history', async () => {
+test('legacy account policy rollback fills additive session and password limits without modifying history', async () => {
     const legacy = {session_ttl_seconds: 604800, temporary_password_ttl_days: 7, min_password_length: 15, bcrypt_cost: 12}
-    const fields = Object.entries({...legacy, max_active_sessions: 5}).map(([key, default_value]) => ({key, label: key, type: 'integer', default_value, minimum: 1, maximum: key === 'max_active_sessions' ? 100 : 2592000}))
+    const fields = Object.entries({...legacy, max_active_sessions: 5, min_share_password_length: 8, share_code_length: 6}).map(([key, default_value]) => ({key, label: key, type: 'integer', default_value, minimum: 1, maximum: key === 'max_active_sessions' ? 100 : 2592000}))
     const requests = []
     const {view} = component('AdminConfig', {
         validateConfig: async (...args) => {requests.push(['validate', ...args]); return {revision: 7, values: args[1]}},
-        rollbackConfig: async (...args) => {requests.push(['rollback', ...args]); return {namespace: 'account_policy', revision: 8, values: {...legacy, max_active_sessions: 5}}},
+        rollbackConfig: async (...args) => {requests.push(['rollback', ...args]); return {namespace: 'account_policy', revision: 8, values: {...legacy, max_active_sessions: 5, min_share_password_length: 8, share_code_length: 6}}},
         configStatus: async () => ({apply_state: 'applied'}),
     })
     view.namespace = 'account_policy'; view.schemas = [{namespace: 'account_policy', fields}]
@@ -90,6 +90,9 @@ test('legacy account policy rollback fills the additive session limit without mo
     await view.prepareRollback(record)
     assert.equal(view.historyError, '')
     assert.equal(requests[0][2].max_active_sessions, 5)
+    assert.equal(requests[0][2].min_share_password_length, 8)
+    assert.equal(requests[0][2].share_code_length, 6)
+    assert.equal(Object.hasOwn(record.values, 'share_code_length'), false)
     assert.equal(Object.hasOwn(record.values, 'max_active_sessions'), false)
     assert.equal(view.draft.max_active_sessions, 3)
     assert.equal(view.confirmVisible, true)

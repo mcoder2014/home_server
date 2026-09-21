@@ -82,7 +82,8 @@ func contentNotFound(c *gin.Context) {
 		return
 	}
 	if strings.Contains(c.GetHeader("Accept"), "text/html") {
-		c.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>404</title><body><h1>404</h1><p>页面不存在或不可见。</p><a href="/">系统主页</a></body></html>`))
+		c.Header("Referrer-Policy", "no-referrer")
+		c.Data(http.StatusNotFound, "text/html; charset=utf-8", []byte(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>404</title><script>const url=new URL(location.href);if(url.searchParams.has('code')){url.searchParams.delete('code');history.replaceState(history.state,'',url.pathname+url.search+url.hash)}</script><body><h1>404</h1><p>页面不存在或不可见。</p><a href="/">系统主页</a></body></html>`))
 	} else {
 		c.Status(http.StatusNotFound)
 	}

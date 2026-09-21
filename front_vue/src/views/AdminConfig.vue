@@ -106,9 +106,11 @@ export default {
       this.validating = true; this.historyError = ''
       try {
         const candidate = {...record.values}
-        if (this.namespace === 'account_policy' && !Object.prototype.hasOwnProperty.call(candidate, 'max_active_sessions')) {
-          const field = this.schema.fields.find(field => field.key === 'max_active_sessions')
-          if (field) candidate.max_active_sessions = field.default_value
+        if (this.namespace === 'account_policy') {
+          for (const key of ['max_active_sessions', 'min_share_password_length', 'share_code_length']) {
+            const field = this.schema.fields.find(field => field.key === key)
+            if (field && !Object.prototype.hasOwnProperty.call(candidate, key)) candidate[key] = field.default_value
+          }
         }
         const values = configValues(this.schema, candidate)
         this.validation = await accountsApi.validateConfig(this.namespace, values)
