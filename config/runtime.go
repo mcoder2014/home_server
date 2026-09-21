@@ -8,6 +8,8 @@ import (
 )
 
 type AccountPolicyConfig struct {
+	MinSharePasswordLength   int `json:"min_share_password_length"`
+	ShareCodeLength          int `json:"share_code_length"`
 	SessionTTLSeconds        int `json:"session_ttl_seconds"`
 	MaxActiveSessions        int `json:"max_active_sessions"`
 	TemporaryPasswordTTLDays int `json:"temporary_password_ttl_days"`

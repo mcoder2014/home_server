@@ -13,8 +13,8 @@ var credentialValue = regexp.MustCompile(`(?:ak|sk|at)_cq_[A-Za-z0-9_-]+`)
 // server does not recognize.
 var fileShareTokenPath = regexp.MustCompile(`(/api/file-shares/|/s/)[^/?#]+`)
 
-// RedactedURI protects even rejected requests: credentials in a query are never
-// a supported auth mechanism, but the access logger still sees their original URI.
+// RedactedURI protects even rejected requests: the access logger sees the original URI, including
+// the optional webpage password code before the browser clears it.
 func RedactedURI(value string) string {
 	value = credentialValue.ReplaceAllString(value, "[redacted]")
 	value = fileShareTokenPath.ReplaceAllString(value, "${1}[redacted]")
@@ -32,7 +32,7 @@ func RedactedURI(value string) string {
 	changed := false
 	for name := range query {
 		lower := strings.ToLower(name)
-		if strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "passwd") || lower == "passport" || lower == "authorization" || lower == "signature" || lower == "client_id" || lower == "api_key" || lower == "access_key" || lower == "ak" || lower == "sk" {
+		if strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "passwd") || lower == "code" || lower == "passport" || lower == "authorization" || lower == "signature" || lower == "client_id" || lower == "api_key" || lower == "access_key" || lower == "ak" || lower == "sk" {
 			query.Set(name, "[redacted]")
 			changed = true
 		}

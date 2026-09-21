@@ -71,14 +71,14 @@
 
               <fieldset class="secret-options"><legend>额外口令</legend>
                 <label class="choice-card"><input v-model="shareForm.secret_mode" type="radio" name="secret-mode" value="none"><span><strong>无需额外口令</strong><small>满足身份要求后可直接下载</small></span></label>
-                <label v-if="shareForm.access_mode === 'public'" class="choice-card"><input v-model="shareForm.secret_mode" type="radio" name="secret-mode" value="code" aria-label="需要分享码" @change="prepareCode"><span><strong>需要 6 位分享码</strong><small>大小写敏感，仅支持 ASCII 字母和数字</small></span></label>
-                <label v-else class="choice-card"><input v-model="shareForm.secret_mode" type="radio" name="secret-mode" value="password"><span><strong>需要分享密码</strong><small>登录身份之外再验证 8～72 字节密码</small></span></label>
+                <label v-if="shareForm.access_mode === 'public'" class="choice-card"><input v-model="shareForm.secret_mode" type="radio" name="secret-mode" value="code" aria-label="需要分享码" @change="prepareCode"><span><strong>需要 {{ shareCodeLength }} 位分享码</strong><small>大小写敏感，仅支持 ASCII 字母和数字</small></span></label>
+                <label v-else class="choice-card"><input v-model="shareForm.secret_mode" type="radio" name="secret-mode" value="password"><span><strong>需要分享密码</strong><small>登录身份之外再验证 {{ sharePasswordMinimum }}～72 字节密码</small></span></label>
               </fieldset>
               <div v-if="shareForm.secret_mode === 'code'" class="secret-editor">
                 <div class="secret-source"><label><input v-model="shareForm.code_source" type="radio" value="random" aria-label="随机生成" @change="generateCode">随机生成</label><label><input v-model="shareForm.code_source" type="radio" value="custom">指定分享码</label></div>
-                <label class="form-field"><span>6 位分享码</span><div class="inline-control"><input v-model="shareForm.secret" aria-label="6 位分享码" maxlength="6" autocomplete="off" :readonly="shareForm.code_source === 'random'"><el-button v-if="shareForm.code_source === 'random'" @click="generateCode">换一个</el-button></div></label>
+                <label class="form-field"><span>{{ shareCodeLength }} 位分享码</span><div class="inline-control"><input v-model="shareForm.secret" :aria-label="`${shareCodeLength} 位分享码`" :maxlength="shareCodeLength" autocomplete="off" :readonly="shareForm.code_source === 'random'"><el-button v-if="shareForm.code_source === 'random'" @click="generateCode">换一个</el-button></div></label>
               </div>
-              <label v-if="shareForm.secret_mode === 'password'" class="form-field"><span>分享密码</span><input v-model="shareForm.secret" type="password" aria-label="分享密码" maxlength="72" autocomplete="new-password" placeholder="8～72 个 UTF-8 字节"></label>
+              <label v-if="shareForm.secret_mode === 'password'" class="form-field"><span>分享密码</span><input v-model="shareForm.secret" type="password" aria-label="分享密码" maxlength="72" autocomplete="new-password" :placeholder="`${sharePasswordMinimum}～72 个 UTF-8 字节`"></label>
 
               <div class="limit-grid">
                 <label class="form-field"><span>有效期</span><select v-model="shareForm.expiration" aria-label="有效期"><option value="never">不限时间</option><option value="1d">1 天</option><option value="7d">7 天</option><option value="30d">30 天</option><option value="custom">自定义</option></select></label>
@@ -135,11 +135,15 @@ export default {
       files: [], filesCursor: '', filesHasMore: false, loadingFiles: false, pendingFile: null, uploading: false, uploadProgress: 0, uploadError: '', pageError: '',
       selectedFile: null, shares: [], sharesCursor: '', sharesHasMore: false, loadingShares: false, creatingShare: false, savingShare: false, shareError: '', shareForm: emptyShareForm(), createdShare: null,
       eligibleUsers: [], accessOptions: [
-        {value: 'public', label: '任何拿到链接的人', description: '无需登录，可选择 6 位分享码'},
+        {value: 'public', label: '任何拿到链接的人', description: '无需登录，可选择分享码'},
         {value: 'authenticated', label: '本站登录用户', description: '有效账号登录后可以下载'},
         {value: 'members', label: '指定成员', description: '只允许选中的本站账号'},
       ],
     }
+  },
+  computed: {
+    sharePasswordMinimum() { return this.$store.state.sharePasswordPolicy?.min_length || 8 },
+    shareCodeLength() { return this.$store.state.sharePasswordPolicy?.code_length || 6 },
   },
   async created() {
     if (!this.$store.state.userInfo) {
@@ -206,10 +210,10 @@ export default {
       this.shareForm.code_source = 'random'; this.generateCode()
     },
     generateCode() {
-      this.shareForm.secret = randomShareCode()
+      this.shareForm.secret = randomShareCode(undefined, this.shareCodeLength)
     },
     sharePayload() {
-      const secretValidation = secretError(this.shareForm.secret_mode, this.shareForm.secret)
+      const secretValidation = secretError(this.shareForm.secret_mode, this.shareForm.secret, this.sharePasswordMinimum, this.shareCodeLength)
       if (secretValidation) throw new Error(secretValidation)
       if (this.shareForm.access_mode === 'members' && this.shareForm.member_user_ids.length === 0) throw new Error('请至少选择一位成员')
       const maxDownloads = this.shareForm.download_limit === 'unlimited' ? 0 : this.shareForm.download_limit === 'once' ? 1 : Number(this.shareForm.max_downloads)
@@ -263,7 +267,7 @@ export default {
     shareState(share) { return fileShareState(share) },
     absoluteShareURL(share) { return new URL(share.url || `/s/${share.token}`, window.location.origin).href },
     accessText(mode) { return {public: '任何人', authenticated: '登录用户', members: '指定成员'}[mode] || mode },
-    secretText(mode) { return {none: '无额外口令', code: '6 位分享码', password: '分享密码'}[mode] || mode },
+    secretText(mode) { return {none: '无额外口令', code: '分享码', password: '分享密码'}[mode] || mode },
     formatDate(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? '未知时间' : date.toLocaleString('zh-CN', {hour12: false}) },
     formatBytes(bytes) { const value = Number(bytes || 0); return value < 1024 ? `${value} B` : value < 1048576 ? `${(value / 1024).toFixed(1)} KiB` : `${(value / 1048576).toFixed(1)} MiB` },
     fileExtension(name) { const part = String(name || '').split('.').pop(); return part && part !== name ? part.slice(0, 4).toUpperCase() : 'FILE' },

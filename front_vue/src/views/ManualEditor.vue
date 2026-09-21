@@ -26,7 +26,7 @@
         <section v-if="manual" class="card editor-section manual-password-section">
           <div class="section-title"><div><h2>阅读密码</h2><p>密码独立于可见范围；所有者仍可直接查看和管理。</p></div><el-tag :type="passwordState.password_protected ? 'success' : 'info'">{{ passwordState.password_protected ? '已启用阅读密码' : '尚未设置阅读密码' }}</el-tag></div>
           <div class="password-grid">
-            <label><span>新的说明书阅读密码</span><el-input v-model="passwordDraft" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="新的说明书阅读密码" placeholder="8～72 个 UTF-8 字节" /></label>
+            <label><span>新的说明书阅读密码</span><el-input v-model="passwordDraft" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="新的说明书阅读密码" :placeholder="`${sharePasswordMinimum}～72 个 UTF-8 字节`" /></label>
             <label><span>确认说明书阅读密码</span><el-input v-model="passwordConfirmation" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="确认说明书阅读密码" @keyup.enter="saveManualPassword" /></label>
           </div>
           <el-alert v-if="passwordNotice" :title="passwordNotice" :type="passwordNoticeType" :closable="false" show-icon class="password-alert" />
@@ -132,6 +132,7 @@ export default {
     }
   },
   computed: {
+    sharePasswordMinimum() { return this.$store.state.sharePasswordPolicy?.min_length || 8 },
     manualID() { return this.manual?.id || this.$route.params.id || '' },
     totalItemCount() { return (this.manual?.items?.length || 0) + this.queue.filter(item => item.status !== 'success').length },
     hasFailures() { return this.queue.some(item => item.status === 'failed') },
@@ -181,7 +182,7 @@ export default {
     },
     async saveManualPassword() {
       if (this.passwordSaving) return
-      const validation = resourcePasswordError(this.passwordDraft, this.passwordConfirmation)
+      const validation = resourcePasswordError(this.passwordDraft, this.passwordConfirmation, this.sharePasswordMinimum)
       if (validation) { this.passwordNotice = validation; this.passwordNoticeType = 'error'; return }
       await this.updateManualPassword(this.passwordDraft)
     },

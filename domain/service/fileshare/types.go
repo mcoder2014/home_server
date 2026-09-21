@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/model"
 	apperrors "github.com/mcoder2014/home_server/errors"
 )
@@ -167,7 +168,7 @@ func NormalizeShareInput(input CreateShareInput, random io.Reader, now time.Time
 }
 
 func ValidCode(value string) bool {
-	if len(value) != 6 {
+	if len(value) != config.Runtime().AccountPolicy.ShareCodeLength {
 		return false
 	}
 	for _, character := range []byte(value) {
@@ -183,7 +184,7 @@ func ValidCode(value string) bool {
 }
 
 func validPassword(value string) bool {
-	return utf8.ValidString(value) && len([]byte(value)) >= 8 && len([]byte(value)) <= 72
+	return utf8.ValidString(value) && len([]byte(value)) >= config.Runtime().AccountPolicy.MinSharePasswordLength && len([]byte(value)) <= 72
 }
 
 func randomCode(source io.Reader) (string, error) {
@@ -191,7 +192,7 @@ func randomCode(source io.Reader) (string, error) {
 		source = rand.Reader
 	}
 	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
-	raw := make([]byte, 6)
+	raw := make([]byte, config.Runtime().AccountPolicy.ShareCodeLength)
 	if _, err := io.ReadFull(source, raw); err != nil {
 		return "", err
 	}

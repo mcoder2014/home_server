@@ -123,3 +123,43 @@ func passwordGrantCookie(t *testing.T, cookies []*http.Cookie) *http.Cookie {
 	t.Fatal("unlock did not issue a resource grant cookie")
 	return nil
 }
+
+func TestHTTPFourBytePolicyAndQueryPasswordGate(t *testing.T) {
+	f := newHTTPFixture(t)
+	owner := f.login(f.owner, integrationPassword)
+	current := requireSuccess(t, f.request("GET", "/api/admin/config/account_policy", owner, nil, nil))
+	values := object(current["values"])
+	values["min_password_length"], values["min_share_password_length"], values["share_code_length"] = 4, 4, 4
+	requireSuccess(t, f.publish(owner, "account_policy", values, "four-byte-password-policy"))
+	bootstrap := requireSuccess(t, f.request("GET", "/api/site/bootstrap", nil, nil, nil))
+	if number(object(bootstrap["share_password_policy"])["min_length"]) != 4 || number(object(bootstrap["registration"])["min_password_length"]) != 4 {
+		t.Fatal("bootstrap omitted active password lengths")
+	}
+	project, _ := f.privatePage(owner)
+	id := project["id"].(string)
+	base := "/api/web-share/" + id
+	queryPath := "/p/http-private-fixture/index.html?code=1234&view=wide"
+	if response := f.request("GET", queryPath, nil, nil, nil); response.Status != http.StatusNotFound {
+		t.Fatal("query password bypassed private ACL")
+	}
+	requireSuccess(t, f.request("PATCH", base, owner, map[string]interface{}{"access_mode": "public", "container_mode": "raw"}, map[string]string{"If-Match": strconv.FormatInt(number(project["revision"]), 10)}))
+	if response := f.request("PUT", base+"/password", owner, map[string]interface{}{"password": "123", "version": 0}, nil); response.Status != http.StatusBadRequest {
+		t.Fatal("three-byte password accepted")
+	}
+	requireSuccess(t, f.request("PUT", base+"/password", owner, map[string]interface{}{"password": "1234", "version": 0}, nil))
+	unlocked := f.request("POST", base+"/unlock", nil, map[string]interface{}{"password": "1234"}, nil)
+	requireSuccess(t, unlocked)
+	grant := passwordGrantCookie(t, unlocked.Cookies)
+	for _, headers := range []map[string]string{nil, {"Cookie": grant.Name + "=" + grant.Value}, {"Cookie": owner.Cookie.Name + "=" + owner.Cookie.Value}} {
+		page := f.request("GET", queryPath, nil, nil, headers)
+		if page.Status != http.StatusForbidden || !strings.Contains(string(page.Raw), "history.replaceState") || strings.Contains(string(page.Raw), "code=1234") {
+			t.Fatalf("query did not use isolated gate: %d", page.Status)
+		}
+	}
+	values["min_share_password_length"] = 8
+	requireSuccess(t, f.publish(owner, "account_policy", values, "restore-share-password-policy"))
+	requireSuccess(t, f.request("POST", base+"/unlock", nil, map[string]interface{}{"password": "1234"}, nil))
+	if bad := f.request("POST", base+"/unlock", nil, map[string]interface{}{"password": "4321"}, nil); bad.Status != http.StatusForbidden {
+		t.Fatal("incorrect password accepted")
+	}
+}

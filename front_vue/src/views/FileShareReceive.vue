@@ -11,7 +11,7 @@
 
         <form v-if="share.state === 'locked'" class="unlock-form" @submit.prevent="unlock">
           <div class="lock-note"><strong>需要{{ share.secret_mode === 'code' ? '分享码' : '分享密码' }}</strong><p>口令由分享者提供，不是你的账号密码。</p></div>
-          <label><span>{{ share.secret_mode === 'code' ? '6 位分享码' : '分享密码' }}</span><el-input v-model="secret" :aria-label="share.secret_mode === 'code' ? '6 位分享码' : '分享密码'" :maxlength="share.secret_mode === 'code' ? 6 : 72" :show-password="share.secret_mode !== 'code'" type="password" autocomplete="off" size="large" /></label>
+          <label><span>{{ share.secret_mode === 'code' ? '分享码' : '分享密码' }}</span><el-input v-model="secret" :aria-label="share.secret_mode === 'code' ? '分享码' : '分享密码'" :maxlength="share.secret_mode === 'code' ? 12 : 72" :show-password="share.secret_mode !== 'code'" type="password" autocomplete="off" size="large" /></label>
           <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
           <el-button native-type="submit" type="primary" size="large" :loading="unlocking" class="primary-action">解锁文件</el-button>
         </form>

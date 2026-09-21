@@ -107,3 +107,30 @@ func TestStoredSessionPolicyIsReadOnlyAndLegacyRollbackAddsDefault(t *testing.T)
 		t.Fatal("legacy rollback rewrote historical JSON or checksum")
 	}
 }
+
+func TestStoredLegacyPasswordPolicyKeepsOriginalDocument(t *testing.T) {
+	service := New(nil, config.Config{})
+	values := config.DefaultRuntimeValues(config.Config{})["account_policy"]
+	delete(values, "min_share_password_length")
+	delete(values, "share_code_length")
+	raw, _ := json.Marshal(values)
+	hash := sha256.Sum256(raw)
+	row := model.SiteConfigCurrent{Namespace: "account_policy", Revision: 1, SchemaVersion: 1, ValuesJSON: string(raw), ValuesSHA256: hash[:]}
+	actual, err := service.checkedValues(row)
+	if err != nil || actual["min_share_password_length"] != int64(8) || actual["share_code_length"] != int64(6) {
+		t.Fatalf("legacy defaults: %v %v", actual, err)
+	}
+	if row.ValuesJSON != string(raw) || !bytes.Equal(row.ValuesSHA256, hash[:]) {
+		t.Fatal("legacy stored policy changed")
+	}
+	for _, key := range []string{"min_share_password_length", "share_code_length"} {
+		values[key] = 3
+		raw, _ = json.Marshal(values)
+		hash = sha256.Sum256(raw)
+		row.ValuesJSON, row.ValuesSHA256 = string(raw), hash[:]
+		if _, err := service.checkedValues(row); err == nil {
+			t.Fatalf("invalid stored %s accepted", key)
+		}
+		delete(values, key)
+	}
+}

@@ -19,6 +19,7 @@ const store = createStore({
         sessionLoaded: false,
         sessionEpoch: 0,
         site: {title: 'CQ Home Server', notice: ''},
+        sharePasswordPolicy: {min_length: 8, code_length: 6},
         registration: {enabled: false, monthly_limit: 3, ttl_days: 7},
         modules: {manuals: false, file_sharing: false},
         bootstrapLoaded: false,
@@ -35,6 +36,7 @@ const store = createStore({
             localStorage.setItem('isbn', isbn)
         },
         SET_BOOTSTRAP(state, value) {
+            state.sharePasswordPolicy = value.share_password_policy || state.sharePasswordPolicy
             state.site = value.site || state.site
             state.registration = value.registration || state.registration
             state.modules = value.modules || state.modules

@@ -43,3 +43,17 @@ func TestWebDAVPermissionChecksEveryReadAndWriteMethod(t *testing.T) {
 		}
 	}
 }
+
+func TestFourCharacterPasswordPolicy(t *testing.T) {
+	for _, password := range []string{"1234", "四个字符"} {
+		if err := ValidatePassword(password, password, 4); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ValidatePassword("123", "123", 4); err == nil {
+		t.Fatal("three-character password accepted")
+	}
+	if err := ValidatePassword("1234", "1234", 15); err == nil {
+		t.Fatal("default policy was relaxed")
+	}
+}

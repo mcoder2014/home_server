@@ -91,7 +91,7 @@
               <el-tag :type="passwordState.password_protected ? 'success' : 'info'">{{ passwordState.password_protected ? '已启用' : '未设置' }}</el-tag>
             </div>
             <div class="password-fields">
-              <el-form-item label="新的网页阅读密码"><el-input v-model="passwordDraft" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="新的网页阅读密码" placeholder="8～72 个 UTF-8 字节" /></el-form-item>
+              <el-form-item label="新的网页阅读密码"><el-input v-model="passwordDraft" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="新的网页阅读密码" :placeholder="`${sharePasswordMinimum}～72 个 UTF-8 字节`" /></el-form-item>
               <el-form-item label="确认网页阅读密码"><el-input v-model="passwordConfirmation" type="password" show-password maxlength="72" autocomplete="new-password" aria-label="确认网页阅读密码" @keyup.enter="saveProjectPassword" /></el-form-item>
             </div>
             <el-alert v-if="passwordNotice" :title="passwordNotice" :type="passwordNoticeType" :closable="false" show-icon class="form-alert" />
@@ -264,6 +264,7 @@ export default {
     }
   },
   computed: {
+    sharePasswordMinimum() { return this.$store.state.sharePasswordPolicy?.min_length || 8 },
     isCreate() {
       return this.$route.name === 'WebShareCreate'
     },
@@ -335,7 +336,7 @@ export default {
     },
     async saveProjectPassword() {
       if (this.passwordSaving) return
-      const validation = resourcePasswordError(this.passwordDraft, this.passwordConfirmation)
+      const validation = resourcePasswordError(this.passwordDraft, this.passwordConfirmation, this.sharePasswordMinimum)
       if (validation) { this.passwordNotice = validation; this.passwordNoticeType = 'error'; return }
       await this.updateProjectPassword(this.passwordDraft)
     },

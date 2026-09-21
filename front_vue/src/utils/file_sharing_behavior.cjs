@@ -13,31 +13,31 @@ function uploadFileError(file) {
     return ''
 }
 
-function secretError(mode, value) {
+function secretError(mode, value, minimum = 8, codeLength = 6) {
     const secret = String(value || '')
     if (mode === 'none') return ''
-    if (mode === 'code') return /^[A-Za-z0-9]{6}$/.test(secret) ? '' : '分享码必须是 6 位 ASCII 字母或数字，区分大小写'
+    if (mode === 'code') return /^[A-Za-z0-9]+$/.test(secret) && secret.length === codeLength ? '' : `分享码必须是 ${codeLength} 位 ASCII 字母或数字，区分大小写`
     if (mode !== 'password') return '请选择有效的口令方式'
     const bytes = utf8Length(secret)
-    return bytes >= 8 && bytes <= 72 ? '' : '登录分享密码必须为 8～72 个 UTF-8 字节'
+    return bytes >= minimum && bytes <= 72 ? '' : `登录分享密码必须为 ${minimum}～72 个 UTF-8 字节`
 }
 
-function resourcePasswordError(password, confirmation) {
+function resourcePasswordError(password, confirmation, minimum = 8) {
     const bytes = utf8Length(password)
-    if (bytes < 8 || bytes > 72) return '阅读密码必须为 8～72 个 UTF-8 字节'
+    if (bytes < minimum || bytes > 72) return `阅读密码必须为 ${minimum}～72 个 UTF-8 字节`
     if (password !== confirmation) return '两次输入的阅读密码不一致'
     return ''
 }
 
-function randomShareCode(fillRandom = array => crypto.getRandomValues(array)) {
+function randomShareCode(fillRandom = array => crypto.getRandomValues(array), length = 6) {
     let code = ''
-    while (code.length < 6) {
+    while (code.length < length) {
         const bytes = new Uint8Array(12)
         fillRandom(bytes)
         for (const byte of bytes) {
             if (byte >= 248) continue
             code += CODE_CHARACTERS[byte % CODE_CHARACTERS.length]
-            if (code.length === 6) break
+            if (code.length === length) break
         }
     }
     return code
