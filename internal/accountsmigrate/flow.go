@@ -90,6 +90,8 @@ func BuildPlan(ctx context.Context, db *sql.DB, source *Source, opts Options) (*
 	// Preserve the published v1 import document and checksum. The optional
 	// session limit is supplied by runtime reads of legacy account policies.
 	delete(values["account_policy"], "max_active_sessions")
+	delete(values["account_policy"], "min_share_password_length")
+	delete(values["account_policy"], "share_code_length")
 	values["registration"]["enabled"] = false
 	plan := &Plan{Version: 1, Database: opts.Database, SourceSHA256: source.SHA256, BinarySHA256: opts.BinarySHA256, DDLChecksums: opts.DDLChecksums, AliasCount: len(source.Aliases), Grants: source.Grants, RuntimeValues: values}
 	names := map[string]bool{"schema_migration": true}

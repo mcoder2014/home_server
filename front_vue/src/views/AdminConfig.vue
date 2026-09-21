@@ -25,7 +25,7 @@
         <p v-if="namespace === 'registration'" class="danger-note">关闭注册后，不能生成或兑换邀请码，现有未使用邀请码永久失效。重新开启、版本回滚均不会复活旧邀请码；管理员仍可手动添加用户。</p>
         <p v-if="namespace === 'webdav'" class="danger-note">全站开关与个人授权共同生效。WebDAV 使用共享根目录，打开站点能力不会自动授权任何账号。</p>
         <p v-if="namespace === 'library'" class="muted">全站开关与个人授权共同生效，打开站点能力不会自动授予个人藏书权限。</p>
-        <p v-if="namespace === 'account_policy'" class="muted">网站登录上限按有效会话计数，不代表物理设备数。达到上限会拒绝新的登录；降低上限不会主动退出已有会话，超额会话保留至主动退出或过期。</p>
+        <p v-if="namespace === 'account_policy'" class="muted">密码长度仅约束新建或修改密码，已有密码和分享码仍可使用。账号密码按字符计数，分享密码按 UTF-8 字节计数（ASCII 字符各占 1 字节），上限均受 72 字节限制。网站登录上限按有效会话计数，不代表物理设备数。达到上限会拒绝新的登录；降低上限不会主动退出已有会话，超额会话保留至主动退出或过期。</p>
         <div class="action-row"><el-button type="primary" native-type="submit" :loading="validating" :disabled="!dirty || conflict || saving">校验并查看差异</el-button><el-button :disabled="!dirty || saving" @click="resetDraft">撤销草稿</el-button></div>
       </el-form>
     </section>
@@ -106,9 +106,11 @@ export default {
       this.validating = true; this.historyError = ''
       try {
         const candidate = {...record.values}
-        if (this.namespace === 'account_policy' && !Object.prototype.hasOwnProperty.call(candidate, 'max_active_sessions')) {
-          const field = this.schema.fields.find(field => field.key === 'max_active_sessions')
-          if (field) candidate.max_active_sessions = field.default_value
+        if (this.namespace === 'account_policy') {
+          for (const key of ['max_active_sessions', 'min_share_password_length', 'share_code_length']) {
+            const field = this.schema.fields.find(field => field.key === key)
+            if (field && !Object.prototype.hasOwnProperty.call(candidate, key)) candidate[key] = field.default_value
+          }
         }
         const values = configValues(this.schema, candidate)
         this.validation = await accountsApi.validateConfig(this.namespace, values)

@@ -86,7 +86,9 @@ func Registry(conf Config) []NamespaceSchema {
 		{"account_policy", "session_ttl_seconds", "用户会话有效期", "秒", 300, 2592000, 604800},
 		{"account_policy", "max_active_sessions", "每个账号同时有效的网站登录上限", "个会话", 1, 100, 5},
 		{"account_policy", "temporary_password_ttl_days", "临时密码有效期", "天", 1, 30, 7},
-		{"account_policy", "min_password_length", "密码最少字符数", "字符", 15, 64, 15},
+		{"account_policy", "min_password_length", "账号密码最少字符数", "字符", 4, 64, 15},
+		{"account_policy", "min_share_password_length", "网页、说明书与文件分享密码最少字节数", "UTF-8 字节", 4, 72, 8},
+		{"account_policy", "share_code_length", "公开文件分享码长度", "位", 4, 12, 6},
 		{"account_policy", "bcrypt_cost", "密码哈希成本", "", 10, 14, 12},
 	} {
 		min, max := limit.min, limit.max

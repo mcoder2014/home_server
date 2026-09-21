@@ -19,7 +19,7 @@ var requestIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 var invitationLocation = time.FixedZone("Asia/Singapore", 8*60*60)
 
 func ValidatePassword(password, confirmation string, minimum int) error {
-	if minimum < 15 {
+	if minimum < 4 {
 		minimum = 15
 	}
 	if !utf8.ValidString(password) || utf8.RuneCountInString(password) < minimum || len(password) > 72 || strings.ContainsRune(password, '\x00') {

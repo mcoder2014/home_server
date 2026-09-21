@@ -1,6 +1,7 @@
 package fileshare
 
 import (
+	"github.com/mcoder2014/home_server/config"
 	"strings"
 	"testing"
 	"time"
@@ -79,3 +80,31 @@ func TestPublicStateSeparatesLoginAndSecretWithoutLeakingMembership(t *testing.T
 }
 
 func timePointer(value time.Time) *time.Time { return &value }
+
+func TestFourByteFileShareSecrets(t *testing.T) {
+	original := config.Runtime()
+	t.Cleanup(func() {
+		if err := config.StoreRuntimeSnapshot(original); err != nil {
+			t.Fatal(err)
+		}
+	})
+	policy := original
+	policy.AccountPolicy.MinSharePasswordLength = 4
+	policy.AccountPolicy.ShareCodeLength = 4
+	if err := config.StoreRuntimeSnapshot(policy); err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []CreateShareInput{
+		{AccessMode: "public", SecretMode: "code", Secret: "aB12"},
+		{AccessMode: "public", SecretMode: "code"},
+		{AccessMode: "authenticated", SecretMode: "password", Secret: "1234"},
+	} {
+		result, err := NormalizeShareInput(input, strings.NewReader("synthetic-random"), time.Now())
+		if err != nil || len(result.Secret) != 4 {
+			t.Fatalf("four-byte secret failed: %v %v", result, err)
+		}
+	}
+	if _, err := NormalizeShareInput(CreateShareInput{AccessMode: "authenticated", SecretMode: "password", Secret: "123"}, nil, time.Now()); err == nil {
+		t.Fatal("three-byte password accepted")
+	}
+}

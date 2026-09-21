@@ -156,10 +156,12 @@ func (s *Service) checkedValues(row model.SiteConfigCurrent) (map[string]interfa
 	if err != nil {
 		return nil, appErrors.ErrDependency
 	}
-	// Published v1 account policies omit this additive key; preserve their original JSON and checksum.
+	// Published v1 policies may omit additive keys; preserve their original JSON and checksum.
 	if row.Namespace == "account_policy" && values != nil {
-		if _, exists := values["max_active_sessions"]; !exists {
-			values["max_active_sessions"] = 5
+		for key, fallback := range map[string]int{"max_active_sessions": 5, "min_share_password_length": 8, "share_code_length": 6} {
+			if _, exists := values[key]; !exists {
+				values[key] = fallback
+			}
 		}
 	}
 	normalized, err := config.ValidateValues(s.bootstrap, row.Namespace, values)

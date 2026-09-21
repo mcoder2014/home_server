@@ -215,7 +215,7 @@ test('收件页在1440与320展示通用口令门禁，解锁后连点只发送�
         await page.setViewportSize({width: 320, height: 820})
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
         await page.screenshot({path: path.join(visualOutput, 'file-receive-password-mobile-320.png'), fullPage: true})
-        await page.getByLabel('6 位分享码').fill('aB09zZ')
+        await page.getByLabel('分享码', {exact: true}).fill('aB09zZ')
         await page.getByRole('button', {name: '解锁文件', exact: true}).click()
         await page.getByRole('button', {name: '下载文件', exact: true}).waitFor()
         const downloadPromise = page.waitForEvent('download')

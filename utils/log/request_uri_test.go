@@ -22,3 +22,12 @@ func TestTokenEndpointHidesEveryQueryField(t *testing.T) {
 	require.NotContains(t, RedactedURI("/p/at_cq_synthetic/"), "at_cq_synthetic")
 	require.Equal(t, "/api/file-shares/[redacted]/download", RedactedURI("/api/file-shares/unguessable-share-token/download"))
 }
+
+func TestWebpageQueryPasswordRedacted(t *testing.T) {
+	for _, uri := range []string{"/p/report/?code=1234&view=wide", "/p/report/?%63ode=1234&code=5678&view=wide", "/p/report/?CODE=1234&view=wide"} {
+		result := RedactedURI(uri)
+		require.NotContains(t, result, "1234")
+		require.NotContains(t, result, "5678")
+		require.Contains(t, result, "view=wide")
+	}
+}

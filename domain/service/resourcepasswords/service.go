@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/dal"
 	"github.com/mcoder2014/home_server/domain/db"
 	"github.com/mcoder2014/home_server/domain/model"
@@ -95,7 +96,7 @@ func ValidateManagedPassword(password string) error {
 	if password == "" {
 		return nil
 	}
-	if !utf8.ValidString(password) || len([]byte(password)) < 8 || len([]byte(password)) > 72 {
+	if !utf8.ValidString(password) || len([]byte(password)) < config.Runtime().AccountPolicy.MinSharePasswordLength || len([]byte(password)) > 72 {
 		return apperrors.ErrInvalid
 	}
 	return nil

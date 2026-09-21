@@ -23,7 +23,7 @@ function routeDecision(route, user, modules = {}) {
 }
 
 function passwordError(password, confirmation, minimum = 15) {
-    minimum = Math.max(15, minimum)
+    minimum = Math.max(4, minimum)
     if ((password || '').includes('\u0000')) return '密码包含无效字符'
     if (Array.from(password || '').length < minimum) return `密码至少需要 ${minimum} 个字符，允许空格和粘贴`
     if (new TextEncoder().encode(password).length > 72) return '密码不能超过 72 个 UTF-8 字节（中文通常占 3 字节）'
