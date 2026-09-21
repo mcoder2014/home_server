@@ -29,7 +29,7 @@ function gate(query, responseStatus = 200) {
     const requests = [], redirects = [], nodes = {unlock: {addEventListener(_, fn) { this.submit = fn }}, password: {value: ''}, submit: {}, error: {}}
     const context = vm.createContext({URL, document: {getElementById: id => nodes[id]},
         history: {state: {keep: true}, replaceState(state, _, value) { assert.equal(state.keep, true); href = new URL(value, href).href }},
-        location: {get href() { return href }, replace(value) { redirects.push(value) }},
+        location: {get href() { return href }, reload() { const url = new URL(href); redirects.push(url.pathname + url.search + url.hash) }},
         fetch: async (url, options) => { requests.push({url, options, href}); return {ok: responseStatus === 200, status: responseStatus} },
     })
     scripts.forEach(script => vm.runInContext(script, context))
