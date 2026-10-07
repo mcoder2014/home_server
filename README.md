@@ -15,6 +15,7 @@
 - 家庭图书管理能力: 以 isbn 为基础，快速管理家庭中的纸质书及电子书；
 - WebDAV: 使用同一套账号体系，通过 WebDAV 协议实现外部文档访问，地址为 [https://www.server.com:port/webdav](https://www.server.com:port/webdav)；
 - 网页托管：动态管理 HTML 文档和纯前端工具，通过同域 `/p/{slug}/` 访问，由服务端控制公开或指定账号可见。
+- home virtual sub：管理员在管理中心查看、增改删订阅配置，查看运行状态及刷新、启停订阅。默认关闭，部署及接口约定见 [管理说明](docs/specs/home-virtual-sub/design.md)。
 
 ## 安装说明
 

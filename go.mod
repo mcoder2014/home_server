@@ -14,6 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/sirupsen/logrus v1.9.0
+	github.com/smartystreets/goconvey v1.6.4
 	github.com/stretchr/testify v1.8.0
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
@@ -22,6 +23,12 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.3.3
 	gorm.io/gorm v1.23.5
+)
+
+require (
+	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
+	github.com/jtolds/gls v4.20.0+incompatible // indirect
+	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
 )
 
 require (

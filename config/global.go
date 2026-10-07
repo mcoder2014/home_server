@@ -7,12 +7,13 @@ import (
 )
 
 type Config struct {
-	Redis                RedisConfig     `json:"-" yaml:"redis"`
-	Cache                CacheConfig     `json:"-" yaml:"cache"`
-	Analytics            AnalyticsConfig `json:"-" yaml:"analytics"`
-	IdentitySource       string          `json:"identity_source" yaml:"identity_source"`
-	ConfigSource         string          `json:"config_source" yaml:"config_source"`
-	UploadHardLimitBytes int64           `json:"upload_hard_limit_bytes" yaml:"upload_hard_limit_bytes"`
+	Redis                RedisConfig          `json:"-" yaml:"redis"`
+	Cache                CacheConfig          `json:"-" yaml:"cache"`
+	Analytics            AnalyticsConfig      `json:"-" yaml:"analytics"`
+	HomeVirtualSub       HomeVirtualSubConfig `json:"-" yaml:"home_virtual_sub"`
+	IdentitySource       string               `json:"identity_source" yaml:"identity_source"`
+	ConfigSource         string               `json:"config_source" yaml:"config_source"`
+	UploadHardLimitBytes int64                `json:"upload_hard_limit_bytes" yaml:"upload_hard_limit_bytes"`
 	// 服务相关配置
 	Server struct {
 		// http 服务端口号
@@ -167,6 +168,9 @@ func InitGlobalConfig(filepath string) error {
 		return err
 	}
 	if err := NormalizeInfrastructure(&loaded); err != nil {
+		return err
+	}
+	if err := NormalizeHomeVirtualSub(&loaded.HomeVirtualSub); err != nil {
 		return err
 	}
 	SetGlobalConfig(loaded)

@@ -29,6 +29,7 @@ const routes = [
         {path: 'users', component: () => import('@/views/AdminUsers.vue'), meta: {title: '用户管理'}},
         {path: 'web-share', component: () => import('@/views/AdminProjects.vue'), meta: {title: '网页审核'}},
         {path: 'config', component: () => import('@/views/AdminConfig.vue'), meta: {title: '站点设置'}},
+		{path: 'home-virtual-sub', component: () => import('@/views/AdminHomeVirtualSub.vue'), meta: {title: 'home virtual sub'}},
         {path: 'audit-logs', component: () => import('@/views/AdminAudit.vue'), meta: {title: '操作记录'}},
     ]},
     {

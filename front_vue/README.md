@@ -14,6 +14,7 @@ Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，�
 | `/admin/users` | 搜索用户、有效会话统计与详情；创建、封禁、恢复、删除、重置密码、昵称／头像、退出全部会话；管理员、藏书和 WebDAV 授权 | `/api/admin/users`、`/:id`、`/:id/sessions`、`/:id/reset-profile` 及原管理动作 |
 | `/admin/web-share` | 按所有者、名称、发布状态、可见范围和审核状态筛选全站网页；版本预览、下架、删除、恢复、解除审核锁 | `/api/admin/web-share`、`/:id`、`/:id/:action`、管理员版本预览路径 |
 | `/admin/config` | 根据 schema 生成分组表单；校验、查看差异、发布、查看历史、回滚、检查运行生效状态 | `/api/admin/config/schema`、`config`、`status`、`/:namespace`、`validate`、`history`、`rollback` |
+| `/admin/home-virtual-sub` | 查看订阅和运行状态；新增、编辑、删除、刷新和启停订阅 | `/api/admin/home-virtual-sub/status`、`subscriptions`、`subscriptions/detail`、`subscriptions/refresh`、`start`、`stop` |
 | `/admin/audit-logs` | 按目标类型与数字 ID 查询操作记录及脱敏变化 | `/api/admin/audit-logs` |
 
 原 `/applications`、`/web-share`、`/web-projects` 兼容入口、图书与扫码页面保留。网页托管与应用管理请求也使用 Cookie 和 CSRF；应用 scope 选择器包含网页托管、网页评论、藏书和 WebDAV 权限，并按当前用户能力限制可授予范围。网页编辑页可在增强容器与原始页面之间切换；新项目默认增强，旧项目缺少字段时按原始页面显示。应用有效期表单读取 `/me.application_policy` 的默认值及上限，随当前站点策略变化。应用统计区分有效与未吊销数量，网页统计区分发布与未删除数量。
@@ -35,6 +36,8 @@ Vue 3 与 Element Plus 页面。浏览器使用同源 HttpOnly Cookie 登录，�
 “站点设置 → 账号策略 → 每个账号同时有效的网站登录上限”默认 5，允许 1–100 个网站会话，普通与受限改密会话均占名额。达到上限保留已有登录并拒绝新登录；调低上限不会自动退出旧会话。登录管理显示有效数量和网站上限。应用凭证、Basic 和同一 Token 的 Cookie 兑换不占名额。
 
 ## 动态配置表单
+
+home virtual sub 的连接由部署配置启用，凭证保存在后端。订阅列表不包含 URL；打开编辑窗口后读取地址，关闭时清除草稿。所有写操作要求原因、当前密码和配置版本。每 5 秒读取运行状态，页面隐藏时暂停，断连立即清除在线状态；配置轮询不覆盖编辑草稿。版本冲突需重新读取并确认，写请求超时后核对配置和状态，不自动重发。停止是临时操作，服务重启后恢复原有启动规则。
 
 配置字段由服务端 schema 定义。布尔值使用开关、整数使用带范围的输入框、文本使用普通文本表单；固定邀请规则只读且不进入发布请求。发布前显示字段差异和生效影响，回滚创建新版本。数据库中已保存的版本与运行中已加载的版本分别展示，页面每 15 秒刷新运行状态。
 
