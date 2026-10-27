@@ -18,6 +18,7 @@ function responseError(response) {
     const error = new Error(body.message || body.msg || statusMessage)
     error.code = body.code
     error.status = response && response.status
+    error.data = body.data
     return error
 }
 

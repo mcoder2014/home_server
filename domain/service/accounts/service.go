@@ -23,6 +23,7 @@ import (
 )
 
 var ErrCredentials = apperrors.WithMessage(apperrors.ErrUnauthorized, "账号或密码错误")
+var ErrSessionLimit = apperrors.WithMessage(apperrors.ErrRateLimited, "有效登录会话已达到网站上限，请从已登录设备退出其他登录或联系管理员")
 
 func DatabaseMode() bool {
 	return config.Global().IdentitySource == "database"
@@ -155,6 +156,7 @@ func Login(ctx context.Context, key, password string, metadata ...SessionMetadat
 	info := NewSessionMetadata("", "", "unknown")
 	if len(metadata) > 0 {
 		info = NewSessionMetadata(metadata[0].LoginIP, metadata[0].UserAgent, metadata[0].LoginSource)
+		info.ReplaceOldestSession = metadata[0].ReplaceOldestSession
 	}
 	// 锁定账号后确认凭据快照仍有效，必要时升级 bcrypt 成本，再原子写入新会话。
 	err = database.Transaction(func(tx *gorm.DB) error {
@@ -183,7 +185,8 @@ func Login(ctx context.Context, key, password string, metadata ...SessionMetadat
 }
 
 // issueSessionTx requires the user row lock. It checks the effective-session
-// limit with a current locking read before issuing a token or changing login time.
+// limit with a current locking read. An explicit replacement revokes the oldest
+// excess sessions in this same transaction before issuing the new token.
 // Temporary passwords only receive ten-minute password-change sessions.
 func issueSessionTx(tx *gorm.DB, user *model.UserAccount, metadata SessionMetadata) (string, *model.AccountSession, error) {
 	policy := config.Runtime().AccountPolicy
@@ -194,15 +197,32 @@ func issueSessionTx(tx *gorm.DB, user *model.UserAccount, metadata SessionMetada
 	var active []struct{ ID int64 }
 	// A locking read sees sessions committed while this transaction waited for
 	// the user lock, even if an earlier consistent read established a snapshot.
-	err := activeSessionQuery(tx, now).Select("s.id").
+	query := activeSessionQuery(tx, now).Select("s.id").
 		Where("s.user_id = ? AND s.auth_version = ?", user.ID, user.AuthVersion).
-		Limit(policy.MaxActiveSessions).
-		Clauses(clause.Locking{Strength: "UPDATE"}).Find(&active).Error
+		Clauses(clause.Locking{Strength: "UPDATE"})
+	if !metadata.ReplaceOldestSession {
+		query = query.Limit(policy.MaxActiveSessions)
+	} else {
+		query = query.Order("s.create_time ASC, s.id ASC")
+	}
+	err := query.Find(&active).Error
 	if err != nil {
 		return "", nil, err
 	}
 	if len(active) >= policy.MaxActiveSessions {
-		return "", nil, apperrors.WithMessage(apperrors.ErrRateLimited, "有效登录会话已达到网站上限，请从已登录设备退出其他登录或联系管理员")
+		if !metadata.ReplaceOldestSession {
+			return "", nil, ErrSessionLimit
+		}
+		// A lowered policy can require more than one revocation. Keep the newest
+		// limit-1 sessions so the replacement also fits the current policy.
+		ids := make([]int64, len(active)-policy.MaxActiveSessions+1)
+		for i := range ids {
+			ids[i] = active[i].ID
+		}
+		if err := tx.Table(dal.TableUserToken).Where("user_id = ? AND id IN ?", user.ID, ids).
+			Updates(map[string]interface{}{"is_expired": 1, "update_time": now}).Error; err != nil {
+			return "", nil, err
+		}
 	}
 	token, err := randomSecret("us_cq_", 32)
 	if err != nil {

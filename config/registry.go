@@ -76,7 +76,7 @@ func Registry(conf Config) []NamespaceSchema {
 		{"web_projects", "max_file_count", "单次文件数量上限", "个", 1, 100000, 5000},
 		{"web_projects", "max_directory_depth", "目录深度上限", "层", 1, 64, 16},
 		{"web_projects", "max_project_bytes", "单项目体积上限", "bytes", 1, 1 << 40, int64(1 << 30)},
-		{"web_projects", "max_projects_per_user", "每人可用项目数量", "个", 1, 100, 10},
+		{"web_projects", "max_projects_per_user", "每人可用项目数量", "个", 1, 100000, 100000},
 		{"web_projects", "max_user_bytes", "每人网页存储上限", "bytes", 1, 1 << 40, int64(10 << 30)},
 		{"web_projects", "min_free_disk_bytes", "网页磁盘保留空间", "bytes", 1 << 30, 1 << 40, int64(20 << 30)},
 		{"web_projects", "max_releases", "保留版本数量", "个", 1, 1000, 10},

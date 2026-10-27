@@ -19,6 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestManualCountDefaultAndExplicitLimit(t *testing.T) {
+	for _, limit := range []int{0, 30, 100000} {
+		conf := config.ManualsConfig{MaxManualsPerUser: limit}
+		require.NoError(t, Init(&conf, "", ""))
+		if limit == 0 {
+			require.Equal(t, 100000, conf.MaxManualsPerUser)
+		} else {
+			require.Equal(t, limit, conf.MaxManualsPerUser)
+		}
+	}
+}
+
 func TestValidateManualFieldsUsesDocumentedCharacterLimits(t *testing.T) {
 	name, description, access, err := ValidateManualFields(strings.Repeat("说", 120), strings.Repeat("明", 2000), "")
 	require.NoError(t, err)

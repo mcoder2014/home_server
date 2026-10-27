@@ -164,6 +164,9 @@ func TestV1ImportChecksumSurvivesNewSessionPolicy(t *testing.T) {
 	if plan.ImportSHA256 != original {
 		t.Fatalf("published v1 import changed: got %s, want %s", plan.ImportSHA256, original)
 	}
+	if plan.RuntimeValues["web_projects"]["max_projects_per_user"] != int64(10) {
+		t.Fatal("v1 import must retain its original project count default")
+	}
 	if _, ok := plan.RuntimeValues["account_policy"]["max_active_sessions"]; ok {
 		t.Fatal("v1 import contains a later runtime policy")
 	}

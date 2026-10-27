@@ -28,6 +28,7 @@
             v-model="ruleForm.username"
             placeholder="请输入用户名"
             autocomplete="username"
+            :disabled="loading"
             :prefix-icon="User"
             size="large"
           />
@@ -38,6 +39,7 @@
             v-model="ruleForm.password"
             placeholder="请输入密码"
             autocomplete="current-password"
+            :disabled="loading"
             :prefix-icon="Lock"
             show-password
             size="large"
@@ -90,7 +92,21 @@ export default {
       this.loading = true
       this.error = ''
       try {
-        const user = await accountsApi.login({user_name: this.ruleForm.username, password: this.ruleForm.password})
+        const credentials = {user_name: this.ruleForm.username, password: this.ruleForm.password}
+        let user
+        try { user = await accountsApi.login(credentials) }
+        catch (error) {
+          if (error.status !== 429 || error.data?.can_replace_oldest_session !== true) throw error
+          this.error = error.message
+          try {
+            await this.$confirm('有效登录会话已达到网站上限。继续后将退出最早登录的会话（对应浏览器或设备）；若已超过当前上限，将按登录时间退出足够数量的旧会话。', '登录数量已达上限', {confirmButtonText: '退出最早登录并继续', cancelButtonText: '取消', type: 'warning'})
+          } catch (action) {
+            if (action === 'cancel' || action === 'close') return
+            throw action
+          }
+          this.error = ''
+          user = await accountsApi.login({...credentials, replace_oldest_session: true})
+        }
         this.$store.commit('SET_USERINFO', user)
         this.ruleForm.password = ''
         if (user.must_change_password) { await this.$router.replace('/account/security'); return }

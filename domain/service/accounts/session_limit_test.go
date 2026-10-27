@@ -246,3 +246,48 @@ func TestSessionLimitInvalidRuntimeFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionReplacementUsesOnlyEffectiveRowsInLoginOrder(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(strconv.FormatBool(full), func(t *testing.T) {
+			database := sessionLimitDatabase(t)
+			setSessionLimit(t, 3)
+			now := time.Now().UTC().Truncate(time.Second)
+			sessionTestInsert(t, database, 9901, 8101, model.SessionUser, now.Add(-time.Minute), now.Add(time.Hour))
+			if full {
+				// The smaller ID is newer; tied older timestamps must use ID order.
+				sessionTestInsert(t, database, 9902, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+				sessionTestInsert(t, database, 9903, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+			}
+			sessionTestInsert(t, database, 9910, 8102, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+			sessionTestInsert(t, database, 9911, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(-time.Second))
+			sessionTestInsert(t, database, 9912, 8101, "unknown_purpose", now.Add(-time.Hour), now.Add(time.Hour))
+			for id, fields := range map[int64]map[string]interface{}{9913: {"auth_version": 0}, 9914: {"token_digest": nil}, 9915: {"is_expired": 1}} {
+				sessionTestInsert(t, database, id, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+				if err := database.Table(dal.TableUserToken).Where("id = ?", id).Updates(fields).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, token, _, err := Login(context.Background(), "session8101", reviewPassword, SessionMetadata{ReplaceOldestSession: true})
+			if err != nil || token == "" {
+				t.Fatal("explicit replacement login failed:", err)
+			}
+			var rows []struct {
+				ID        int64
+				IsExpired int
+			}
+			if err := database.Table(dal.TableUserToken).Select("id,is_expired").Where("id BETWEEN ? AND ?", 9901, 9915).Find(&rows).Error; err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range rows {
+				expected := 0
+				if row.ID == 9915 || full && row.ID == 9902 {
+					expected = 1
+				}
+				if row.IsExpired != expected {
+					t.Fatalf("replacement touched the wrong history or user: id=%d expired=%d want=%d", row.ID, row.IsExpired, expected)
+				}
+			}
+		})
+	}
+}
