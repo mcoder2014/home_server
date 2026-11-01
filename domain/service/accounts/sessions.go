@@ -26,11 +26,10 @@ import (
 
 const SessionWarningThreshold = 10
 
-// SessionMetadata describes issuance and the user's explicit replacement choice.
+// SessionMetadata describes issuance, never the device presenting a token later.
 // Client values are display hints, never authentication or a device identity.
 type SessionMetadata struct {
 	LoginIP, UserAgent, ClientName, OSName, DeviceType, LoginSource string
-	ReplaceOldestSession                                            bool
 }
 
 // NewSessionMetadata parses a bounded UTF-8 UA using the pinned parser. Unknown

@@ -133,36 +133,22 @@ test('登录页在320下无水平溢出并生成截图', async () => {
     } finally { await context.close() }
 })
 
-test('满额登录取消不重试，确认后才请求替换旧会话', async () => {
+test('登录成功后直接进入页面，不提供替换会话配置或二次确认', async () => {
     const {page, context} = await setup('/login', 320)
     const requests = []
     try {
         await page.route('**/api/auth/login', async route => {
             const data = route.request().postDataJSON()
             requests.push(data)
-            if (data.replace_oldest_session !== true) {
-                await route.fulfill({status: 429, json: {code: 429, message: '有效登录会话已达到网站上限', data: {can_replace_oldest_session: true}}})
-            } else {
-                await route.fulfill({json: {code: 0, data: {id: '42', role: 'user', csrf_token: 'replacement-csrf'}}})
-            }
+            await route.fulfill({json: {code: 0, data: {id: '42', role: 'user', csrf_token: 'replacement-csrf'}}})
         })
         await page.getByPlaceholder('请输入用户名').fill('friend')
         await page.getByPlaceholder('请输入密码').fill('test-password')
         await page.getByRole('button', {name: '登录', exact: true}).click()
-        const dialog = page.getByRole('dialog')
-        await dialog.getByText('登录数量已达上限', {exact: true}).waitFor()
-        assert.equal(requests.length, 1)
-        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
-        await dialog.getByRole('button', {name: '取消', exact: true}).click()
-        await dialog.waitFor({state: 'hidden'})
-        assert.equal(requests.length, 1)
-        assert.equal(await page.evaluate(() => window.fixtureStore.state.userInfo), null)
-        await page.getByRole('button', {name: '登录', exact: true}).click()
-        await dialog.getByRole('button', {name: '退出最早登录并继续', exact: true}).click()
         await page.waitForFunction(() => window.fixtureStore.state.userInfo?.id === '42')
-        assert.equal(requests.length, 3)
+        assert.equal(requests.length, 1)
+        assert.equal(await page.getByRole('dialog').count(), 0)
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
         assert.equal(requests[0].replace_oldest_session, undefined)
-        assert.equal(requests[1].replace_oldest_session, undefined)
-        assert.equal(requests[2].replace_oldest_session, true)
     } finally { await context.close() }
 })

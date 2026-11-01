@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestHTTPLoginReplacementRequiresConsentAndRemovesOldestSessions(t *testing.T) {
+func TestHTTPLoginReplacementDefaultsToRemovingOldestSessions(t *testing.T) {
 	for _, limit := range []int{5, 2} {
 		t.Run(strconv.Itoa(limit), func(t *testing.T) {
 			f := newSessionLimitHTTPFixture(t)
@@ -29,11 +29,6 @@ func TestHTTPLoginReplacementRequiresConsentAndRemovesOldestSessions(t *testing.
 				requireSuccess(t, f.publish(admin, "account_policy", values, "lower-session-replacement-limit"))
 			}
 			input := map[string]interface{}{"user_name": f.member, "password": integrationPassword}
-			denied := f.request("POST", "/api/auth/login", nil, input, nil)
-			if denied.Status != http.StatusTooManyRequests || denied.Data["can_replace_oldest_session"] != true || len(denied.Cookies) != 0 {
-				t.Fatalf("full login must offer replacement without issuing credentials: status=%d data=%v", denied.Status, denied.Data)
-			}
-			input["replace_oldest_session"] = true
 			input["password"] = "incorrect-password"
 			wrong := f.request("POST", "/api/auth/login", nil, input, nil)
 			requireDenied(t, wrong)
@@ -76,6 +71,33 @@ func TestHTTPLoginReplacementRequiresConsentAndRemovesOldestSessions(t *testing.
 	}
 }
 
+func TestHTTPLoginLegacyReplacementParameterDoesNotControlPolicy(t *testing.T) {
+	f := newSessionLimitHTTPFixture(t)
+	old := make([]*browserSession, 5)
+	for i := range old {
+		old[i] = f.login(f.member, integrationPassword)
+	}
+	for i, value := range []bool{false, true} {
+		response := f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": f.member, "password": integrationPassword, "replace_oldest_session": value}, nil)
+		requireSuccess(t, response)
+		var issued *http.Cookie
+		for _, cookie := range response.Cookies {
+			if cookie.MaxAge > 0 {
+				issued = cookie
+			}
+		}
+		if issued == nil {
+			t.Fatal("legacy request did not establish a browser session")
+		}
+		f.me(&browserSession{Cookie: issued})
+		requireDenied(t, f.request("GET", "/api/auth/me", old[i], nil, nil))
+		var active int
+		if err := f.database.QueryRow("SELECT COUNT(*) FROM login_token WHERE is_expired=0").Scan(&active); err != nil || active != 5 {
+			t.Fatalf("legacy parameter changed the fixed replacement policy: active=%d error=%v", active, err)
+		}
+	}
+}
+
 func TestHTTPLoginReplacementRollsBackWhenIssuanceFails(t *testing.T) {
 	f := newSessionLimitHTTPFixture(t)
 	old := make([]*browserSession, 5)
@@ -90,7 +112,7 @@ func TestHTTPLoginReplacementRollsBackWhenIssuanceFails(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	response := f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": f.member, "password": integrationPassword, "replace_oldest_session": true}, nil)
+	response := f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": f.member, "password": integrationPassword}, nil)
 	if response.Status != http.StatusServiceUnavailable || len(response.Cookies) != 0 {
 		t.Fatalf("failed issuance must not create a browser session: status=%d", response.Status)
 	}
@@ -109,7 +131,7 @@ func TestHTTPConcurrentLoginReplacementKeepsSessionCap(t *testing.T) {
 	for i := 0; i < cap(results); i++ {
 		go func() {
 			<-start
-			results <- f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": f.member, "password": integrationPassword, "replace_oldest_session": true}, nil)
+			results <- f.request("POST", "/api/auth/login", nil, map[string]interface{}{"user_name": f.member, "password": integrationPassword}, nil)
 		}()
 	}
 	close(start)

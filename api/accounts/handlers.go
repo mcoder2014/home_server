@@ -120,9 +120,9 @@ func view(user *model.UserAccount, token string) accountView {
 // 数据库模式交由账号服务签发受版本约束的会话；配置模式保留旧用户和令牌兼容。
 func login(c *gin.Context) {
 	var input struct {
-		UserName             string `json:"user_name"`
-		Password             string `json:"password"`
-		ReplaceOldestSession bool   `json:"replace_oldest_session"`
+		UserName          string `json:"user_name"`
+		Password          string `json:"password"`
+		LegacyReplacement bool   `json:"replace_oldest_session"` // 兼容已上线旧请求，仅解析，不控制登录策略。
 	}
 	if !bind(c, &input, 16<<10) {
 		return
@@ -131,15 +131,7 @@ func login(c *gin.Context) {
 	ctx := ginfmt.RPCContext(c)
 	if accountservice.DatabaseMode() {
 		metadata := accountservice.NewSessionMetadata(middleware.TrustedClientIP(c.Request), c.Request.UserAgent(), "web")
-		metadata.ReplaceOldestSession = input.ReplaceOldestSession
 		user, token, session, err := accountservice.Login(ctx, input.UserName, input.Password, metadata)
-		if err == accountservice.ErrSessionLimit {
-			response := ginfmt.NewErrorResponse(int(apperrors.ErrRateLimited.Code), err.Error())
-			response.Data = gin.H{"can_replace_oldest_session": true}
-			c.Header("Cache-Control", "no-store")
-			c.JSON(http.StatusTooManyRequests, response)
-			return
-		}
 		if err != nil {
 			respond(c, nil, err)
 			return

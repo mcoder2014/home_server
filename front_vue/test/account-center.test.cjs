@@ -34,26 +34,23 @@ function component(file, api = {}, props = {}, globals = {}) {
     return {view, definition, commits, confirmations}
 }
 
-test('full login retries replacement only after explicit confirmation', async () => {
+test('login submits credentials once without a replacement option', async () => {
     const calls = []
     const {view, confirmations, commits} = component('views/Login.vue', {login: async data => {
         calls.push({...data})
-        if (calls.length === 1) throw Object.assign(new Error('有效登录会话已达到网站上限'), {status: 429, data: {can_replace_oldest_session: true}})
         return {id: '42'}
     }}, {$refs: {ruleForm: {validate: async () => true}}}, {URLSearchParams})
     view.ruleForm = {username: 'friend', password: 'test-password'}
     await view.submitForm()
-    assert.equal(confirmations.length, 1)
-    assert.match(confirmations[0][0], /最早/)
-    assert.equal(calls.length, 2)
+    assert.equal(confirmations.length, 0)
+    assert.equal(calls.length, 1)
     assert.equal(calls[0].replace_oldest_session, undefined)
-    assert.equal(calls[1].replace_oldest_session, true)
     assert.equal(commits.length, 1)
     assert.equal(view.ruleForm.password, '')
     assert.equal(view.loading, false)
 })
 
-test('cancelled replacement and unrelated rate limits never retry login', async () => {
+test('login errors never offer or retry a configurable session replacement', async () => {
     for (const offer of [true, false]) {
         let calls = 0, confirmations = 0
         const {view, commits} = component('views/Login.vue', {login: async () => {
@@ -63,17 +60,12 @@ test('cancelled replacement and unrelated rate limits never retry login', async 
         view.ruleForm = {username: 'friend', password: 'test-password'}
         await view.submitForm()
         assert.equal(calls, 1)
-        assert.equal(confirmations, offer ? 1 : 0)
+        assert.equal(confirmations, 0)
         assert.equal(commits.length, 0)
         assert.equal(view.ruleForm.password, 'test-password')
         assert.equal(view.error, '登录受限')
         assert.equal(view.loading, false)
     }
-})
-
-test('browser errors preserve the session replacement capability', async () => {
-    const api = createAccountsApi({async request() { return {status: 429, data: {code: 429, message: '登录已满', data: {can_replace_oldest_session: true}}} }})
-    await assert.rejects(api.login({user_name: 'friend', password: 'test-password'}), error => error.status === 429 && error.data?.can_replace_oldest_session === true)
 })
 
 test('empty nickname uses the username and profile patches contain only changed fields', () => {
