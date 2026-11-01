@@ -46,7 +46,7 @@ manuals:
   max_file_bytes: 52428800
   max_items_per_manual: 100
   max_manual_bytes: 524288000
-  max_manuals_per_user: 1000
+  max_manuals_per_user: 100000
   max_user_bytes: 10737418240
   min_free_disk_bytes: 2147483648
   pdftoppm_path: /usr/bin/pdftoppm

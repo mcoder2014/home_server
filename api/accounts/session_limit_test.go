@@ -8,13 +8,11 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"net/http"
-	"strings"
 	"testing"
 
 	passportapi "github.com/mcoder2014/home_server/api/passport"
 	"github.com/mcoder2014/home_server/config"
 	"github.com/mcoder2014/home_server/domain/service/passport"
-	apperrors "github.com/mcoder2014/home_server/errors"
 )
 
 // newSessionLimitHTTPFixture opts into the production default rather than the
@@ -34,30 +32,16 @@ func newSessionLimitHTTPFixture(t *testing.T) *httpFixture {
 	return f
 }
 
-func requireSessionLimitDenied(t *testing.T, response apiResponse, legacy bool) {
-	t.Helper()
-	status := http.StatusTooManyRequests
-	if legacy {
-		status = http.StatusOK
-	}
-	if response.Status != status || response.Code != int(apperrors.ErrorCodeRateLimited) || !strings.Contains(string(response.Raw), "网站上限") || response.Data["token"] != nil {
-		t.Fatalf("full session limit must preserve the response contract and explain how to recover: status=%d code=%d body=%s", response.Status, response.Code, response.Raw)
-	}
-	for _, cookie := range response.Cookies {
-		if cookie.MaxAge > 0 {
-			t.Fatal("a rejected login issued a live browser cookie")
-		}
-	}
-}
-
-func TestHTTPSessionLimitDefaultRejectsSixthAndExemptsApplicationsAndBasic(t *testing.T) {
+func TestHTTPSessionLimitDefaultReplacesSixthAndExemptsApplicationsAndBasic(t *testing.T) {
 	f := newSessionLimitHTTPFixture(t)
 	logins := []*browserSession{}
 	for i := 0; i < 5; i++ {
 		logins = append(logins, f.login(f.member, integrationPassword))
 	}
-	failed := f.request(http.MethodPost, "/api/auth/login", nil, map[string]string{"user_name": f.member, "password": integrationPassword}, nil)
-	requireSessionLimitDenied(t, failed, false)
+	oldest := logins[0]
+	latest := f.login(f.member, integrationPassword)
+	requireDenied(t, f.request(http.MethodGet, "/api/auth/me", oldest, nil, nil))
+	logins = append(logins[1:], latest)
 	for _, login := range logins {
 		f.me(login)
 	}
@@ -91,7 +75,7 @@ func TestHTTPSessionLimitDefaultRejectsSixthAndExemptsApplicationsAndBasic(t *te
 	requireSuccess(t, f.request(http.MethodGet, "/api/web-share", nil, nil, bearer))
 }
 
-func TestHTTPSessionLimitLegacyCannotBypassAndCookieExchangeDoesNotConsumeSlots(t *testing.T) {
+func TestHTTPSessionLimitLegacyReplacesOldestAndCookieExchangeDoesNotConsumeSlots(t *testing.T) {
 	f := newSessionLimitHTTPFixture(t)
 	f.router.POST("/passport/login", passportapi.Login)
 	public, _, err := passport.GetLoginRsa(context.Background())
@@ -116,8 +100,10 @@ func TestHTTPSessionLimitLegacyCannotBypassAndCookieExchangeDoesNotConsumeSlots(
 	for i := 0; i < 4; i++ {
 		f.login(f.member, integrationPassword)
 	}
-	requireSessionLimitDenied(t, f.request(http.MethodPost, "/passport/login", nil, payload, nil), true)
-	requireSessionLimitDenied(t, f.request(http.MethodPost, "/api/auth/login", nil, map[string]string{"user_name": f.member, "password": integrationPassword}, nil), false)
+	legacy = requireSuccess(t, f.request(http.MethodPost, "/passport/login", nil, payload, nil))
+	requireDenied(t, f.request(http.MethodGet, "/api/account/sessions", nil, nil, map[string]string{"passport": token}))
+	token = legacy["token"].(string)
+	f.login(f.member, integrationPassword)
 	page := requireSuccess(t, f.request(http.MethodGet, "/api/account/sessions", nil, nil, map[string]string{"passport": token}))
 	currentID := object(page["current_session"])["id"]
 	for _, path := range []string{"/api/auth/browser-login", "/api/web-share/browser-login", "/api/web-projects/browser-login"} {
@@ -159,7 +145,6 @@ func TestHTTPSessionLimitAdministratorChangesApplyToNextLoginWithoutRevokingOld(
 	for _, login := range logins {
 		f.me(login)
 	}
-	requireSessionLimitDenied(t, f.request(http.MethodPost, "/api/auth/login", nil, map[string]string{"user_name": f.member, "password": integrationPassword}, nil), false)
 	for _, request := range []struct {
 		path    string
 		session *browserSession
@@ -169,10 +154,20 @@ func TestHTTPSessionLimitAdministratorChangesApplyToNextLoginWithoutRevokingOld(
 			t.Fatal("lowered session limit hid or invalidated existing logins")
 		}
 	}
-	result := requireSuccess(t, f.request(http.MethodPost, "/api/account/sessions/revoke-others", logins[0], nil, nil))
-	if number(result["revoked_count"]) != 5 {
+	latest := f.login(f.member, integrationPassword)
+	requireDenied(t, f.request(http.MethodGet, "/api/auth/me", logins[0], nil, nil))
+	page := requireSuccess(t, f.request(http.MethodGet, "/api/account/sessions", latest, nil, nil))
+	if number(page["total_count"]) != 2 {
+		t.Fatal("next login did not replace enough old sessions after lowering the cap")
+	}
+	result := requireSuccess(t, f.request(http.MethodPost, "/api/account/sessions/revoke-others", latest, nil, nil))
+	if number(result["revoked_count"]) != 1 {
 		t.Fatal("could not release slots after lowering the session limit")
 	}
 	f.login(f.member, integrationPassword)
-	requireSessionLimitDenied(t, f.request(http.MethodPost, "/api/auth/login", nil, map[string]string{"user_name": f.member, "password": integrationPassword}, nil), false)
+	latest = f.login(f.member, integrationPassword)
+	page = requireSuccess(t, f.request(http.MethodGet, "/api/account/sessions", latest, nil, nil))
+	if number(page["total_count"]) != 2 {
+		t.Fatal("repeated login exceeded the lowered cap")
+	}
 }

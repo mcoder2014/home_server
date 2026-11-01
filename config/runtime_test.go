@@ -124,9 +124,17 @@ func TestBootstrapChangeInvalidatesPreviousSnapshot(t *testing.T) {
 func TestResourceQuotaSchemaDefaultsAndRelationships(t *testing.T) {
 	conf := Config{}
 	values := DefaultRuntimeValues(conf)["web_projects"]
-	if values["max_projects_per_user"] != 10 || values["max_user_bytes"] != int64(10<<30) || values["min_free_disk_bytes"] != int64(20<<30) {
+	if values["max_projects_per_user"] != 100000 || values["max_user_bytes"] != int64(10<<30) || values["min_free_disk_bytes"] != int64(20<<30) {
 		t.Fatal("resource quota defaults are missing")
 	}
+	for _, limit := range []int{1, 100000, 0, 100001} {
+		values["max_projects_per_user"] = limit
+		_, err := ValidateValues(conf, "web_projects", values)
+		if (err == nil) != (limit >= 1 && limit <= 100000) {
+			t.Fatalf("project count limit %d has unexpected validation result: %v", limit, err)
+		}
+	}
+	values["max_projects_per_user"] = 100000
 	values["max_user_bytes"] = int64(1)
 	if _, err := ValidateValues(conf, "web_projects", values); err == nil {
 		t.Fatal("per-user quota accepted below per-project quota")

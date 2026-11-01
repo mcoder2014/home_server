@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +38,7 @@ func sessionLimitDatabase(t *testing.T) *gorm.DB {
 	return database
 }
 
-func TestSessionLimitDefaultRejectsSixthLoginAndKeepsExistingSessions(t *testing.T) {
+func TestSessionLimitDefaultReplacesOldestForEveryLoginEntry(t *testing.T) {
 	database := sessionLimitDatabase(t)
 	ctx := context.Background()
 	tokens := make([]string, 0, 5)
@@ -51,22 +50,32 @@ func TestSessionLimitDefaultRejectsSixthLoginAndKeepsExistingSessions(t *testing
 		tokens = append(tokens, token)
 	}
 	_, token, session, err := Login(ctx, "session8101", reviewPassword)
-	if !errors.Is(err, apperrors.ErrRateLimited) || token != "" || session != nil || !strings.Contains(err.Error(), "网站上限") {
-		t.Fatalf("sixth login must explain the session limit without issuing a token: token_issued=%t session_issued=%t error=%v", token != "", session != nil, err)
+	if err != nil || token == "" || session == nil {
+		t.Fatalf("sixth login must replace the oldest session: token_issued=%t session_issued=%t error=%v", token != "", session != nil, err)
 	}
-	if token, err := IssueVerifiedSession(ctx, 8101, 1); token != "" || !errors.Is(err, apperrors.ErrRateLimited) {
-		t.Fatalf("verified legacy issuance bypassed the limit: token_issued=%t error=%v", token != "", err)
+	if _, _, err := CheckSession(ctx, tokens[0], false); !errors.Is(err, apperrors.ErrUnauthorized) {
+		t.Fatal("sixth login did not revoke the oldest session:", err)
 	}
-	var rows int64
-	if err := database.Table(dal.TableUserToken).Where("user_id = ?", 8101).Count(&rows).Error; err != nil || rows != 5 {
-		t.Fatalf("rejected login changed session rows: count=%d error=%v", rows, err)
-	}
-	for _, token := range tokens {
-		if _, _, err := CheckSession(ctx, token, false); err != nil {
-			t.Fatal("limit rejection invalidated an existing login:", err)
+	for _, existing := range tokens[1:] {
+		if _, _, err := CheckSession(ctx, existing, false); err != nil {
+			t.Fatal("replacement revoked a newer session:", err)
 		}
 	}
-	page, err := ListSessions(ctx, tokens[0], SessionFilter{})
+	legacy, err := IssueVerifiedSession(ctx, 8101, 1)
+	if err != nil || legacy == "" {
+		t.Fatal("verified legacy login did not use the same replacement policy:", err)
+	}
+	if _, _, err := CheckSession(ctx, tokens[1], false); !errors.Is(err, apperrors.ErrUnauthorized) {
+		t.Fatal("legacy login did not revoke the next oldest session:", err)
+	}
+	if _, _, err := CheckSession(ctx, token, false); err != nil {
+		t.Fatal("legacy login revoked the newer website session:", err)
+	}
+	var active int64
+	if err := database.Table(dal.TableUserToken).Where("user_id = ? AND is_expired = 0", 8101).Count(&active).Error; err != nil || active != 5 {
+		t.Fatalf("default replacement exceeded the cap: active=%d error=%v", active, err)
+	}
+	page, err := ListSessions(ctx, legacy, SessionFilter{})
 	if err != nil || page.TotalCount != 5 {
 		t.Fatalf("session page omitted the applied limit: page=%v error=%v", page, err)
 	}
@@ -96,20 +105,18 @@ func TestSessionLimitConcurrentMixedIssuanceNeverExceedsCap(t *testing.T) {
 				}(i%2 == 0)
 			}
 			close(start)
-			issued, limited := 0, 0
+			issued := 0
 			for i := 0; i < parallelism; i++ {
 				switch err := <-results; {
 				case err == nil:
 					issued++
-				case errors.Is(err, apperrors.ErrRateLimited):
-					limited++
 				default:
 					t.Errorf("concurrent issuance returned an unexpected error: %v", err)
 				}
 			}
-			var rows int64
-			if err := database.Table(dal.TableUserToken).Where("user_id = ?", 8101).Count(&rows).Error; err != nil || issued != 5 || limited != parallelism-5 || rows != 5 {
-				t.Fatalf("concurrent login exceeded the cap: issued=%d limited=%d rows=%d error=%v", issued, limited, rows, err)
+			var active int64
+			if err := database.Table(dal.TableUserToken).Where("user_id = ? AND is_expired = 0", 8101).Count(&active).Error; err != nil || issued != parallelism || active != 5 {
+				t.Fatalf("concurrent replacement violated the policy: issued=%d active=%d error=%v", issued, active, err)
 			}
 		})
 	}
@@ -120,6 +127,7 @@ func TestSessionLimitUsesCurrentReadAfterAnEarlierTransactionSnapshot(t *testing
 	setSessionLimit(t, 1)
 	ready, resume := make(chan struct{}), make(chan struct{})
 	result := make(chan error, 1)
+	var replacement string
 	go func() {
 		result <- database.Transaction(func(tx *gorm.DB) error {
 			var rows int64
@@ -132,7 +140,7 @@ func TestSessionLimitUsesCurrentReadAfterAnEarlierTransactionSnapshot(t *testing
 			if err != nil {
 				return err
 			}
-			_, _, err = issueSessionTx(tx, user, SessionMetadata{})
+			replacement, _, err = issueSessionTx(tx, user, SessionMetadata{})
 			return err
 		}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	}()
@@ -144,17 +152,24 @@ func TestSessionLimitUsesCurrentReadAfterAnEarlierTransactionSnapshot(t *testing
 	case <-time.After(5 * time.Second):
 		t.Fatal("transaction did not establish its initial snapshot")
 	}
-	if _, err := IssueVerifiedSession(context.Background(), 8101, 1); err != nil {
+	first, err := IssueVerifiedSession(context.Background(), 8101, 1)
+	if err != nil {
 		t.Fatal(err)
 	}
 	resume <- struct{}{}
 	select {
 	case err := <-result:
-		if !errors.Is(err, apperrors.ErrRateLimited) {
-			t.Fatalf("an earlier snapshot hid the newly committed session: %v", err)
+		if err != nil || replacement == "" {
+			t.Fatalf("replacement after an earlier snapshot failed: %v", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("session check did not finish")
+	}
+	if _, _, err := CheckSession(context.Background(), first, false); !errors.Is(err, apperrors.ErrUnauthorized) {
+		t.Fatal("an earlier snapshot hid the committed session from replacement:", err)
+	}
+	if _, _, err := CheckSession(context.Background(), replacement, false); err != nil {
+		t.Fatal("replacement session is unusable:", err)
 	}
 }
 
@@ -188,11 +203,15 @@ func TestSessionLimitInactiveRowsDoNotConsumeSlotsAndRestrictedRowsDo(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := IssueVerifiedSession(context.Background(), 8102, 1); !errors.Is(err, apperrors.ErrRateLimited) {
-		t.Fatalf("valid initial-password sessions did not consume a slot: %v", err)
+	replacement, err := IssueVerifiedSession(context.Background(), 8102, 1)
+	if err != nil {
+		t.Fatal("initial-password session replacement failed:", err)
 	}
-	if _, _, err := CheckSession(context.Background(), restricted, true); err != nil {
-		t.Fatal("limited login was revoked by a rejected new login:", err)
+	if _, _, err := CheckSession(context.Background(), restricted, true); !errors.Is(err, apperrors.ErrUnauthorized) {
+		t.Fatal("valid initial-password session did not consume a replacement slot:", err)
+	}
+	if _, _, err := CheckSession(context.Background(), replacement, true); err != nil {
+		t.Fatal("replacement lost its password-change session:", err)
 	}
 }
 
@@ -213,17 +232,27 @@ func TestSessionLimitLoweringKeepsOldLoginsAndRevocationReleasesSlots(t *testing
 			t.Fatal("lowering the cap invalidated an existing login:", err)
 		}
 	}
-	if _, err := IssueVerifiedSession(ctx, 8101, 1); !errors.Is(err, apperrors.ErrRateLimited) {
-		t.Fatalf("lowered cap was not applied to the next login: %v", err)
+	replacement, err := IssueVerifiedSession(ctx, 8101, 1)
+	if err != nil {
+		t.Fatal("login after lowering the cap failed:", err)
 	}
-	if result, err := RevokeOtherSessions(ctx, tokens[0]); err != nil || result.RevokedCount != 4 {
+	page, err := ListSessions(ctx, replacement, SessionFilter{})
+	if err != nil || page.TotalCount != 2 {
+		t.Fatalf("lowered cap was not applied to replacement: page=%v error=%v", page, err)
+	}
+	if result, err := RevokeOtherSessions(ctx, replacement); err != nil || result.RevokedCount != 1 {
 		t.Fatalf("could not release old session slots: result=%v error=%v", result, err)
 	}
 	if _, err := IssueVerifiedSession(ctx, 8101, 1); err != nil {
 		t.Fatal("revocation did not release a session slot:", err)
 	}
-	if _, err := IssueVerifiedSession(ctx, 8101, 1); !errors.Is(err, apperrors.ErrRateLimited) {
-		t.Fatalf("second newly issued login exceeded the lowered cap: %v", err)
+	newest, err := IssueVerifiedSession(ctx, 8101, 1)
+	if err != nil {
+		t.Fatal("subsequent login did not replace the oldest session:", err)
+	}
+	page, err = ListSessions(ctx, newest, SessionFilter{})
+	if err != nil || page.TotalCount != 2 {
+		t.Fatalf("subsequent replacement exceeded the cap: page=%v error=%v", page, err)
 	}
 	setSessionLimit(t, 3)
 	if _, err := IssueVerifiedSession(ctx, 8101, 1); err != nil {
@@ -242,6 +271,51 @@ func TestSessionLimitInvalidRuntimeFailsClosed(t *testing.T) {
 			var rows int64
 			if err := database.Table(dal.TableUserToken).Count(&rows).Error; err != nil || rows != 0 {
 				t.Fatalf("invalid runtime issued a session: rows=%d error=%v", rows, err)
+			}
+		})
+	}
+}
+
+func TestSessionReplacementUsesOnlyEffectiveRowsInLoginOrder(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(strconv.FormatBool(full), func(t *testing.T) {
+			database := sessionLimitDatabase(t)
+			setSessionLimit(t, 3)
+			now := time.Now().UTC().Truncate(time.Second)
+			sessionTestInsert(t, database, 9901, 8101, model.SessionUser, now.Add(-time.Minute), now.Add(time.Hour))
+			if full {
+				// The smaller ID is newer; tied older timestamps must use ID order.
+				sessionTestInsert(t, database, 9902, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+				sessionTestInsert(t, database, 9903, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+			}
+			sessionTestInsert(t, database, 9910, 8102, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+			sessionTestInsert(t, database, 9911, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(-time.Second))
+			sessionTestInsert(t, database, 9912, 8101, "unknown_purpose", now.Add(-time.Hour), now.Add(time.Hour))
+			for id, fields := range map[int64]map[string]interface{}{9913: {"auth_version": 0}, 9914: {"token_digest": nil}, 9915: {"is_expired": 1}} {
+				sessionTestInsert(t, database, id, 8101, model.SessionUser, now.Add(-time.Hour), now.Add(time.Hour))
+				if err := database.Table(dal.TableUserToken).Where("id = ?", id).Updates(fields).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, token, _, err := Login(context.Background(), "session8101", reviewPassword)
+			if err != nil || token == "" {
+				t.Fatal("default replacement login failed:", err)
+			}
+			var rows []struct {
+				ID        int64
+				IsExpired int
+			}
+			if err := database.Table(dal.TableUserToken).Select("id,is_expired").Where("id BETWEEN ? AND ?", 9901, 9915).Find(&rows).Error; err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range rows {
+				expected := 0
+				if row.ID == 9915 || full && row.ID == 9902 {
+					expected = 1
+				}
+				if row.IsExpired != expected {
+					t.Fatalf("replacement touched the wrong history or user: id=%d expired=%d want=%d", row.ID, row.IsExpired, expected)
+				}
 			}
 		})
 	}

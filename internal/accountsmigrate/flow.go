@@ -77,6 +77,11 @@ func BuildPlan(ctx context.Context, db *sql.DB, source *Source, opts Options) (*
 		return nil, errors.New("connected database differs from requested target")
 	}
 	values := config.DefaultRuntimeValues(source.Config)
+	// The immutable v1 import used ten projects when no quota was supplied.
+	// Increasing runtime defaults must not invalidate an already imported marker.
+	if source.Config.WebProjects.MaxProjectsPerUser == 0 {
+		values["web_projects"]["max_projects_per_user"] = 10
+	}
 	if len(values) != 7 {
 		return nil, errors.New("all seven runtime namespaces are required")
 	}

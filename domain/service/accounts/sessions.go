@@ -27,7 +27,7 @@ import (
 const SessionWarningThreshold = 10
 
 // SessionMetadata describes issuance, never the device presenting a token later.
-// These values are display hints and are not used for authentication.
+// Client values are display hints, never authentication or a device identity.
 type SessionMetadata struct {
 	LoginIP, UserAgent, ClientName, OSName, DeviceType, LoginSource string
 }

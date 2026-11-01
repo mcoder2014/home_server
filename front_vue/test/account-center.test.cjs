@@ -34,6 +34,40 @@ function component(file, api = {}, props = {}, globals = {}) {
     return {view, definition, commits, confirmations}
 }
 
+test('login submits credentials once without a replacement option', async () => {
+    const calls = []
+    const {view, confirmations, commits} = component('views/Login.vue', {login: async data => {
+        calls.push({...data})
+        return {id: '42'}
+    }}, {$refs: {ruleForm: {validate: async () => true}}}, {URLSearchParams})
+    view.ruleForm = {username: 'friend', password: 'test-password'}
+    await view.submitForm()
+    assert.equal(confirmations.length, 0)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].replace_oldest_session, undefined)
+    assert.equal(commits.length, 1)
+    assert.equal(view.ruleForm.password, '')
+    assert.equal(view.loading, false)
+})
+
+test('login errors never offer or retry a configurable session replacement', async () => {
+    for (const offer of [true, false]) {
+        let calls = 0, confirmations = 0
+        const {view, commits} = component('views/Login.vue', {login: async () => {
+            calls++
+            throw Object.assign(new Error('登录受限'), {status: 429, data: offer ? {can_replace_oldest_session: true} : null})
+        }}, {$refs: {ruleForm: {validate: async () => true}}, $confirm: async () => {confirmations++; throw 'cancel'}}, {URLSearchParams})
+        view.ruleForm = {username: 'friend', password: 'test-password'}
+        await view.submitForm()
+        assert.equal(calls, 1)
+        assert.equal(confirmations, 0)
+        assert.equal(commits.length, 0)
+        assert.equal(view.ruleForm.password, 'test-password')
+        assert.equal(view.error, '登录受限')
+        assert.equal(view.loading, false)
+    }
+})
+
 test('empty nickname uses the username and profile patches contain only changed fields', () => {
     const saved = {display_name: '朋友', contact_email: 'friend@example.com', contact_mobile: ''}
     assert.equal(behavior.profileError({...saved, display_name: '   '}), '')

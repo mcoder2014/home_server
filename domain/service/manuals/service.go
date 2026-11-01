@@ -90,7 +90,7 @@ func applyDefaults(conf *config.ManualsConfig) {
 		conf.MaxManualBytes = 500 << 20
 	}
 	if conf.MaxManualsPerUser <= 0 {
-		conf.MaxManualsPerUser = 1000
+		conf.MaxManualsPerUser = 100000
 	}
 	if conf.MaxUserBytes <= 0 {
 		conf.MaxUserBytes = 10 << 30

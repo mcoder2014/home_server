@@ -120,8 +120,9 @@ func view(user *model.UserAccount, token string) accountView {
 // 数据库模式交由账号服务签发受版本约束的会话；配置模式保留旧用户和令牌兼容。
 func login(c *gin.Context) {
 	var input struct {
-		UserName string `json:"user_name"`
-		Password string `json:"password"`
+		UserName          string `json:"user_name"`
+		Password          string `json:"password"`
+		LegacyReplacement bool   `json:"replace_oldest_session"` // 兼容已上线旧请求，仅解析，不控制登录策略。
 	}
 	if !bind(c, &input, 16<<10) {
 		return

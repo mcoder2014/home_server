@@ -132,3 +132,23 @@ test('登录页在320下无水平溢出并生成截图', async () => {
         await page.screenshot({path: path.join(visualOutput, 'login-mobile-320.png'), fullPage: true})
     } finally { await context.close() }
 })
+
+test('登录成功后直接进入页面，不提供替换会话配置或二次确认', async () => {
+    const {page, context} = await setup('/login', 320)
+    const requests = []
+    try {
+        await page.route('**/api/auth/login', async route => {
+            const data = route.request().postDataJSON()
+            requests.push(data)
+            await route.fulfill({json: {code: 0, data: {id: '42', role: 'user', csrf_token: 'replacement-csrf'}}})
+        })
+        await page.getByPlaceholder('请输入用户名').fill('friend')
+        await page.getByPlaceholder('请输入密码').fill('test-password')
+        await page.getByRole('button', {name: '登录', exact: true}).click()
+        await page.waitForFunction(() => window.fixtureStore.state.userInfo?.id === '42')
+        assert.equal(requests.length, 1)
+        assert.equal(await page.getByRole('dialog').count(), 0)
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+        assert.equal(requests[0].replace_oldest_session, undefined)
+    } finally { await context.close() }
+})
