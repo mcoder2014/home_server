@@ -4,6 +4,8 @@
 
 实际 IP、域名、系统账号、证书路径和数据库配置应保存在服务器或被 Git 忽略的 `deploy/local/`，不要回填到公开模板。复制示例并替换所有环境值后，再执行配置校验与部署。
 
+可选的 home virtual sub 管理入口位于 `/admin/home-virtual-sub`。先部署支持 `/management/v1` 的同机管理服务，准备两个服务内容一致的私有凭证文件，再启用后端 `home_virtual_sub` 启动配置；数据库管理员会话、HTTPS 和现有 `/api/admin/` 代理规则必须可用。该能力无需新增 DDL或公网管理端口。配置、权限、结果未知与关闭集成的步骤见 [home virtual sub 管理说明](../../docs/specs/home-virtual-sub/design.md#部署连接)。
+
 | 组件 | 路径与职责 |
 | --- | --- |
 | 后端 release | `/opt/home_server/releases/<revision>/bin/home_server`；`current` 符号链接选择当前版本。 |

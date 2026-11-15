@@ -4,6 +4,12 @@ identity_source: config
 config_source: file
 # Verified hard ceiling of every proxy upload path; 50 MiB in this example.
 upload_hard_limit_bytes: 52428800
+# Optional administrator integration. Database accounts and HTTPS are required.
+home_virtual_sub:
+  enabled: false
+  base_url: http://127.0.0.1:18190
+  token_file: /etc/home_server/home_virtual_sub.token
+  timeout_ms: 5000
 server:
   # http server 的服务端口
   port: 8080

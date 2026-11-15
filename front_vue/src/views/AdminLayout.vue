@@ -1,7 +1,7 @@
 <template>
   <MyHeader />
   <main class="page-container admin-layout">
-    <aside class="admin-sidebar"><span class="page-eyebrow">管理中心</span><nav aria-label="管理导航"><router-link to="/admin/users">用户管理<span>账号与功能授权</span></router-link><router-link to="/admin/web-share">网页审核<span>全站内容与风险处置</span></router-link><router-link to="/admin/config">站点设置<span>动态配置与版本发布</span></router-link><router-link to="/admin/audit-logs">操作记录<span>管理行为追溯</span></router-link></nav><p class="muted">管理员访问来自当前账号。应用凭证不能执行管理操作。</p></aside>
+    <aside class="admin-sidebar"><span class="page-eyebrow">管理中心</span><nav aria-label="管理导航"><router-link to="/admin/users">用户管理<span>账号与功能授权</span></router-link><router-link to="/admin/web-share">网页审核<span>全站内容与风险处置</span></router-link><router-link to="/admin/config">站点设置<span>动态配置与版本发布</span></router-link><router-link to="/admin/home-virtual-sub">home virtual sub<span>订阅与运行状态</span></router-link><router-link to="/admin/audit-logs">操作记录<span>管理行为追溯</span></router-link></nav><p class="muted">管理员访问来自当前账号。应用凭证不能执行管理操作。</p></aside>
     <div class="admin-content"><router-view /></div>
   </main>
 </template>
