@@ -10,7 +10,6 @@ import (
 	"time"
 
 	apperrors "github.com/mcoder2014/home_server/errors"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // PasswordSourceIPKey is set only after the HTTP boundary resolves the trusted
@@ -41,7 +40,8 @@ var authenticatedPasswordFailures = map[[32]byte]passwordFailure{}
 // failures cannot block security actions in an existing authenticated session.
 // Aliases share an account budget within each scope; successes do not consume or
 // reset it. Failed checks update counters under the mutex; already admitted
-// requests can finish concurrently.
+// requests can finish concurrently. DAV reuses only successful password work;
+// current account state and permissions remain the callers' responsibility.
 func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password string) error {
 	accountKey := "login:" + strings.ToLower(strings.TrimSpace(loginKey))
 	if userID > 0 {
@@ -79,7 +79,7 @@ func VerifyPassword(ctx context.Context, userID int64, loginKey, hash, password 
 		}
 	}
 	passwordFailureLock.Unlock()
-	if hash != "" && bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+	if hash != "" && verifyPasswordHash(ctx, accountKey, hash, password) {
 		return nil
 	}
 	passwordFailureLock.Lock()

@@ -257,6 +257,8 @@ go build -o output/bin/web-projects-storage-migrate ./cmd/web-projects-storage-m
 
 WebDAV Basic 直接使用用户名/密码，持续兼容 `/webdav/` 和 `/webdav_dev/`；不依赖网页登录、Cookie、CSRF、注册开关、应用凭证开关或网站会话有效期。获准用户可直接使用未过期的初始密码，无需先在网页改密；账号封禁、密码失效、WebDAV 开关及读写授权仍生效。
 
+Finder 浏览目录会产生大量属性及元数据请求。WebDAV Basic 对同一账号、当前密码哈希和提交密码复用成功的 bcrypt 校验结果：缓存仅在服务进程内保存带随机密钥的 HMAC 摘要和固定 5 分钟过期时间，最多 1024 条，命中不续期。首次或过期请求仍执行完整 bcrypt；错误密码不缓存，缓存容量满也不影响正常认证。每次请求继续读取当前账号并检查失败预算、状态、临时密码期限、WebDAV 开关和方法权限；改密后旧密码不能命中新哈希，封禁和撤权继续及时生效。网站登录、管理员密码确认和改密不复用该缓存。无需修改客户端、数据库或 Nginx，重启服务会清空缓存。设计与验收边界见 [WebDAV 密码校验缓存](docs/specs/webdav-auth-cache/design.md)。
+
 账号迁移默认只读计划，显式审核计划哈希、数据库名、维护窗口和授权清单后才执行。未迁移时保持 `identity_source: config` / `config_source: file`；完成后同时切换为 `database`。不要在生产目录编译，不用生产凭据运行测试，也不要把新增表当成已经完成迁移。
 
 ## 应用身份与 AK/SK
